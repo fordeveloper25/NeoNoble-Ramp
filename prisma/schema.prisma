@@ -37,6 +37,11 @@ model ApiClient {
   rateLimitDay Int      @default(1000)
   totalCalls   Int      @default(0)
   totalFeeBase Decimal  @default(0) @db.Decimal(20, 2)
+  
+  // Rate Limiting
+  lastResetAt  DateTime @default(now())
+  dailyCalls   Int      @default(0)
+  
   createdAt    DateTime @default(now())
   lastUsedAt   DateTime?
 
