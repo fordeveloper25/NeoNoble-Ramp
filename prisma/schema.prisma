@@ -59,16 +59,13 @@ enum ApiClientStatus {
 }
 
 model ApiCallLog {
-  id          String   @id @default(uuid())
-  apiClientId String
-  endpoint    String
-  method      String
-  statusCode  Int
-  createdAt   DateTime @default(now())
-  extraMeta   Json?
-
-  apiClient ApiClient? @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
-  platformApiKey PlatformApiKey? @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
+  id               String   @id @default(uuid())
+  apiClientId      String?  // Can be ApiClient ID or PlatformApiKey ID
+  endpoint         String
+  method           String
+  statusCode       Int
+  createdAt        DateTime @default(now())
+  extraMeta        Json?
 
   @@index([apiClientId])
   @@index([createdAt])
