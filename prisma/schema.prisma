@@ -161,3 +161,41 @@ model WebhookEvent {
   @@index([processed])
   @@index([createdAt])
 }
+
+model PlatformApiKey {
+  id            String   @id @default(uuid())
+  name          String   // Label: "NeoExchange Main", "Partner ABC"
+  apiKey        String   @unique  // Public key shown to client
+  secretHash    String   // SHA256 hash of secret - NEVER store plaintext
+  status        PlatformApiKeyStatus @default(ACTIVE)
+  
+  // Rate limiting
+  rateLimitDay  Int      @default(10000)
+  dailyCalls    Int      @default(0)
+  totalCalls    Int      @default(0)
+  lastResetAt   DateTime @default(now())
+  
+  // Metadata
+  description   String?  @db.Text
+  allowedIps    String?  @db.Text  // Comma-separated IPs for IP whitelisting
+  metadata      Json?    // Additional metadata
+  
+  createdBy     String?  // Admin user who created it
+  createdAt     DateTime @default(now())
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+  revokedBy     String?
+  
+  // Relations
+  apiCallLogs   ApiCallLog[]
+
+  @@index([apiKey])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum PlatformApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
