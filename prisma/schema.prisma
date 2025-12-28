@@ -67,7 +67,8 @@ model ApiCallLog {
   createdAt   DateTime @default(now())
   extraMeta   Json?
 
-  apiClient ApiClient @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
+  apiClient ApiClient? @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
+  platformApiKey PlatformApiKey? @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
 
   @@index([apiClientId])
   @@index([createdAt])
