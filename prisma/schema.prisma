@@ -46,7 +46,6 @@ model ApiClient {
   lastUsedAt   DateTime?
 
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  apiCallLogs  ApiCallLog[]
   rampSessions RampSession[]
 
   @@index([apiKey])
