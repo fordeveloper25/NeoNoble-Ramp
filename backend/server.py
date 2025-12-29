@@ -5,70 +5,114 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
-
+from contextlib import asynccontextmanager
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Validate required environment variables
+def validate_env():
+    required_vars = ['MONGO_URL', 'DB_NAME']
+    missing = [var for var in required_vars if not os.environ.get(var)]
+    if missing:
+        raise ValueError(f"Missing required environment variables: {missing}")
+    
+    # Warn about optional but recommended vars
+    if not os.environ.get('API_SECRET_ENCRYPTION_KEY'):
+        logging.warning(
+            "API_SECRET_ENCRYPTION_KEY not set. Platform API keys will not work. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+
+validate_env()
+
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'neonoble_ramp')]
 
-# Create the main app without a prefix
-app = FastAPI()
+# Import services
+from services.auth_service import AuthService
+from services.api_key_service import PlatformApiKeyService
+from services.ramp_service import RampService
+from services.pricing_service import pricing_service
+
+# Import routes
+from routes.auth import router as auth_router, set_auth_service
+from routes.dev_portal import router as dev_router, set_api_key_service
+from routes.ramp_api import router as ramp_api_router, set_services as set_ramp_api_services
+from routes.user_ramp import router as user_ramp_router, set_ramp_service
+
+# Initialize services
+auth_service = AuthService(db)
+api_key_service = PlatformApiKeyService(db)
+ramp_service = RampService(db)
+
+# Wire up services to routes
+set_auth_service(auth_service)
+set_api_key_service(api_key_service)
+set_ramp_api_services(ramp_service, api_key_service)
+set_ramp_service(ramp_service)
+
+# Lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logging.info("NeoNoble Ramp API starting up...")
+    
+    # Create database indexes
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("id", unique=True)
+    await db.platform_api_keys.create_index("api_key", unique=True)
+    await db.platform_api_keys.create_index("id", unique=True)
+    await db.platform_api_keys.create_index("user_id")
+    await db.transactions.create_index("id", unique=True)
+    await db.transactions.create_index("user_id")
+    await db.transactions.create_index("reference", unique=True)
+    
+    logging.info("Database indexes created")
+    yield
+    
+    # Shutdown
+    logging.info("NeoNoble Ramp API shutting down...")
+    await pricing_service.close()
+    client.close()
+
+# Create the main app
+app = FastAPI(
+    title="NeoNoble Ramp API",
+    description="Crypto on/off-ramp platform with HMAC-secured API access",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-# Add your routes to the router instead of directly to app
+# Root endpoint
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {
+        "message": "Welcome to NeoNoble Ramp API",
+        "version": "1.0.0",
+        "docs": "/docs"
+    }
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+# Health check
+@api_router.get("/health")
+async def health():
+    return {"status": "healthy", "service": "NeoNoble Ramp"}
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+# Include all routers
+api_router.include_router(auth_router)
+api_router.include_router(dev_router)
+api_router.include_router(ramp_api_router)
+api_router.include_router(user_ramp_router)
 
-# Include the router in the main app
+# Include the main router
 app.include_router(api_router)
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -83,7 +127,3 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
