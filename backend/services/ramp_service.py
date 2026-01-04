@@ -29,6 +29,8 @@ class QuoteStatus(str, Enum):
     LOCKED = "LOCKED"            # Quote is being processed (confirmation in progress)
     CONFIRMED = "CONFIRMED"      # Quote has been confirmed and transaction created
     EXPIRED = "EXPIRED"          # Quote has expired (TTL exceeded)
+    RECEIVED = "RECEIVED"        # Crypto deposit received on-chain
+    COMPLETED = "COMPLETED"      # Payout completed
 
 
 class QuoteEntry:
@@ -40,7 +42,12 @@ class QuoteEntry:
         self.status = QuoteStatus.AVAILABLE
         self.locked_at: Optional[datetime] = None
         self.confirmed_at: Optional[datetime] = None
+        self.received_at: Optional[datetime] = None
+        self.completed_at: Optional[datetime] = None
         self.transaction_id: Optional[str] = None
+        self.deposit_address: Optional[str] = None
+        self.deposit_tx_hash: Optional[str] = None
+        self.payout_id: Optional[str] = None
         self._lock = asyncio.Lock()
     
     def is_expired(self) -> bool:
@@ -52,12 +59,7 @@ class QuoteEntry:
         return self.status == QuoteStatus.AVAILABLE and not self.is_expired()
     
     async def try_lock(self) -> tuple[bool, Optional[str]]:
-        """
-        Attempt to lock the quote for processing.
-        
-        Returns:
-            Tuple of (success, error_message)
-        """
+        """Attempt to lock the quote for processing."""
         async with self._lock:
             if self.is_expired():
                 self.status = QuoteStatus.EXPIRED
@@ -66,25 +68,41 @@ class QuoteEntry:
             if self.status == QuoteStatus.LOCKED:
                 return False, "Quote is already being processed"
             
-            if self.status == QuoteStatus.CONFIRMED:
+            if self.status in [QuoteStatus.CONFIRMED, QuoteStatus.RECEIVED, QuoteStatus.COMPLETED]:
                 return False, "Quote has already been confirmed"
             
             if self.status == QuoteStatus.EXPIRED:
                 return False, "Quote has expired"
             
-            # Lock the quote
             self.status = QuoteStatus.LOCKED
             self.locked_at = datetime.now(timezone.utc)
             logger.info(f"Quote {self.quote.quote_id} locked for processing")
             return True, None
     
-    async def confirm(self, transaction_id: str) -> None:
+    async def confirm(self, transaction_id: str, deposit_address: str = None) -> None:
         """Mark the quote as confirmed with the associated transaction."""
         async with self._lock:
             self.status = QuoteStatus.CONFIRMED
             self.confirmed_at = datetime.now(timezone.utc)
             self.transaction_id = transaction_id
+            self.deposit_address = deposit_address
             logger.info(f"Quote {self.quote.quote_id} confirmed with transaction {transaction_id}")
+    
+    async def mark_received(self, tx_hash: str) -> None:
+        """Mark the quote as having received the crypto deposit."""
+        async with self._lock:
+            self.status = QuoteStatus.RECEIVED
+            self.received_at = datetime.now(timezone.utc)
+            self.deposit_tx_hash = tx_hash
+            logger.info(f"Quote {self.quote.quote_id} received deposit (tx: {tx_hash})")
+    
+    async def mark_completed(self, payout_id: str = None) -> None:
+        """Mark the quote as completed (payout initiated)."""
+        async with self._lock:
+            self.status = QuoteStatus.COMPLETED
+            self.completed_at = datetime.now(timezone.utc)
+            self.payout_id = payout_id
+            logger.info(f"Quote {self.quote.quote_id} completed (payout: {payout_id})")
     
     async def unlock(self) -> None:
         """Release the lock (e.g., if processing failed)."""
@@ -103,6 +121,21 @@ class RampService:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.collection = db.transactions
+        self._wallet_service = None
+        self._blockchain_listener = None
+        self._payout_service = None
+    
+    def set_wallet_service(self, wallet_service):
+        """Set the wallet service for address generation."""
+        self._wallet_service = wallet_service
+    
+    def set_blockchain_listener(self, listener):
+        """Set the blockchain listener."""
+        self._blockchain_listener = listener
+    
+    def set_payout_service(self, payout_service):
+        """Set the payout service."""
+        self._payout_service = payout_service
     
     async def create_onramp_quote(self, fiat_amount: float, crypto_currency: str) -> QuoteResponse:
         """Create an onramp quote (Fiat -> Crypto)."""
@@ -121,7 +154,6 @@ class RampService:
             **quote_data
         )
         
-        # Cache the quote with status tracking
         _quote_cache[quote_id] = QuoteEntry(quote=quote, expires_at=valid_until)
         
         logger.info(f"Created onramp quote: {quote_id} - {fiat_amount} EUR -> {quote.crypto_amount} {crypto_currency}")
@@ -144,19 +176,40 @@ class RampService:
             **quote_data
         )
         
-        # Cache the quote with status tracking
-        _quote_cache[quote_id] = QuoteEntry(quote=quote, expires_at=valid_until)
+        # For offramp, generate a deposit address if wallet service is available
+        deposit_address = None
+        if self._wallet_service and crypto_currency.upper() == "NENO":
+            address, error = await self._wallet_service.generate_deposit_address(quote_id)
+            if address:
+                deposit_address = address
+                logger.info(f"Generated deposit address for quote {quote_id}: {address}")
+            elif error:
+                logger.warning(f"Could not generate deposit address: {error}")
+        
+        # Store quote with deposit address
+        entry = QuoteEntry(quote=quote, expires_at=valid_until)
+        entry.deposit_address = deposit_address
+        _quote_cache[quote_id] = entry
         
         logger.info(f"Created offramp quote: {quote_id} - {crypto_amount} {crypto_currency} -> {quote.fiat_amount} EUR")
         return quote
     
-    def _get_quote_entry(self, quote_id: str) -> tuple[Optional[QuoteEntry], Optional[str]]:
-        """
-        Get a quote entry from cache with validation.
+    async def get_offramp_quote_with_address(self, quote_id: str) -> Optional[dict]:
+        """Get offramp quote details including deposit address."""
+        entry = _quote_cache.get(quote_id)
+        if not entry:
+            return None
         
-        Returns:
-            Tuple of (QuoteEntry, None) if found, or (None, error_message)
-        """
+        return {
+            "quote_id": quote_id,
+            "quote": entry.quote.model_dump(),
+            "deposit_address": entry.deposit_address,
+            "status": entry.status.value,
+            "expires_at": entry.expires_at.isoformat()
+        }
+    
+    def _get_quote_entry(self, quote_id: str) -> tuple[Optional[QuoteEntry], Optional[str]]:
+        """Get a quote entry from cache with validation."""
         entry = _quote_cache.get(quote_id)
         if not entry:
             return None, "Quote not found or expired"
@@ -171,29 +224,24 @@ class RampService:
     ) -> tuple[Optional[RampResponse], Optional[str]]:
         """Execute an onramp transaction with quote locking."""
         
-        # Get quote entry
         entry, error = self._get_quote_entry(quote_id)
         if error:
             return None, error
         
         quote = entry.quote
         
-        # Validate quote type
         if quote.direction != "onramp":
             return None, "Invalid quote type for onramp"
         
-        # Validate wallet address
         if not wallet_address:
             return None, "Wallet address is required for onramp"
         
-        # Try to lock the quote (prevents double confirmation)
         lock_success, lock_error = await entry.try_lock()
         if not lock_success:
             logger.warning(f"Failed to lock quote {quote_id}: {lock_error}")
             return None, lock_error
         
         try:
-            # Create transaction
             transaction = Transaction(
                 user_id=user_id,
                 api_key_id=api_key_id,
@@ -210,18 +258,13 @@ class RampService:
                 metadata={"quote_id": quote_id}
             )
             
-            # Save to database
             tx_dict = transaction.model_dump()
             for field in ['created_at', 'updated_at', 'completed_at']:
                 if tx_dict.get(field):
                     tx_dict[field] = tx_dict[field].isoformat()
             await self.collection.insert_one(tx_dict)
             
-            # Mark quote as confirmed
             await entry.confirm(transaction.id)
-            
-            # In a real system, this would trigger payment processing
-            # For now, we'll simulate a successful transaction
             await self._complete_transaction(transaction.id)
             
             logger.info(f"Executed onramp: {transaction.reference} - {quote.total_fiat} EUR -> {quote.crypto_amount} {quote.crypto_currency}")
@@ -245,7 +288,6 @@ class RampService:
             ), None
             
         except Exception as e:
-            # If anything fails, unlock the quote so it can be retried
             await entry.unlock()
             logger.error(f"Failed to execute onramp for quote {quote_id}: {e}")
             return None, f"Transaction failed: {str(e)}"
@@ -257,31 +299,33 @@ class RampService:
         user_id: Optional[str] = None,
         api_key_id: Optional[str] = None
     ) -> tuple[Optional[RampResponse], Optional[str]]:
-        """Execute an offramp transaction with quote locking."""
+        """Execute an offramp transaction with quote locking and deposit address."""
         
-        # Get quote entry
         entry, error = self._get_quote_entry(quote_id)
         if error:
             return None, error
         
         quote = entry.quote
         
-        # Validate quote type
         if quote.direction != "offramp":
             return None, "Invalid quote type for offramp"
         
-        # Validate bank account
         if not bank_account:
             return None, "Bank account is required for offramp"
         
-        # Try to lock the quote (prevents double confirmation)
         lock_success, lock_error = await entry.try_lock()
         if not lock_success:
             logger.warning(f"Failed to lock quote {quote_id}: {lock_error}")
             return None, lock_error
         
         try:
-            # Create transaction
+            # Get or generate deposit address for NENO
+            deposit_address = entry.deposit_address
+            if not deposit_address and self._wallet_service and quote.crypto_currency == "NENO":
+                deposit_address, addr_error = await self._wallet_service.generate_deposit_address(quote_id)
+                if addr_error:
+                    logger.warning(f"Could not generate deposit address: {addr_error}")
+            
             transaction = Transaction(
                 user_id=user_id,
                 api_key_id=api_key_id,
@@ -294,29 +338,40 @@ class RampService:
                 fee_amount=quote.fee_amount,
                 fee_currency=quote.fee_currency,
                 bank_account=bank_account,
-                status=TransactionStatus.PROCESSING,
-                metadata={"quote_id": quote_id}
+                wallet_address=deposit_address,  # Now includes deposit address!
+                status=TransactionStatus.PENDING,  # Waiting for crypto deposit
+                metadata={
+                    "quote_id": quote_id,
+                    "deposit_address": deposit_address,
+                    "awaiting_deposit": True
+                }
             )
             
-            # Save to database
             tx_dict = transaction.model_dump()
             for field in ['created_at', 'updated_at', 'completed_at']:
                 if tx_dict.get(field):
                     tx_dict[field] = tx_dict[field].isoformat()
             await self.collection.insert_one(tx_dict)
             
-            # Mark quote as confirmed
-            await entry.confirm(transaction.id)
+            await entry.confirm(transaction.id, deposit_address)
             
-            # Simulate processing
-            await self._complete_transaction(transaction.id)
+            # For NENO offramp, we wait for deposit - don't complete yet
+            if quote.crypto_currency == "NENO" and deposit_address:
+                message = (
+                    f"Please send exactly {quote.crypto_amount} NENO to the deposit address. "
+                    f"Funds will be converted to EUR and sent to your bank account after confirmation."
+                )
+            else:
+                # For non-NENO or when no deposit address, complete immediately (legacy flow)
+                await self._complete_transaction(transaction.id)
+                message = "Transaction initiated. Funds will be sent to your bank account once crypto is received."
             
             logger.info(f"Executed offramp: {transaction.reference} - {quote.crypto_amount} {quote.crypto_currency} -> {quote.total_fiat} EUR")
             
             return RampResponse(
                 transaction_id=transaction.id,
                 reference=transaction.reference,
-                status=TransactionStatus.PROCESSING.value,
+                status=TransactionStatus.PENDING.value if deposit_address else TransactionStatus.PROCESSING.value,
                 direction="offramp",
                 fiat_currency=quote.fiat_currency,
                 fiat_amount=quote.fiat_amount,
@@ -325,17 +380,111 @@ class RampService:
                 exchange_rate=quote.exchange_rate,
                 fee_amount=quote.fee_amount,
                 total_fiat=quote.total_fiat,
-                wallet_address=None,
+                wallet_address=deposit_address,  # Return the deposit address!
                 bank_account=bank_account,
                 created_at=transaction.created_at,
-                message="Transaction initiated. Funds will be sent to your bank account once crypto is received."
+                message=message
             ), None
             
         except Exception as e:
-            # If anything fails, unlock the quote so it can be retried
             await entry.unlock()
             logger.error(f"Failed to execute offramp for quote {quote_id}: {e}")
             return None, f"Transaction failed: {str(e)}"
+    
+    async def process_deposit_received(
+        self,
+        quote_id: str,
+        tx_hash: str,
+        amount_received: float
+    ) -> tuple[bool, Optional[str]]:
+        """
+        Process a confirmed crypto deposit.
+        
+        Called by the blockchain listener when deposit is confirmed.
+        """
+        entry = _quote_cache.get(quote_id)
+        if not entry:
+            return False, "Quote not found"
+        
+        if entry.status not in [QuoteStatus.CONFIRMED, QuoteStatus.LOCKED]:
+            return False, f"Quote in invalid state: {entry.status}"
+        
+        # Update quote status
+        await entry.mark_received(tx_hash)
+        
+        # Update transaction in database
+        await self.collection.update_one(
+            {"metadata.quote_id": quote_id},
+            {
+                "$set": {
+                    "status": TransactionStatus.PROCESSING.value,
+                    "metadata.deposit_tx_hash": tx_hash,
+                    "metadata.deposit_amount": amount_received,
+                    "metadata.deposit_confirmed_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        
+        # Trigger payout
+        if self._payout_service:
+            tx_doc = await self.collection.find_one({"metadata.quote_id": quote_id})
+            if tx_doc:
+                payout_amount = entry.quote.total_fiat
+                payout_result, payout_error = await self._payout_service.create_payout(
+                    quote_id=quote_id,
+                    transaction_id=tx_doc["id"],
+                    amount_eur=payout_amount,
+                    reference=tx_doc["reference"]
+                )
+                
+                if payout_result:
+                    payout_id = payout_result.get("payout_id")
+                    await entry.mark_completed(payout_id)
+                    
+                    # Update transaction as completed
+                    await self.collection.update_one(
+                        {"metadata.quote_id": quote_id},
+                        {
+                            "$set": {
+                                "status": TransactionStatus.COMPLETED.value,
+                                "metadata.payout_id": payout_id,
+                                "completed_at": datetime.now(timezone.utc).isoformat(),
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            }
+                        }
+                    )
+                    
+                    logger.info(f"Offramp completed for quote {quote_id}: payout {payout_id}")
+                    return True, None
+                else:
+                    logger.error(f"Payout failed for quote {quote_id}: {payout_error}")
+                    return False, payout_error
+        
+        return True, None
+    
+    async def get_active_offramp_quotes(self) -> List[dict]:
+        """
+        Get all active offramp quotes awaiting deposits.
+        
+        Used by the blockchain listener.
+        """
+        active_quotes = []
+        
+        for quote_id, entry in _quote_cache.items():
+            if (entry.quote.direction == "offramp" and 
+                entry.status in [QuoteStatus.CONFIRMED, QuoteStatus.LOCKED] and
+                entry.deposit_address and
+                not entry.is_expired()):
+                
+                active_quotes.append({
+                    "quote_id": quote_id,
+                    "address": entry.deposit_address,
+                    "expected_amount": entry.quote.crypto_amount,
+                    "crypto_currency": entry.quote.crypto_currency
+                })
+        
+        return active_quotes
     
     async def get_quote_status(self, quote_id: str) -> Optional[dict]:
         """Get the current status of a quote."""
@@ -350,12 +499,17 @@ class RampService:
             "is_available": entry.is_available(),
             "locked_at": entry.locked_at.isoformat() if entry.locked_at else None,
             "confirmed_at": entry.confirmed_at.isoformat() if entry.confirmed_at else None,
+            "received_at": entry.received_at.isoformat() if entry.received_at else None,
+            "completed_at": entry.completed_at.isoformat() if entry.completed_at else None,
             "transaction_id": entry.transaction_id,
+            "deposit_address": entry.deposit_address,
+            "deposit_tx_hash": entry.deposit_tx_hash,
+            "payout_id": entry.payout_id,
             "expires_at": entry.expires_at.isoformat()
         }
     
     async def _complete_transaction(self, transaction_id: str):
-        """Mark a transaction as completed (simulation)."""
+        """Mark a transaction as completed (simulation for non-blockchain flow)."""
         await self.collection.update_one(
             {"id": transaction_id},
             {
