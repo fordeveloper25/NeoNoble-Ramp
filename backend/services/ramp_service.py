@@ -169,13 +169,6 @@ class RampService:
         quote_id = f"quote_{uuid.uuid4().hex[:16]}"
         valid_until = datetime.now(timezone.utc) + timedelta(minutes=QUOTE_VALIDITY_MINUTES)
         
-        quote = QuoteResponse(
-            quote_id=quote_id,
-            direction="offramp",
-            valid_until=valid_until,
-            **quote_data
-        )
-        
         # For offramp, generate a deposit address if wallet service is available
         deposit_address = None
         if self._wallet_service and crypto_currency.upper() == "NENO":
@@ -185,6 +178,14 @@ class RampService:
                 logger.info(f"Generated deposit address for quote {quote_id}: {address}")
             elif error:
                 logger.warning(f"Could not generate deposit address: {error}")
+        
+        quote = QuoteResponse(
+            quote_id=quote_id,
+            direction="offramp",
+            valid_until=valid_until,
+            deposit_address=deposit_address,  # Include deposit address in response
+            **quote_data
+        )
         
         # Store quote with deposit address
         entry = QuoteEntry(quote=quote, expires_at=valid_until)
