@@ -1,14 +1,21 @@
 """
 Stripe SEPA Payout Service for NeoNoble Ramp.
 
-Handles SEPA bank transfers after successful crypto deposits.
+PRODUCTION-READY implementation for SEPA bank transfers
+after successful crypto deposits.
+
+Environment Variables:
+- STRIPE_SECRET_KEY: Stripe API secret key (required)
+- STRIPE_WEBHOOK_SECRET: Webhook signing secret (optional)
+- STRIPE_PAYOUT_MODE: 'live' or 'test' (default: 'live')
+- STRIPE_PAYOUT_IBAN: Destination IBAN
+- STRIPE_PAYOUT_BENEFICIARY_NAME: Beneficiary name
 """
 
 import os
 import logging
 from typing import Optional, Dict, Tuple
 from datetime import datetime, timezone
-from decimal import Decimal
 import stripe
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -23,14 +30,20 @@ class StripePayoutService:
     crypto deposits are confirmed on-chain.
     """
     
-    # Default payout destination
-    DEFAULT_IBAN = "IT22B0200822800000103317304"
-    DEFAULT_BENEFICIARY = "Massimo Fornara"
-    
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.payouts_collection = db.stripe_payouts
         self._initialized = False
+        self._stripe_configured = False
+    
+    def _get_config(self) -> Dict:
+        """Get payout configuration from environment."""
+        return {
+            'iban': os.environ.get('STRIPE_PAYOUT_IBAN', 'IT22B0200822800000103317304'),
+            'beneficiary_name': os.environ.get('STRIPE_PAYOUT_BENEFICIARY_NAME', 'Massimo Fornara'),
+            'mode': os.environ.get('STRIPE_PAYOUT_MODE', 'live'),
+            'webhook_secret': os.environ.get('STRIPE_WEBHOOK_SECRET')
+        }
     
     def _initialize_stripe(self) -> bool:
         """
@@ -38,29 +51,39 @@ class StripePayoutService:
         
         Returns True if initialized successfully, False otherwise.
         """
-        if self._initialized:
+        if self._stripe_configured:
             return True
         
         api_key = os.environ.get('STRIPE_SECRET_KEY')
         if not api_key:
-            logger.warning(
-                "STRIPE_SECRET_KEY not set. Stripe payouts will be disabled. "
-                "Set this environment variable to enable real payouts."
+            logger.error(
+                "STRIPE_SECRET_KEY not set. Stripe payouts are DISABLED. "
+                "Set this environment variable with your live Stripe key."
             )
             return False
         
         stripe.api_key = api_key
-        self._initialized = True
-        logger.info("Stripe initialized successfully")
+        self._stripe_configured = True
+        
+        config = self._get_config()
+        logger.info(
+            f"Stripe initialized in {config['mode'].upper()} mode. "
+            f"Payouts will go to: {config['beneficiary_name']} ({config['iban'][:8]}...)"
+        )
         return True
     
     async def initialize(self):
         """Initialize the payout service."""
-        # Create indexes (use sparse to allow null payout_ids)
+        # Create indexes
         await self.payouts_collection.create_index("payout_id", unique=True, sparse=True)
         await self.payouts_collection.create_index("quote_id", unique=True)
         await self.payouts_collection.create_index("transaction_id")
         await self.payouts_collection.create_index("status")
+        await self.payouts_collection.create_index("created_at")
+        
+        # Check Stripe configuration
+        self._initialize_stripe()
+        self._initialized = True
     
     def is_available(self) -> bool:
         """Check if Stripe payouts are available."""
@@ -71,8 +94,6 @@ class StripePayoutService:
         quote_id: str,
         transaction_id: str,
         amount_eur: float,
-        iban: str = None,
-        beneficiary_name: str = None,
         reference: str = None
     ) -> Tuple[Optional[Dict], Optional[str]]:
         """
@@ -82,25 +103,24 @@ class StripePayoutService:
             quote_id: The quote ID this payout is for
             transaction_id: The transaction ID
             amount_eur: Amount in EUR to payout
-            iban: Destination IBAN (defaults to configured IBAN)
-            beneficiary_name: Beneficiary name (defaults to configured name)
             reference: Payment reference
             
         Returns:
             Tuple of (payout_info, error_message)
         """
-        iban = iban or self.DEFAULT_IBAN
-        beneficiary_name = beneficiary_name or self.DEFAULT_BENEFICIARY
+        config = self._get_config()
+        iban = config['iban']
+        beneficiary_name = config['beneficiary_name']
         reference = reference or f"NENO-{quote_id[:8]}"
         
         # Check if already processed
         existing = await self.payouts_collection.find_one({
             'quote_id': quote_id,
-            'status': {'$in': ['pending', 'paid', 'in_transit']}
+            'status': {'$in': ['pending', 'paid', 'in_transit', 'processing']}
         })
         
         if existing:
-            logger.warning(f"Payout already exists for quote {quote_id}")
+            logger.warning(f"Payout already exists for quote {quote_id}: {existing.get('payout_id')}")
             return existing, None
         
         # Create payout record
@@ -112,6 +132,7 @@ class StripePayoutService:
             'iban': iban,
             'beneficiary_name': beneficiary_name,
             'reference': reference,
+            'mode': config['mode'],
             'status': 'pending',
             'created_at': datetime.now(timezone.utc).isoformat(),
             'payout_id': None,
@@ -119,38 +140,37 @@ class StripePayoutService:
             'error': None
         }
         
-        # Check if Stripe is available
+        # Check if Stripe is configured
         if not self._initialize_stripe():
-            payout_record['status'] = 'stripe_unavailable'
-            payout_record['error'] = 'Stripe API key not configured'
+            error_msg = "STRIPE_SECRET_KEY not configured - payout cannot be processed"
+            payout_record['status'] = 'failed'
+            payout_record['error'] = error_msg
             await self.payouts_collection.insert_one(payout_record)
             
-            logger.warning(
-                f"Stripe unavailable - payout logged but not executed: "
-                f"{amount_eur} EUR to {iban}"
-            )
-            return payout_record, "Stripe not configured - payout logged for manual processing"
+            logger.error(f"Stripe not configured - payout FAILED for quote {quote_id}")
+            return None, error_msg
         
         try:
-            # For Stripe Connect payouts, we need a connected account
-            # For direct SEPA, we use Stripe's Transfer/Payout API
+            logger.info(
+                f"Creating Stripe payout: €{amount_eur} to {beneficiary_name} "
+                f"(IBAN: {iban[:8]}...) [Quote: {quote_id}]"
+            )
             
-            # Option 1: Using Stripe Payouts (requires Stripe balance)
-            # This sends from your Stripe balance to a bank account
-            
-            # First, check if we have a bank account set up
-            # In production, you'd have the bank account already added
-            
-            # Create the payout
+            # Create the payout via Stripe API
+            # Note: This requires the Stripe account to have sufficient balance
+            # and a bank account configured for payouts
             payout = stripe.Payout.create(
                 amount=int(amount_eur * 100),  # Amount in cents
                 currency='eur',
                 description=f"NeoNoble Ramp - {reference}",
+                statement_descriptor="NEONOBLE RAMP",
                 metadata={
                     'quote_id': quote_id,
                     'transaction_id': transaction_id,
                     'iban': iban,
-                    'beneficiary': beneficiary_name
+                    'beneficiary': beneficiary_name,
+                    'source': 'neonoble_ramp',
+                    'mode': config['mode']
                 }
             )
             
@@ -158,24 +178,39 @@ class StripePayoutService:
             payout_record['status'] = payout.status
             payout_record['stripe_response'] = {
                 'id': payout.id,
+                'object': payout.object,
                 'status': payout.status,
+                'amount': payout.amount,
+                'currency': payout.currency,
                 'arrival_date': payout.arrival_date,
-                'created': payout.created
+                'created': payout.created,
+                'method': payout.method,
+                'type': payout.type
             }
+            payout_record['processed_at'] = datetime.now(timezone.utc).isoformat()
             
             await self.payouts_collection.insert_one(payout_record)
             
             logger.info(
-                f"Stripe payout created: {payout.id} - {amount_eur} EUR to {iban} "
-                f"(status: {payout.status})"
+                f"✓ Stripe payout CREATED: {payout.id} - €{amount_eur} to {iban} "
+                f"(Status: {payout.status}, Arrival: {payout.arrival_date})"
             )
             
             return payout_record, None
             
         except stripe.error.InvalidRequestError as e:
-            # Handle case where Stripe balance is insufficient or bank not set up
-            error_msg = str(e)
-            logger.error(f"Stripe payout failed: {error_msg}")
+            error_msg = f"Stripe InvalidRequestError: {str(e)}"
+            logger.error(f"Payout failed for {quote_id}: {error_msg}")
+            
+            payout_record['status'] = 'failed'
+            payout_record['error'] = error_msg
+            await self.payouts_collection.insert_one(payout_record)
+            
+            return payout_record, error_msg
+            
+        except stripe.error.AuthenticationError as e:
+            error_msg = f"Stripe AuthenticationError: Invalid API key"
+            logger.error(f"Payout failed for {quote_id}: {error_msg}")
             
             payout_record['status'] = 'failed'
             payout_record['error'] = error_msg
@@ -184,8 +219,8 @@ class StripePayoutService:
             return payout_record, error_msg
             
         except stripe.error.StripeError as e:
-            error_msg = str(e)
-            logger.error(f"Stripe error: {error_msg}")
+            error_msg = f"Stripe Error: {str(e)}"
+            logger.error(f"Payout failed for {quote_id}: {error_msg}")
             
             payout_record['status'] = 'failed'
             payout_record['error'] = error_msg
@@ -194,8 +229,8 @@ class StripePayoutService:
             return payout_record, error_msg
             
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Unexpected payout error: {error_msg}")
+            error_msg = f"Unexpected error: {str(e)}"
+            logger.error(f"Payout failed for {quote_id}: {error_msg}")
             
             payout_record['status'] = 'failed'
             payout_record['error'] = error_msg
@@ -203,47 +238,108 @@ class StripePayoutService:
             
             return payout_record, error_msg
     
-    async def create_transfer_to_connected_account(
-        self,
-        quote_id: str,
-        transaction_id: str,
-        amount_eur: float,
-        connected_account_id: str = None
-    ) -> Tuple[Optional[Dict], Optional[str]]:
+    async def handle_webhook(self, payload: bytes, sig_header: str) -> Tuple[bool, Optional[str]]:
         """
-        Alternative: Create a transfer to a Stripe Connect account.
+        Handle Stripe webhook events.
         
-        Use this if you have Stripe Connect set up with a connected account
-        that has the destination bank account.
+        Args:
+            payload: Raw webhook payload
+            sig_header: Stripe-Signature header value
+            
+        Returns:
+            Tuple of (success, error_message)
         """
-        if not self._initialize_stripe():
-            return None, "Stripe not configured"
+        config = self._get_config()
+        webhook_secret = config['webhook_secret']
+        
+        if not webhook_secret:
+            logger.warning("STRIPE_WEBHOOK_SECRET not configured - webhook verification skipped")
+            return False, "Webhook secret not configured"
         
         try:
-            transfer = stripe.Transfer.create(
-                amount=int(amount_eur * 100),
-                currency='eur',
-                destination=connected_account_id,
-                description=f"NeoNoble Ramp payout - Quote {quote_id}",
-                metadata={
-                    'quote_id': quote_id,
-                    'transaction_id': transaction_id
-                }
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, webhook_secret
             )
-            
-            logger.info(f"Stripe transfer created: {transfer.id}")
-            
-            return {
-                'transfer_id': transfer.id,
-                'status': 'succeeded',
-                'amount_eur': amount_eur
-            }, None
-            
-        except stripe.error.StripeError as e:
-            return None, str(e)
+        except ValueError as e:
+            logger.error(f"Invalid webhook payload: {e}")
+            return False, "Invalid payload"
+        except stripe.error.SignatureVerificationError as e:
+            logger.error(f"Invalid webhook signature: {e}")
+            return False, "Invalid signature"
+        
+        # Handle the event
+        event_type = event['type']
+        data = event['data']['object']
+        
+        logger.info(f"Received Stripe webhook: {event_type}")
+        
+        if event_type == 'payout.paid':
+            await self._handle_payout_paid(data)
+        elif event_type == 'payout.failed':
+            await self._handle_payout_failed(data)
+        elif event_type == 'payout.canceled':
+            await self._handle_payout_canceled(data)
+        
+        return True, None
+    
+    async def _handle_payout_paid(self, payout_data: dict):
+        """Handle payout.paid webhook event."""
+        payout_id = payout_data['id']
+        
+        result = await self.payouts_collection.update_one(
+            {'payout_id': payout_id},
+            {
+                '$set': {
+                    'status': 'paid',
+                    'paid_at': datetime.now(timezone.utc).isoformat(),
+                    'arrival_date': payout_data.get('arrival_date')
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            logger.info(f"✓ Payout {payout_id} marked as PAID")
+        else:
+            logger.warning(f"Payout {payout_id} not found in database")
+    
+    async def _handle_payout_failed(self, payout_data: dict):
+        """Handle payout.failed webhook event."""
+        payout_id = payout_data['id']
+        failure_message = payout_data.get('failure_message', 'Unknown failure')
+        
+        result = await self.payouts_collection.update_one(
+            {'payout_id': payout_id},
+            {
+                '$set': {
+                    'status': 'failed',
+                    'error': failure_message,
+                    'failed_at': datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            logger.error(f"✗ Payout {payout_id} FAILED: {failure_message}")
+    
+    async def _handle_payout_canceled(self, payout_data: dict):
+        """Handle payout.canceled webhook event."""
+        payout_id = payout_data['id']
+        
+        result = await self.payouts_collection.update_one(
+            {'payout_id': payout_id},
+            {
+                '$set': {
+                    'status': 'canceled',
+                    'canceled_at': datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            logger.warning(f"Payout {payout_id} was CANCELED")
     
     async def get_payout_status(self, payout_id: str) -> Optional[Dict]:
-        """Get the status of a payout."""
+        """Get the current status of a payout from Stripe."""
         if not self._initialize_stripe():
             return None
         
@@ -253,6 +349,7 @@ class StripePayoutService:
                 'id': payout.id,
                 'status': payout.status,
                 'amount': payout.amount / 100,
+                'currency': payout.currency,
                 'arrival_date': payout.arrival_date,
                 'failure_message': payout.failure_message
             }
@@ -264,39 +361,37 @@ class StripePayoutService:
         """Get payout record by quote ID."""
         return await self.payouts_collection.find_one({'quote_id': quote_id})
     
-    async def log_payout_for_manual_processing(
-        self,
-        quote_id: str,
-        transaction_id: str,
-        amount_eur: float,
-        iban: str = None,
-        beneficiary_name: str = None
-    ) -> Dict:
+    async def get_payout_by_id(self, payout_id: str) -> Optional[Dict]:
+        """Get payout record by Stripe payout ID."""
+        return await self.payouts_collection.find_one({'payout_id': payout_id})
+    
+    async def list_payouts(self, limit: int = 50, status: str = None) -> list:
+        """List recent payouts."""
+        query = {}
+        if status:
+            query['status'] = status
+        
+        cursor = self.payouts_collection.find(query).sort('created_at', -1).limit(limit)
+        return await cursor.to_list(length=limit)
+    
+    async def sync_payout_status(self, payout_id: str) -> Optional[Dict]:
         """
-        Log a payout request for manual processing.
+        Sync payout status from Stripe to database.
         
-        Used when Stripe is not available or as a fallback.
+        Useful for manual reconciliation.
         """
-        iban = iban or self.DEFAULT_IBAN
-        beneficiary_name = beneficiary_name or self.DEFAULT_BENEFICIARY
+        stripe_status = await self.get_payout_status(payout_id)
+        if not stripe_status:
+            return None
         
-        payout_record = {
-            'quote_id': quote_id,
-            'transaction_id': transaction_id,
-            'amount_eur': amount_eur,
-            'iban': iban,
-            'beneficiary_name': beneficiary_name,
-            'reference': f"NENO-{quote_id[:8]}",
-            'status': 'pending_manual',
-            'created_at': datetime.now(timezone.utc).isoformat(),
-            'requires_manual_processing': True
-        }
-        
-        await self.payouts_collection.insert_one(payout_record)
-        
-        logger.info(
-            f"Payout logged for manual processing: {amount_eur} EUR to {iban} "
-            f"(quote: {quote_id})"
+        await self.payouts_collection.update_one(
+            {'payout_id': payout_id},
+            {
+                '$set': {
+                    'status': stripe_status['status'],
+                    'synced_at': datetime.now(timezone.utc).isoformat()
+                }
+            }
         )
         
-        return payout_record
+        return stripe_status
