@@ -56,9 +56,9 @@ class StripePayoutService:
     
     async def initialize(self):
         """Initialize the payout service."""
-        # Create indexes
+        # Create indexes (use sparse to allow null payout_ids)
         await self.payouts_collection.create_index("payout_id", unique=True, sparse=True)
-        await self.payouts_collection.create_index("quote_id")
+        await self.payouts_collection.create_index("quote_id", unique=True)
         await self.payouts_collection.create_index("transaction_id")
         await self.payouts_collection.create_index("status")
     
