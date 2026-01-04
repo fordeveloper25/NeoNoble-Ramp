@@ -50,10 +50,16 @@ async def ramp_health():
     return {
         "status": "healthy",
         "service": "NeoNoble Ramp API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "supported_cryptos": SUPPORTED_CRYPTOS,
         "neno_price_eur": NENO_PRICE_EUR
     }
+
+
+@router.get("/ramp-api-cache-status")
+async def get_cache_status():
+    """Get pricing cache status for monitoring."""
+    return pricing_service.get_cache_status()
 
 
 @router.get("/ramp-api-prices")
