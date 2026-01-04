@@ -17,8 +17,11 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger(__name__)
 
-# NENO Token Contract on BSC
-NENO_CONTRACT_ADDRESS = "0xeF3F5C1892A8d7A3304E4A15959E124402d69974"
+# NENO Token Contract on BSC - configurable via environment
+NENO_CONTRACT_ADDRESS = os.environ.get(
+    'NENO_CONTRACT_ADDRESS',
+    '0xeF3F5C1892A8d7A3304E4A15959E124402d69974'
+)
 
 # Standard BEP-20/ERC-20 Transfer event ABI
 TRANSFER_EVENT_ABI = [
