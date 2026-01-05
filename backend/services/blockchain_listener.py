@@ -384,6 +384,10 @@ class BlockchainListener:
             get_active_quotes: Async function that returns list of active quotes with addresses
             on_transfer: Async callback when transfer is confirmed
         """
+        if not self._enabled:
+            logger.warning("Blockchain polling not started (not enabled)")
+            return
+        
         self._running = True
         poll_interval = int(os.environ.get('BSC_POLL_INTERVAL', '15'))  # seconds
         
