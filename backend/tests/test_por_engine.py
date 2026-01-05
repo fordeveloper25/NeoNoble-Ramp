@@ -267,8 +267,8 @@ class PoREngineAPITester:
                 data.get("quote_id") == self.quote_id and
                 data.get("event_count", 0) >= 6 and  # Full lifecycle
                 len(events) >= 6 and
-                any(e.get("state") == "quote_created" for e in events) and
-                any(e.get("state") == "completed" for e in events)
+                any(e.get("state") == "QUOTE_CREATED" for e in events) and
+                any(e.get("state") == "COMPLETED" for e in events)
             )
         
         self.log_test_result(
