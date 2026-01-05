@@ -149,9 +149,8 @@ class NeoNobleAPITester:
         
         # Test user registration (may fail if user exists)
         user_data = {
-            "email": "test@neonoble.com",
-            "password": "TestPass123!",
-            "role": "USER"
+            "email": "testuser_ui@neonoble.com",
+            "password": "TestPass123!"
         }
         
         success, data, status = await self.make_request("POST", "/auth/register", user_data)
@@ -170,7 +169,7 @@ class NeoNobleAPITester:
         
         # Test user login
         login_data = {
-            "email": "test@neonoble.com",
+            "email": "testuser_ui@neonoble.com",
             "password": "TestPass123!"
         }
         
