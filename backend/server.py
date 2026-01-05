@@ -157,6 +157,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Payout service initialization failed: {e}")
     
+    # Initialize PoR Engine (always available - no credentials required)
+    try:
+        await por_engine.initialize()
+        logger.info("PoR Engine initialized - autonomous off-ramp provider ready")
+    except Exception as e:
+        logger.warning(f"PoR Engine initialization failed: {e}")
+    
+    # Initialize settlement service
+    try:
+        await settlement_service.initialize()
+        logger.info("Settlement service initialized")
+    except Exception as e:
+        logger.warning(f"Settlement service initialization failed: {e}")
+    
     # Start blockchain monitoring if configured
     if os.environ.get('BSC_RPC_URL'):
         try:
