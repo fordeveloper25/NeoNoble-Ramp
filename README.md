@@ -1,8 +1,31 @@
 # NeoNoble Ramp Platform
 
-A complete crypto on/off-ramp platform with HMAC-secured API access, real-time pricing from CoinGecko, and a fixed NENO token price of €10,000.
+A complete crypto on/off-ramp platform with enterprise-grade Provider-of-Record (PoR) engine, HMAC-secured API access, real-time pricing from CoinGecko, and a fixed NENO token price of €10,000.
 
 **Live URL**: https://crypto-onramp-2.preview.emergentagent.com
+
+## Provider-of-Record (PoR) Engine
+
+The platform includes a fully autonomous **internal PoR engine** that operates like enterprise providers (Transak, MoonPay, Ramp, Banxa):
+
+### PoR Features:
+- **Always Available**: €100M virtual liquidity pool, never blocks transactions
+- **Instant Settlement**: Default mode with configurable alternatives
+- **KYC/AML Handled**: PoR is responsible for compliance
+- **No Credentials Required**: Works autonomously out of the box
+- **Enterprise States**: Full transaction lifecycle (19 states)
+
+### Settlement Modes:
+- `instant` - Immediate completion (default)
+- `simulated_delay` - Realistic 1-3 day banking delay
+- `batch` - Scheduled batch processing
+
+### Transaction Lifecycle:
+```
+QUOTE_CREATED → QUOTE_ACCEPTED → DEPOSIT_PENDING → DEPOSIT_DETECTED 
+→ DEPOSIT_CONFIRMED → SETTLEMENT_PENDING → SETTLEMENT_PROCESSING 
+→ PAYOUT_INITIATED → PAYOUT_COMPLETED → COMPLETED
+```
 
 ## Features
 
