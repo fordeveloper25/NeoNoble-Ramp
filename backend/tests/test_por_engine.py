@@ -144,7 +144,7 @@ class PoREngineAPITester:
                 abs(data.get("fee_amount", 0) - expected_fee) < 0.01 and
                 abs(data.get("net_payout", 0) - expected_net_payout) < 0.01 and
                 data.get("exchange_rate") == 10000.0 and
-                data.get("state") == "quote_created" and
+                data.get("state") == "QUOTE_CREATED" and
                 data.get("deposit_address") is not None and
                 data.get("compliance", {}).get("por_responsible") == True
             )
