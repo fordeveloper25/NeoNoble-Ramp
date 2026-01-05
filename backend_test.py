@@ -790,7 +790,7 @@ class NeoNobleAPITester:
     
     async def run_all_tests(self):
         """Run all tests in sequence"""
-        logger.info("🚀 Starting NeoNoble Ramp Backend API Tests")
+        logger.info("🚀 Starting NeoNoble Ramp Backend API Tests - Comprehensive PoR Engine Validation")
         logger.info(f"Testing against: {BACKEND_URL}")
         
         # Test sequence based on priority
@@ -799,7 +799,11 @@ class NeoNobleAPITester:
             ("User Authentication", self.test_user_authentication),
             ("Developer Authentication", self.test_developer_authentication),
             ("API Key Management", self.test_api_key_management),
-            ("Off-Ramp Quote Flow", self.test_offramp_quote_flow),
+            ("Public Endpoints", self.test_public_endpoints),
+            ("User UI PoR Engine Flow (JWT)", self.test_user_ui_por_flow),
+            ("Developer API PoR Engine Flow (HMAC)", self.test_developer_api_por_flow),
+            ("Consistency Validation", self.test_consistency_validation),
+            ("Legacy Off-Ramp Quote Flow", self.test_offramp_quote_flow),
             ("Stripe Webhook Route", self.test_stripe_webhook_route),
             ("Pricing Endpoint", self.test_pricing_endpoint),
         ]
@@ -812,18 +816,21 @@ class NeoNobleAPITester:
                 self.log_test_result(test_name, False, f"Exception: {e}")
         
         # Summary
-        logger.info("\n" + "="*60)
-        logger.info("TEST SUMMARY")
-        logger.info("="*60)
+        logger.info("\n" + "="*80)
+        logger.info("COMPREHENSIVE PoR ENGINE VALIDATION SUMMARY")
+        logger.info("="*80)
         
         passed = 0
         failed = 0
+        critical_failures = []
         
         for test_name, result in self.test_results.items():
             status = "✅ PASS" if result["success"] else "❌ FAIL"
             logger.info(f"{status} {test_name}")
             if not result["success"] and result["details"]:
                 logger.info(f"    Error: {result['details']}")
+                if any(keyword in test_name.lower() for keyword in ["por", "user ui", "developer api", "consistency"]):
+                    critical_failures.append(test_name)
             
             if result["success"]:
                 passed += 1
@@ -831,6 +838,11 @@ class NeoNobleAPITester:
                 failed += 1
         
         logger.info(f"\nTotal: {passed + failed}, Passed: {passed}, Failed: {failed}")
+        
+        if critical_failures:
+            logger.error(f"\n🚨 CRITICAL PoR ENGINE FAILURES: {critical_failures}")
+        else:
+            logger.info(f"\n✅ PoR ENGINE VALIDATION COMPLETE - ALL FLOWS WORKING")
         
         return self.test_results
 
