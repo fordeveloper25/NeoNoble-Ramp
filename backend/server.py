@@ -97,6 +97,12 @@ set_ramp_service(ramp_service)
 set_payout_service(payout_service)
 set_por_engine(por_engine)
 
+# Import and wire PoR engine to user routes and ramp API routes
+from routes.user_ramp import set_por_engine as set_user_por_engine
+from routes.ramp_api import set_por_engine as set_api_por_engine
+set_user_por_engine(por_engine)
+set_api_por_engine(por_engine)
+
 # Background task for blockchain monitoring
 blockchain_poll_task = None
 
