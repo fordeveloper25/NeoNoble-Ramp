@@ -194,10 +194,10 @@ class NeoNobleAPITester:
         dev_data = {
             "email": "testdev_api@neonoble.com",
             "password": "DevPass123!",
-            "company_name": "Test Integration Corp"
+            "role": "DEVELOPER"
         }
         
-        success, data, status = await self.make_request("POST", "/auth/developer/register", dev_data)
+        success, data, status = await self.make_request("POST", "/auth/register", dev_data)
         
         # Registration may fail if user already exists (400), which is expected
         registration_ok = (status == 200) or (status == 400 and "already" in str(data).lower())
@@ -217,7 +217,7 @@ class NeoNobleAPITester:
             "password": "DevPass123!"
         }
         
-        success, data, status = await self.make_request("POST", "/auth/developer/login", login_data)
+        success, data, status = await self.make_request("POST", "/auth/login", login_data)
         
         if success and isinstance(data, dict) and data.get("token"):
             self.dev_auth_token = data["token"]
