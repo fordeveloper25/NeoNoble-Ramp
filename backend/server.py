@@ -228,7 +228,14 @@ async def root():
         "features": {
             "blockchain_monitoring": bool(os.environ.get('BSC_RPC_URL')),
             "hd_wallet": bool(os.environ.get('NENO_WALLET_MNEMONIC')),
-            "stripe_payouts": bool(os.environ.get('STRIPE_SECRET_KEY'))
+            "stripe_payouts": bool(os.environ.get('STRIPE_SECRET_KEY')),
+            "por_engine": True  # Always available
+        },
+        "por_engine": {
+            "name": "NeoNoble Internal PoR",
+            "version": "2.0.0",
+            "available": True,
+            "settlement_mode": "instant"
         },
         "docs": "/docs"
     }
