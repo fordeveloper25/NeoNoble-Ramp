@@ -308,8 +308,8 @@ class PoREngineAPITester:
             states = data.get("states", [])
             states_valid = (
                 len(states) > 10 and  # Should have all transaction states
-                any(s.get("value") == "quote_created" for s in states) and
-                any(s.get("value") == "completed" for s in states)
+                any(s.get("value") == "QUOTE_CREATED" for s in states) and
+                any(s.get("value") == "COMPLETED" for s in states)
             )
         
         self.log_test_result(
