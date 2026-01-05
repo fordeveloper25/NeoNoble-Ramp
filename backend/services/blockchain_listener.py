@@ -99,7 +99,7 @@ class BlockchainListener:
                 logger.error(f"Failed to connect to BSC RPC: {rpc_url}")
                 return None
             
-            logger.info(f"Connected to BSC RPC")
+            logger.info("Connected to BSC RPC")
             return self._web3
         except Exception as e:
             logger.error(f"Error connecting to BSC RPC: {e}")
