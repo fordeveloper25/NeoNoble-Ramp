@@ -362,6 +362,33 @@ class InternalPoRProvider(BaseProvider):
             if not quote:
                 return None, f"Quote not found: {quote_id}"
             
+            # Check if already processed (idempotency protection)
+            if quote.state in [
+                TransactionState.COMPLETED,
+                TransactionState.FAILED,
+                TransactionState.REFUNDED,
+                TransactionState.SETTLEMENT_COMPLETED,
+                TransactionState.PAYOUT_COMPLETED
+            ]:
+                logger.warning(f"Deposit already processed for quote {quote_id} (state: {quote.state.value})")
+                return quote, None  # Return current state without error
+            
+            # Check if deposit can be processed
+            if quote.state not in [
+                TransactionState.DEPOSIT_PENDING,
+                TransactionState.QUOTE_ACCEPTED
+            ]:
+                return None, f"Cannot process deposit in state: {quote.state.value}"
+            
+            # Check for duplicate tx_hash
+            existing_tx = quote.metadata.get("deposit_tx_hash")
+            if existing_tx:
+                if existing_tx == tx_hash:
+                    logger.warning(f"Duplicate deposit tx_hash for quote {quote_id}")
+                    return quote, None  # Idempotent - same tx
+                else:
+                    return None, f"Quote {quote_id} already has a deposit with different tx_hash"
+            
             now = datetime.now(timezone.utc)
             
             # Add deposit detected event
