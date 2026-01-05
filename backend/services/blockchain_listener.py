@@ -115,6 +115,9 @@ class BlockchainListener:
             return self._contract
         
         web3 = self._get_web3()
+        if web3 is None:
+            return None
+        
         self._contract = web3.eth.contract(
             address=Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
             abi=BEP20_ABI
@@ -145,12 +148,20 @@ class BlockchainListener:
         await self.events_collection.create_index("to_address")
         await self.events_collection.create_index("status")
         
+        # Check if BSC RPC is configured
+        web3 = self._get_web3()
+        if web3 is None:
+            self._enabled = False
+            logger.warning("Blockchain listener disabled (no BSC_RPC_URL)")
+            return
+        
         # Get current block
         try:
-            web3 = self._get_web3()
             self._last_block = web3.eth.block_number
+            self._enabled = True
             logger.info(f"Blockchain listener initialized at block {self._last_block}")
         except Exception as e:
+            self._enabled = False
             logger.error(f"Failed to initialize blockchain listener: {e}")
     
     async def get_token_balance(self, address: str) -> Decimal:
