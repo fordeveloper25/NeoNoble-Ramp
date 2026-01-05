@@ -514,13 +514,16 @@ class NeoNobleAPITester:
         )
         
         timeline_valid = False
-        if success and isinstance(data, list):
-            timeline_valid = len(data) >= 11  # All state transitions logged
+        if success and isinstance(data, dict):
+            events = data.get("events", [])
+            timeline_valid = len(events) >= 11  # All state transitions logged
+        elif success and isinstance(data, list):
+            timeline_valid = len(data) >= 11
         
         self.log_test_result(
             "User UI - Get Transaction Timeline", 
             success and status == 200 and timeline_valid,
-            f"Status: {status}, Timeline Events: {len(data) if isinstance(data, list) else 0}"
+            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0}"
         )
         
         return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
