@@ -699,20 +699,22 @@ class NeoNobleAPITester:
         
         por_status_valid = False
         if success and isinstance(data, dict):
-            provider = data.get("provider", {})
-            capabilities = data.get("capabilities", {})
-            liquidity = data.get("liquidity", {})
+            provider = data.get("provider")
+            available = data.get("available")
+            settlement_mode = data.get("settlement_mode")
+            neno_price = data.get("neno_price_eur")
             
             por_status_valid = (
-                provider.get("name") == "NeoNoble Internal PoR" and
-                capabilities.get("instant_settlement") == True and
-                liquidity.get("available") == True
+                provider == "NeoNoble Internal PoR" and
+                available == True and
+                settlement_mode == "instant" and
+                neno_price == 10000.0
             )
         
         self.log_test_result(
             "Public - Get PoR Engine Status", 
             success and status == 200 and por_status_valid,
-            f"Status: {status}, Provider: {provider.get('name') if isinstance(data, dict) and 'provider' in data else 'N/A'}"
+            f"Status: {status}, Provider: {data.get('provider') if isinstance(data, dict) else 'N/A'}, Available: {data.get('available') if isinstance(data, dict) else 'N/A'}"
         )
         
         # Test API health check
