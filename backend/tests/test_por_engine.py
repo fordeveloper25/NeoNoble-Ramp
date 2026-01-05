@@ -209,7 +209,7 @@ class PoREngineAPITester:
             # In instant settlement mode, should go directly to COMPLETED
             deposit_valid = (
                 data.get("quote_id") == self.quote_id and
-                data.get("state") == "completed" and  # Instant settlement
+                data.get("state") == "COMPLETED" and  # Instant settlement
                 data.get("metadata", {}).get("settlement_id") is not None and
                 data.get("metadata", {}).get("payout_reference") is not None and
                 data.get("compliance", {}).get("aml_status") == "cleared"
