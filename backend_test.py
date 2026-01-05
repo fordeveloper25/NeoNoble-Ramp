@@ -240,8 +240,7 @@ class NeoNobleAPITester:
         
         # Test API key creation
         api_key_data = {
-            "name": "Test API Key",
-            "description": "Test key for integration testing"
+            "name": "POR Test Key"
         }
         
         success, data, status = await self.make_request(
@@ -255,7 +254,7 @@ class NeoNobleAPITester:
         self.log_test_result(
             "API Key Creation", 
             success and status == 200 and self.api_key and self.api_secret,
-            f"Status: {status}, API Key: {'Present' if self.api_key else 'Missing'}"
+            f"Status: {status}, API Key: {'Present' if self.api_key else 'Missing'}, Secret: {'Present' if self.api_secret else 'Missing'}"
         )
         
         # Test API key listing
