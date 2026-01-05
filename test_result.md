@@ -378,9 +378,6 @@ metadata:
 
 test_plan:
   current_focus:
-    - "User UI Off-Ramp Flow via PoR Engine"
-    - "Developer API Off-Ramp Flow via PoR Engine (HMAC)"
-    - "State transition consistency validation"
     - "Frontend UI testing via Playwright"
   stuck_tasks: []
   test_all: true
