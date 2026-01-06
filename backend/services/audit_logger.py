@@ -229,7 +229,7 @@ class AuditLogger:
     
     async def get_audit_trail(self, quote_id: str) -> list:
         """Get complete audit trail for a quote."""
-        if not self.audit_collection:
+        if self.audit_collection is None:
             return []
         
         cursor = self.audit_collection.find(
@@ -249,7 +249,7 @@ class AuditLogger:
         limit: int = 100
     ) -> list:
         """Get recent audit events."""
-        if not self.audit_collection:
+        if self.audit_collection is None:
             return []
         
         query = {}
