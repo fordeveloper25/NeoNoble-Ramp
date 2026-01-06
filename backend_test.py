@@ -1739,21 +1739,21 @@ class PostgreSQLMigrationTester:
         return self.test_results
     
     async def run_all_tests(self):
-        """Run all tests in sequence - DEPRECATED: Use run_comprehensive_e2e_tests instead"""
-        return await self.run_comprehensive_e2e_tests()
+        """Run PostgreSQL migration validation tests"""
+        return await self.run_postgresql_migration_tests()
 
 async def main():
-    """Main test runner for comprehensive E2E validation"""
-    async with NeoNobleE2ETester() as tester:
-        results = await tester.run_comprehensive_e2e_tests()
+    """Main test runner for PostgreSQL migration validation"""
+    async with PostgreSQLMigrationTester() as tester:
+        results = await tester.run_postgresql_migration_tests()
         
         # Return exit code based on results
         failed_tests = [name for name, result in results.items() if not result["success"]]
         if failed_tests:
-            logger.error(f"\n❌ {len(failed_tests)} E2E tests failed")
+            logger.error(f"\n❌ {len(failed_tests)} PostgreSQL migration tests failed")
             return 1
         else:
-            logger.info(f"\n✅ All E2E tests passed!")
+            logger.info(f"\n✅ All PostgreSQL migration tests passed!")
             return 0
 
 if __name__ == "__main__":
