@@ -320,7 +320,7 @@ class DatabaseMigrator:
                         crypto_amount=doc.get("crypto_amount"),
                         crypto_currency=doc.get("crypto_currency"),
                         fiat_amount=doc.get("fiat_amount"),
-                        details=doc.get("details", {}),
+                        extra_details=doc.get("details", {}),
                         created_at=doc.get("timestamp", datetime.now(timezone.utc))
                     )
                     
