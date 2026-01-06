@@ -150,13 +150,18 @@ class ProviderQuote:
     fee_amount: float
     fee_percentage: float
     net_payout: float
-    deposit_address: Optional[str]
+    deposit_address: Optional[str]  # For off-ramp: crypto deposit address
     expires_at: str
     created_at: str
     state: TransactionState = TransactionState.QUOTE_CREATED
     compliance: ComplianceInfo = field(default_factory=ComplianceInfo)
     timeline: List[TimelineEvent] = field(default_factory=list)
     metadata: Dict = field(default_factory=dict)
+    # On-ramp specific fields
+    direction: str = "offramp"  # "onramp" or "offramp"
+    wallet_address: Optional[str] = None  # For on-ramp: user's crypto wallet
+    payment_reference: Optional[str] = None  # For on-ramp: fiat payment reference
+    payment_amount: Optional[float] = None  # For on-ramp: total fiat to pay
 
 
 @dataclass
