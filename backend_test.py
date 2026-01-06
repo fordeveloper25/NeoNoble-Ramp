@@ -409,7 +409,9 @@ class PostgreSQLMigrationTester:
         # Step 3: Process payment
         logger.info("Step 3: Process Payment")
         payment_data = {
-            "quote_id": self.pg_onramp_quote_id
+            "quote_id": self.pg_onramp_quote_id,
+            "payment_ref": "PAY-PG-TEST-001",
+            "amount_paid": 10000.0
         }
         
         success, data, status = await self.make_request(
