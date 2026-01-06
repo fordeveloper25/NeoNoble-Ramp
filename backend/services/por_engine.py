@@ -16,6 +16,8 @@ Features:
 - Full transaction lifecycle
 - KYC/AML responsibility at PoR level
 - Enterprise-grade state machine
+- Real-time webhook event broadcasting
+- Comprehensive audit logging
 """
 
 import os
@@ -41,6 +43,12 @@ from services.provider_interface import (
     AMLStatus
 )
 from services.pricing_service import pricing_service, NENO_PRICE_EUR
+from services.audit_logger import AuditLogger, AuditEventType, get_audit_logger
+from services.webhook_service import (
+    WebhookService, 
+    get_webhook_service, 
+    get_webhook_event_type
+)
 
 logger = logging.getLogger(__name__)
 
