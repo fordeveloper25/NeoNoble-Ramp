@@ -51,10 +51,10 @@ class DatabaseMigrator:
         self.mongo_db = None
         
         # PostgreSQL connection
-        pg_host = os.environ.get("POSTGRES_HOST", "localhost")
+        pg_host = os.environ.get("POSTGRES_HOST", "127.0.0.1")
         pg_port = os.environ.get("POSTGRES_PORT", "5432")
         pg_user = os.environ.get("POSTGRES_USER", "neonoble")
-        pg_password = os.environ.get("POSTGRES_PASSWORD", "neonoble_secret")
+        pg_password = os.environ.get("POSTGRES_PASSWORD", "neonoble_secret_2025")
         pg_database = os.environ.get("POSTGRES_DB", "neonoble_ramp")
         
         self.pg_url = f"postgresql+asyncpg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
