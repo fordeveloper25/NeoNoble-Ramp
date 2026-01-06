@@ -74,7 +74,7 @@ class AuditLogger:
     
     async def initialize(self):
         """Initialize audit logger."""
-        if self.audit_collection:
+        if self.audit_collection is not None:
             await self.audit_collection.create_index("timestamp")
             await self.audit_collection.create_index("event_type")
             await self.audit_collection.create_index("quote_id")
