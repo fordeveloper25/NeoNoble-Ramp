@@ -594,6 +594,97 @@ frontend:
           - Layout adapts properly to different screen sizes
           - Touch-friendly interface elements
 
+  - task: "Frontend E2E On-Ramp + Off-Ramp UX Consistency Validation"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/Dashboard.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ FRONTEND E2E UX CONSISTENCY VALIDATION COMPLETE
+          
+          🔥 LANDING PAGE VERIFICATION - PERFECT:
+          • NeoNoble Ramp branding displayed correctly ✅
+          • €10,000 NENO Fixed Price prominently shown ✅
+          • 1.5% Trading Fee clearly displayed ✅
+          • Start Trading and Developer Portal buttons functional ✅
+          • Professional design with all key stats visible ✅
+          
+          🚀 USER REGISTRATION & AUTHENTICATION - WORKING:
+          • User registration: e2e_frontend_test@neonoble.com successful ✅
+          • JWT token generation working correctly ✅
+          • Backend logs confirm successful user registration ✅
+          • Authentication flow integrated with frontend ✅
+          
+          🎯 ON-RAMP (BUY CRYPTO) FLOW API VALIDATION - FULLY FUNCTIONAL:
+          • On-ramp quote creation: €10,000 → 0.985 NENO ✅
+          • Quote ID format: "por_on_cf70048f58854d" (correct prefix) ✅
+          • Direction: "onramp" ✅
+          • Exchange Rate: 1 NENO = €10,000 ✅
+          • Fee Calculation: 1.5% = €150 ✅
+          • You Receive: 0.985 NENO (€9,850 / €10,000) ✅
+          • Payment Reference: "PAY-8F58854D" generated ✅
+          • Provider: "internal_por" (NeoNoble PoR Engine) ✅
+          • State: "QUOTE_CREATED" ✅
+          • Compliance: por_responsible=true, KYC/AML handled by PoR ✅
+          
+          🌐 OFF-RAMP (SELL CRYPTO) FLOW API VALIDATION - FULLY FUNCTIONAL:
+          • Off-ramp quote creation: 1 NENO → €9,850 ✅
+          • Quote ID format: "por_c8d01892dada4412" (correct prefix) ✅
+          • Direction: "offramp" ✅
+          • Exchange Rate: 1 NENO = €10,000 ✅
+          • Fee Calculation: 1.5% = €150 ✅
+          • You Get: €9,850 (€10,000 - €150) ✅
+          • Deposit Address: "0x8979E3EBf2d8Bd7Ae4791E41950F049d748f7Cf1" generated ✅
+          • Provider: "internal_por" (NeoNoble PoR Engine) ✅
+          • State: "QUOTE_CREATED" ✅
+          • Compliance: por_responsible=true, KYC/AML handled by PoR ✅
+          
+          🏆 UX CONSISTENCY VALIDATION - PERFECT ALIGNMENT:
+          • State Badge: Both flows show "QUOTE_CREATED" state ✅
+          • Fee Transparency: Both flows display 1.5% fee consistently ✅
+          • Provider Branding: Both flows show "NeoNoble PoR Engine" ✅
+          • Compliance Messaging: Both flows include "PoR handles KYC/AML" ✅
+          • Payment Reference: On-ramp generates payment reference ✅
+          • Deposit Address: Off-ramp generates deposit address ✅
+          • Exchange Rate: Both flows show 1 NENO = €10,000 ✅
+          • Response Schema: Perfect consistency between on-ramp and off-ramp ✅
+          
+          📊 FRONTEND UI ELEMENTS VERIFIED:
+          • Dashboard tabs: "Buy Crypto" and "Sell Crypto" functional ✅
+          • Cryptocurrency selection: NENO properly listed ✅
+          • Amount input fields: Fiat amount (on-ramp) and crypto amount (off-ramp) ✅
+          • Quote display: Consistent formatting and information ✅
+          • Destination inputs: Wallet address (on-ramp) and bank IBAN (off-ramp) ✅
+          • Error handling: Clear error messages for validation ✅
+          
+          🎯 KEY UX ELEMENTS CONFIRMED:
+          • State badge visibility (QUOTE_CREATED) ✅
+          • Fee transparency (1.5% clearly shown) ✅
+          • Payment reference for on-ramp ✅
+          • Deposit address for off-ramp ✅
+          • Provider branding (NeoNoble PoR Engine) ✅
+          • Compliance messaging (PoR handles KYC/AML) ✅
+          • Clear success/error messages ✅
+          
+          Environment Validated:
+          - Frontend URL: https://por-platform-1.preview.emergentagent.com ✓
+          - NENO Token: Fixed price €10,000 per token ✓
+          - Fee: 1.5% ✓
+          - Settlement: Instant mode ✓
+          
+          📸 Screenshots Captured:
+          • Landing page with branding and pricing ✓
+          • Dashboard with authentication ✓
+          • On-ramp and off-ramp quote displays ✓
+          
+          The frontend UI demonstrates excellent UX consistency between on-ramp and off-ramp flows
+          with identical quote display formats, consistent fee presentation, and proper state management.
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
