@@ -402,7 +402,7 @@ class NeoNobleAPITester:
         
         quote_valid = False
         if success and isinstance(data, dict):
-            self.user_quote_id = data.get("quote_id")
+            self.user_onramp_quote_id = data.get("quote_id")
             direction = data.get("direction")
             fiat_amount = data.get("fiat_amount")
             fee_percentage = data.get("fee_percentage")
@@ -414,7 +414,7 @@ class NeoNobleAPITester:
             compliance = data.get("compliance", {})
             
             quote_valid = (
-                self.user_quote_id and self.user_quote_id.startswith("por_on_") and
+                self.user_onramp_quote_id and self.user_onramp_quote_id.startswith("por_on_") and
                 direction == "onramp" and
                 fiat_amount == 10000 and
                 fee_percentage == 1.5 and
@@ -429,7 +429,7 @@ class NeoNobleAPITester:
         self.log_test_result(
             "User UI - Create ON-RAMP PoR Quote", 
             success and status == 200 and quote_valid,
-            f"Status: {status}, Quote ID: {self.user_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, Fee: {data.get('fee_amount') if isinstance(data, dict) else 'N/A'}"
+            f"Status: {status}, Quote ID: {self.user_onramp_quote_id, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}, Fee: {data.get('fee_amount') if isinstance(data, dict) else 'N/A'}"
         )
         
         if not quote_valid:
