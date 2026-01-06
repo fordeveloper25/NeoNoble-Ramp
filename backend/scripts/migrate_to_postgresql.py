@@ -240,11 +240,16 @@ class DatabaseMigrator:
                         state=doc.get("state"),
                         kyc_status=compliance.get("kyc_status", "not_required"),
                         kyc_provider=compliance.get("kyc_provider", "internal_por"),
+                        kyc_verified_at=self._parse_datetime(compliance.get("kyc_verified_at"), default_now=False),
                         aml_status=compliance.get("aml_status", "not_required"),
                         aml_provider=compliance.get("aml_provider", "internal_por"),
+                        aml_cleared_at=self._parse_datetime(compliance.get("aml_cleared_at"), default_now=False),
+                        risk_score=compliance.get("risk_score"),
+                        risk_level=compliance.get("risk_level", "low"),
                         por_responsible=compliance.get("por_responsible", True),
-                        expires_at=datetime.fromisoformat(doc.get("expires_at").replace('Z', '+00:00')) if doc.get("expires_at") else datetime.now(timezone.utc),
-                        created_at=datetime.fromisoformat(doc.get("created_at").replace('Z', '+00:00')) if doc.get("created_at") else datetime.now(timezone.utc),
+                        expires_at=self._parse_datetime(doc.get("expires_at")),
+                        created_at=self._parse_datetime(doc.get("created_at")),
+                        completed_at=self._parse_datetime(doc.get("completed_at"), default_now=False),
                         extra_data=doc.get("metadata", {})
                     )
                     
@@ -260,7 +265,7 @@ class DatabaseMigrator:
                                 message=event.get("message"),
                                 provider=event.get("provider", "internal_por"),
                                 details=event.get("details", {}),
-                                created_at=datetime.fromisoformat(event.get("timestamp").replace('Z', '+00:00')) if event.get("timestamp") else datetime.now(timezone.utc)
+                                created_at=self._parse_datetime(event.get("timestamp"))
                             )
                             session.add(te)
                         
