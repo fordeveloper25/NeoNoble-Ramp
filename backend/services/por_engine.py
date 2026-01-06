@@ -465,6 +465,9 @@ class InternalPoRProvider(BaseProvider):
             
             await self._store_transaction(quote)
             
+            # Broadcast webhook event
+            await self._broadcast_state_change(quote, "DEPOSIT_DETECTED")
+            
             logger.info(f"PoR deposit confirmed: {quote_id} | {amount} {quote.crypto_currency}")
             
             # Auto-trigger settlement in INSTANT mode
