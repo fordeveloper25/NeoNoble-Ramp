@@ -85,12 +85,20 @@ blockchain_listener = BlockchainListener(db)
 payout_service = StripePayoutService(db)
 por_engine = InternalPoRProvider(db)
 settlement_service = SettlementService(db)
+audit_logger = AuditLogger(db)
+webhook_service = WebhookService(db)
+
+# Set global service instances
+set_audit_logger(audit_logger)
+set_webhook_service(webhook_service)
 
 # Wire up services
 ramp_service.set_wallet_service(wallet_service)
 ramp_service.set_blockchain_listener(blockchain_listener)
 ramp_service.set_payout_service(payout_service)
 por_engine.set_wallet_service(wallet_service)
+por_engine.set_audit_logger(audit_logger)
+por_engine.set_webhook_service(webhook_service)
 
 # Wire up services to routes
 set_auth_service(auth_service)
