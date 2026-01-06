@@ -693,7 +693,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Comprehensive E2E On-Ramp + Off-Ramp Validation"
+    - "Frontend E2E On-Ramp + Off-Ramp UX Consistency Validation"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
