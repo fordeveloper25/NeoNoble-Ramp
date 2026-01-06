@@ -724,6 +724,7 @@ class InternalPoRProvider(BaseProvider):
         return ProviderQuote(
             quote_id=doc["quote_id"],
             provider=ProviderType(doc.get("provider", "internal_por")),
+            direction=doc.get("direction", "offramp"),
             crypto_amount=doc["crypto_amount"],
             crypto_currency=doc["crypto_currency"],
             fiat_amount=doc["fiat_amount"],
@@ -733,6 +734,9 @@ class InternalPoRProvider(BaseProvider):
             fee_percentage=doc["fee_percentage"],
             net_payout=doc["net_payout"],
             deposit_address=doc.get("deposit_address"),
+            wallet_address=doc.get("wallet_address"),
+            payment_reference=doc.get("payment_reference"),
+            payment_amount=doc.get("payment_amount"),
             expires_at=doc["expires_at"],
             created_at=doc["created_at"],
             state=TransactionState(doc["state"]),
