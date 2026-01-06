@@ -1072,3 +1072,45 @@ agent_communication:
       The off-ramp backend consolidation is working perfectly with all critical systems operational.
       The only minor issue is that the audit logging service exists but the monitoring router
       is not wired to the main server, which is a simple configuration fix.
+  - agent: "main"
+    message: |
+      POSTGRESQL MIGRATION TESTING REQUESTED
+      
+      Migration Status:
+      - Phase: validation/dual_read_pg
+      - Mode: dual_read_pg (PostgreSQL is now primary read source)
+      - Data migrated: 35 users, 29/31 API keys, 117 transactions, 50 settlements, 3 webhooks, 21 audit logs
+      - Validation: 2/3 checks passed, 1 minor discrepancy (2 legacy system API keys)
+      
+      Please test the following critical flows to validate PostgreSQL integration:
+      
+      1. USER AUTHENTICATION FLOW:
+         - Register a new user (should write to both MongoDB and PostgreSQL)
+         - Login with new user (should read from PostgreSQL)
+         
+      2. OFF-RAMP FLOW (PoR Engine):
+         - Create off-ramp quote
+         - Execute quote (should write to both databases)
+         - Process deposit
+         - Verify transaction timeline (should read from PostgreSQL)
+         
+      3. ON-RAMP FLOW (PoR Engine):
+         - Create on-ramp quote
+         - Execute quote
+         - Process payment
+         - Verify transaction timeline
+         
+      4. DEVELOPER API FLOW:
+         - Create API key (should write to both databases)
+         - Use HMAC to create quote
+         - Verify transaction via HMAC endpoint
+         
+      5. MIGRATION METRICS:
+         - Check /api/migration/status for write counts
+         - Check /api/migration/metrics for consistency
+         
+      Backend URL: https://ramp-platform-1.preview.emergentagent.com/api
+      
+      IMPORTANT: All writes should go to both MongoDB and PostgreSQL.
+      All reads should come from PostgreSQL.
+      Verify no data loss or state inconsistency.
