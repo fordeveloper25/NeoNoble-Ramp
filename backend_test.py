@@ -800,7 +800,7 @@ class NeoNobleE2ETester:
         # Step 6: Get Timeline (HMAC)
         logger.info("Step 6: Get Timeline (HMAC)")
         success, data, status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction/{self.e2e_dev_onramp_quote_id}/timeline", use_hmac=True
+            "GET", f"/ramp-api-onramp-transaction-por/{self.e2e_dev_onramp_quote_id}/timeline", use_hmac=True
         )
         
         timeline_valid = False
