@@ -15,17 +15,17 @@ from services.webhook_service import (
     WebhookDeliveryStatus,
     get_webhook_service
 )
-from middleware.hmac_auth import HMACMiddleware
+from middleware.auth import HMACAuthMiddleware
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
 # HMAC middleware for developer authentication
-hmac_middleware: HMACMiddleware = None
+hmac_middleware: HMACAuthMiddleware = None
 
 
-def set_hmac_middleware(middleware: HMACMiddleware):
+def set_hmac_middleware(middleware: HMACAuthMiddleware):
     global hmac_middleware
     hmac_middleware = middleware
 
