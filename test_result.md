@@ -693,11 +693,10 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Off-Ramp Backend Consolidation Testing"
-    - "Webhook Service Validation"
-    - "Audit Logging Validation"
+    - "PostgreSQL Migration Implementation Complete"
+    - "Repository Pattern Implementation Complete"
   stuck_tasks: []
-  test_all: true
+  test_all: false
   test_priority: "high_first"
 
 agent_communication:
