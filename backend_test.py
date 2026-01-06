@@ -744,7 +744,7 @@ class NeoNobleAPITester:
         
         # Step 2: Execute On-Ramp via Dev API
         execute_data = {
-            "quote_id": self.dev_quote_id,
+            "quote_id": self.dev_onramp_quote_id,
             "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12"
         }
         
