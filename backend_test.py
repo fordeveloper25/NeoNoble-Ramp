@@ -824,7 +824,7 @@ class NeoNobleAPITester:
         
         # Step 5: Get On-Ramp Timeline via Dev API
         success, data, status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction/{self.dev_onramp_quote_id}/timeline", use_hmac=True
+            "GET", f"/ramp-api-onramp-transaction-por/{self.dev_onramp_quote_id}/timeline", use_hmac=True
         )
         
         timeline_valid = False
