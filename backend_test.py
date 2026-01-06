@@ -749,7 +749,7 @@ class NeoNobleAPITester:
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp-api-onramp", execute_data, use_hmac=True
+            "POST", "/ramp-api-onramp-por", execute_data, use_hmac=True
         )
         
         execute_valid = False
