@@ -316,6 +316,12 @@ api_router.include_router(ramp_api_router)
 api_router.include_router(user_ramp_router)
 api_router.include_router(webhooks_router)
 api_router.include_router(por_router)
+api_router.include_router(webhook_mgmt_router)
+
+# Set HMAC middleware for webhook routes
+from middleware.hmac_auth import HMACMiddleware
+hmac_middleware = HMACMiddleware(api_key_service)
+set_webhook_hmac(hmac_middleware)
 
 # Include the main router
 app.include_router(api_router)
