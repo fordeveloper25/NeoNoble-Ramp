@@ -522,7 +522,7 @@ async def execute_onramp_por(request: PoROnrampExecuteRequest, http_request: Req
     return response
 
 
-@router.post("/ramp-api-payment-process")
+@router.post("/ramp-api-payment-process-por")
 async def process_payment_por(request: PoRPaymentProcessRequest, http_request: Request):
     """
     Process a confirmed fiat payment via PoR engine.
