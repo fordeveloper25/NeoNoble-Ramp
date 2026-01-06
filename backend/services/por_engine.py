@@ -111,6 +111,14 @@ class InternalPoRProvider(BaseProvider):
         """Set wallet service for deposit address generation."""
         self._wallet_service = wallet_service
     
+    def set_audit_logger(self, audit_logger: AuditLogger):
+        """Set audit logger for lifecycle event logging."""
+        self._audit_logger = audit_logger
+    
+    def set_webhook_service(self, webhook_service: WebhookService):
+        """Set webhook service for event broadcasting."""
+        self._webhook_service = webhook_service
+    
     def set_settlement_mode(self, mode: SettlementMode):
         """Configure settlement mode."""
         self._settlement_mode = mode
