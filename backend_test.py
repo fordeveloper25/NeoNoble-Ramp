@@ -292,7 +292,9 @@ class PostgreSQLMigrationTester:
         # Step 3: Process deposit (should write to both databases)
         logger.info("Step 3: Process Deposit")
         deposit_data = {
-            "quote_id": self.pg_user_quote_id
+            "quote_id": self.pg_user_quote_id,
+            "tx_hash": "0xpg_test_hash_001",
+            "amount": 1.0
         }
         
         success, data, status = await self.make_request(
