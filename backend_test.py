@@ -1050,6 +1050,82 @@ class NeoNobleAPITester:
         
         return prices_valid and por_status_valid and health_valid
     
+    async def test_onramp_consistency_validation(self):
+        """Validate consistency between User UI and Developer API ON-RAMP responses"""
+        logger.info("\n=== Testing ON-RAMP Consistency Validation ===")
+        
+        if not self.user_quote_id or not self.dev_quote_id:
+            self.log_test_result("ON-RAMP Consistency Validation", False, "Missing on-ramp quote IDs from previous tests")
+            return False
+        
+        # Get both on-ramp transactions for comparison
+        user_success, user_data, user_status = await self.make_request(
+            "GET", f"/ramp/onramp/por/transaction/{self.user_quote_id}", auth_token=self.auth_token
+        )
+        
+        dev_success, dev_data, dev_status = await self.make_request(
+            "GET", f"/ramp-api-onramp-transaction/{self.dev_quote_id}", use_hmac=True
+        )
+        
+        consistency_valid = False
+        if user_success and dev_success and isinstance(user_data, dict) and isinstance(dev_data, dict):
+            # Check state machine consistency
+            state_consistent = (
+                user_data.get("state") == "COMPLETED" and
+                dev_data.get("state") == "COMPLETED"
+            )
+            
+            # Check direction consistency (both should be onramp)
+            direction_consistent = (
+                user_data.get("direction") == "onramp" and
+                dev_data.get("direction") == "onramp"
+            )
+            
+            # Check compliance metadata structure
+            user_compliance = user_data.get("compliance", {})
+            dev_compliance = dev_data.get("compliance", {})
+            compliance_consistent = (
+                user_compliance.get("por_responsible") == True and
+                dev_compliance.get("por_responsible") == True
+            )
+            
+            # Check fee calculation (1.5%)
+            user_fee = user_data.get("fee_percentage")
+            dev_fee = dev_data.get("fee_percentage")
+            fee_consistent = user_fee == 1.5 and dev_fee == 1.5
+            
+            # Check NENO price (€10,000)
+            user_rate = user_data.get("exchange_rate")
+            dev_rate = dev_data.get("exchange_rate")
+            price_consistent = user_rate == 10000 and dev_rate == 10000
+            
+            # Check fee amounts (should be 1.5% of fiat amount)
+            user_fee_amount = user_data.get("fee_amount")
+            dev_fee_amount = dev_data.get("fee_amount")
+            user_fiat = user_data.get("fiat_amount")
+            dev_fiat = dev_data.get("fiat_amount")
+            fee_amount_consistent = (
+                user_fee_amount == user_fiat * 0.015 and
+                dev_fee_amount == dev_fiat * 0.015
+            )
+            
+            consistency_valid = (
+                state_consistent and
+                direction_consistent and
+                compliance_consistent and
+                fee_consistent and
+                price_consistent and
+                fee_amount_consistent
+            )
+        
+        self.log_test_result(
+            "ON-RAMP Consistency - State Machine & Metadata", 
+            consistency_valid,
+            f"User State: {user_data.get('state') if isinstance(user_data, dict) else 'N/A'}, Dev State: {dev_data.get('state') if isinstance(dev_data, dict) else 'N/A'}, Direction Match: {user_data.get('direction') == dev_data.get('direction') if isinstance(user_data, dict) and isinstance(dev_data, dict) else False}, Fee Match: {user_data.get('fee_percentage') == dev_data.get('fee_percentage') if isinstance(user_data, dict) and isinstance(dev_data, dict) else False}"
+        )
+        
+        return consistency_valid
+    
     async def test_consistency_validation(self):
         """Validate consistency between User UI and Developer API responses"""
         logger.info("\n=== Testing Consistency Validation ===")
