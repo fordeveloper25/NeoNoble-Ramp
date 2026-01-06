@@ -458,40 +458,42 @@ class DualDatabaseManager:
         }
         
         try:
-            async with self.get_mongodb() as mongo_db:
-                # Get 10 most recent transactions
-                cursor = mongo_db.por_transactions.find({}).sort("created_at", -1).limit(10)
-                mongo_docs = await cursor.to_list(length=10)
+            if self._mongo_db is None:
+                raise RuntimeError("MongoDB not initialized")
+            
+            # Get 10 most recent transactions
+            cursor = self._mongo_db.por_transactions.find({}).sort("created_at", -1).limit(10)
+            mongo_docs = await cursor.to_list(length=10)
+            
+            for doc in mongo_docs:
+                quote_id = doc.get("quote_id")
                 
-                for doc in mongo_docs:
-                    quote_id = doc.get("quote_id")
+                # Check in PostgreSQL
+                async with self.get_postgresql_session() as session:
+                    from sqlalchemy import text
+                    result = await session.execute(
+                        text("SELECT quote_id, state, fiat_amount FROM transactions WHERE quote_id = :qid"),
+                        {"qid": quote_id}
+                    )
+                    pg_row = result.fetchone()
+                
+                if pg_row:
+                    # Compare key fields
+                    state_match = doc.get("state") == pg_row[1]
+                    amount_match = abs(doc.get("fiat_amount", 0) - (pg_row[2] or 0)) < 0.01
                     
-                    # Check in PostgreSQL
-                    async with self.get_postgresql_session() as session:
-                        from sqlalchemy import text
-                        result = await session.execute(
-                            text("SELECT quote_id, state, fiat_amount FROM transactions WHERE quote_id = :qid"),
-                            {"qid": quote_id}
-                        )
-                        pg_row = result.fetchone()
+                    check["details"][quote_id] = {
+                        "found_in_pg": True,
+                        "state_match": state_match,
+                        "amount_match": amount_match
+                    }
                     
-                    if pg_row:
-                        # Compare key fields
-                        state_match = doc.get("state") == pg_row[1]
-                        amount_match = abs(doc.get("fiat_amount", 0) - (pg_row[2] or 0)) < 0.01
-                        
-                        check["details"][quote_id] = {
-                            "found_in_pg": True,
-                            "state_match": state_match,
-                            "amount_match": amount_match
-                        }
-                        
-                        if not (state_match and amount_match):
-                            check["passed"] = False
-                    else:
-                        check["details"][quote_id] = {"found_in_pg": False}
+                    if not (state_match and amount_match):
                         check["passed"] = False
-                        
+                else:
+                    check["details"][quote_id] = {"found_in_pg": False}
+                    check["passed"] = False
+                    
         except Exception as e:
             check["passed"] = False
             check["error"] = str(e)
