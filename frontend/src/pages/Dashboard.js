@@ -288,35 +288,71 @@ export default function Dashboard() {
               {quote && (
                 <div className="bg-white/5 rounded-xl p-4 mb-6" data-testid="quote-display">
                   <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-400">Quote</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-gray-400">Quote</span>
+                      {quote.state && (
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          quote.state === 'QUOTE_CREATED' ? 'bg-blue-500/20 text-blue-400' :
+                          quote.state === 'COMPLETED' ? 'bg-green-500/20 text-green-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {quote.state.replace(/_/g, ' ')}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs text-gray-500">
-                      Expires: {new Date(quote.valid_until).toLocaleTimeString()}
+                      Expires: {new Date(quote.expires_at || quote.valid_until).toLocaleTimeString()}
                     </span>
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-400">You {activeTab === 'onramp' ? 'Pay' : 'Sell'}</span>
                       <span className="text-white font-medium">
-                        {activeTab === 'onramp' ? `€${quote.fiat_amount}` : `${quote.crypto_amount} ${quote.crypto_currency}`}
+                        {activeTab === 'onramp' 
+                          ? `€${(quote.payment_amount || quote.fiat_amount)?.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
+                          : `${quote.crypto_amount} ${quote.crypto_currency}`}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Exchange Rate</span>
-                      <span className="text-white font-medium">1 {quote.crypto_currency} = €{quote.exchange_rate.toLocaleString()}</span>
+                      <span className="text-white font-medium">1 {quote.crypto_currency} = €{quote.exchange_rate?.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Fee ({quote.fee_percentage}%)</span>
-                      <span className="text-white font-medium">€{quote.fee_amount}</span>
+                      <span className="text-white font-medium">€{quote.fee_amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="border-t border-white/10 pt-3 flex justify-between">
                       <span className="text-gray-300 font-medium">You {activeTab === 'onramp' ? 'Receive' : 'Get'}</span>
                       <span className="text-white text-lg font-bold">
                         {activeTab === 'onramp' 
-                          ? `${quote.crypto_amount} ${quote.crypto_currency}` 
+                          ? `${quote.crypto_amount?.toFixed(8)} ${quote.crypto_currency}` 
                           : `€${(quote.net_payout || quote.total_fiat || (quote.fiat_amount - quote.fee_amount))?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500">Price source: {quote.price_source}</p>
+                    {/* PoR Provider Info */}
+                    {quote.provider && (
+                      <p className="text-xs text-purple-400">
+                        Provider: {quote.provider === 'internal_por' ? 'NeoNoble PoR Engine' : quote.provider}
+                      </p>
+                    )}
+                    {/* Payment Reference for On-Ramp */}
+                    {activeTab === 'onramp' && quote.payment_reference && (
+                      <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 mt-2">
+                        <p className="text-sm text-purple-300 font-medium">Payment Reference</p>
+                        <p className="text-white font-mono text-lg">{quote.payment_reference}</p>
+                      </div>
+                    )}
+                    {/* Deposit Address for Off-Ramp */}
+                    {activeTab === 'offramp' && quote.deposit_address && (
+                      <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 mt-2">
+                        <p className="text-sm text-purple-300 font-medium">Deposit Address</p>
+                        <p className="text-white font-mono text-xs break-all">{quote.deposit_address}</p>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      {quote.price_source ? `Price source: ${quote.price_source}` : 
+                       quote.compliance?.por_responsible ? 'PoR handles KYC/AML' : ''}
+                    </p>
                   </div>
                 </div>
               )}
