@@ -68,9 +68,9 @@ class AuditLogger:
     
     def __init__(self, db: Optional[AsyncIOMotorDatabase] = None):
         self.db = db
-        self.audit_collection = db.audit_logs if db else None
+        self.audit_collection = db.audit_logs if db is not None else None
         self._enabled = True
-        self._log_to_db = bool(db)
+        self._log_to_db = db is not None
     
     async def initialize(self):
         """Initialize audit logger."""
