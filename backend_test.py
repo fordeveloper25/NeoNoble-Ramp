@@ -456,10 +456,10 @@ class PostgreSQLMigrationTester:
         dev_data = {
             "email": "pg_dev@neonoble.com",
             "password": "DevPG123!",
-            "company_name": "PG Test Corp"
+            "role": "DEVELOPER"
         }
         
-        success, data, status = await self.make_request("POST", "/auth/developer/register", dev_data)
+        success, data, status = await self.make_request("POST", "/auth/register", dev_data)
         
         # Registration may fail if user already exists (400), which is expected
         registration_ok = (status == 200) or (status == 400 and "already" in str(data).lower())
