@@ -532,7 +532,7 @@ async def process_payment_por(request: PoRPaymentProcessRequest, http_request: R
     In instant settlement mode, this completes the entire
     on-ramp flow automatically, delivering crypto to the wallet.
     """
-    auth_info = await hmac_middleware.authenticate(http_request)
+    await hmac_middleware.authenticate(http_request)
     
     if not por_engine:
         raise HTTPException(status_code=503, detail="PoR engine not available")
