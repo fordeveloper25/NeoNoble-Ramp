@@ -241,6 +241,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Webhook service initialization failed: {e}")
     
+    # Initialize PostgreSQL and Dual Database Manager for migration
+    try:
+        pg_engine, pg_session_factory = await init_pg_engine()
+        dual_manager = get_dual_db_manager()
+        await dual_manager.initialize(mongo_db=db, pg_session_factory=pg_session_factory)
+        logger.info(f"Dual Database Manager initialized (mode: {dual_manager.state.mode.value})")
+    except Exception as e:
+        logger.warning(f"PostgreSQL/Dual Manager initialization failed: {e}")
+    
     # Start blockchain monitoring if configured
     if os.environ.get('BSC_RPC_URL'):
         try:
