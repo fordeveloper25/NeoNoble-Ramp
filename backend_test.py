@@ -783,7 +783,7 @@ class NeoNobleE2ETester:
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp-api-payment-process", payment_data, use_hmac=True
+            "POST", "/ramp-api-payment-process-por", payment_data, use_hmac=True
         )
         
         payment_valid = False
