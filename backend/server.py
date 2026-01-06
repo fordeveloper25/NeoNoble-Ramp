@@ -255,6 +255,10 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("NeoNoble Ramp API shutting down...")
     
+    # Stop webhook service worker
+    if webhook_service:
+        await webhook_service.stop_worker()
+    
     # Stop blockchain monitoring
     if blockchain_poll_task:
         blockchain_listener.stop_polling()
