@@ -431,7 +431,7 @@ class PostgresWebhookRepository(WebhookRepository):
     
     async def find_enabled(self) -> List[Webhook]:
         result = await self.session.execute(
-            select(Webhook).where(Webhook.enabled == True)
+            select(Webhook).where(Webhook.enabled.is_(True))
         )
         return list(result.scalars().all())
     
