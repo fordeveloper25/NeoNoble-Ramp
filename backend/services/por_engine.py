@@ -364,6 +364,9 @@ class InternalPoRProvider(BaseProvider):
             # Store update
             await self._store_transaction(quote)
             
+            # Broadcast webhook events
+            await self._broadcast_state_change(quote, "QUOTE_CREATED")
+            
             logger.info(f"PoR quote accepted: {quote_id} → DEPOSIT_PENDING")
             
             return quote, None
