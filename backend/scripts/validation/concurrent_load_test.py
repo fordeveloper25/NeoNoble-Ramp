@@ -154,7 +154,7 @@ class ConcurrentLoadTest:
         return flow_result
     
     async def run_onramp_flow(self, session: aiohttp.ClientSession, token: str, flow_id: int) -> Dict:
-        """Run a complete on-ramp flow."""
+        """Run a complete on-ramp flow using PoR auto-processing."""
         flow_result = {
             "flow_id": flow_id,
             "type": "onramp",
@@ -164,6 +164,7 @@ class ConcurrentLoadTest:
         }
         
         headers = {"Authorization": f"Bearer {token}"}
+        wallet_address = "0x742d35Cc6634C0532925a3b844Bc9e7595f0Ab12"
         
         try:
             # Create quote
@@ -173,7 +174,7 @@ class ConcurrentLoadTest:
                 json={
                     "fiat_amount": 1000,
                     "fiat_currency": "EUR",
-                    "wallet_address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0Ab12"
+                    "wallet_address": wallet_address
                 },
                 headers=headers
             ) as resp:
@@ -188,11 +189,11 @@ class ConcurrentLoadTest:
                     flow_result["success"] = False
                     return flow_result
             
-            # Execute quote
+            # Execute quote (wallet_address is already in quote)
             start = time.time()
             async with session.post(
                 f"{API_URL}/api/ramp/onramp/por/execute",
-                json={"quote_id": quote_id},
+                json={"quote_id": quote_id, "wallet_address": wallet_address},
                 headers=headers
             ) as resp:
                 elapsed = time.time() - start
@@ -203,7 +204,7 @@ class ConcurrentLoadTest:
                     flow_result["success"] = False
                     return flow_result
             
-            # Process payment
+            # Process payment using PoR auto-process
             start = time.time()
             async with session.post(
                 f"{API_URL}/api/ramp/onramp/por/payment/process",
