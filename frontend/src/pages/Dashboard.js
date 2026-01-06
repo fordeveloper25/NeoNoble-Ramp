@@ -94,14 +94,24 @@ export default function Dashboard() {
         if (!walletAddress) {
           throw new Error('Please enter your wallet address');
         }
-        await rampApi.executeOnramp(quote.quote_id, walletAddress);
-        setSuccess(`Successfully initiated purchase of ${quote.crypto_amount} ${quote.crypto_currency}!`);
+        const result = await rampApi.executeOnramp(quote.quote_id, walletAddress);
+        const paymentRef = result.payment_reference || quote.payment_reference;
+        const paymentAmount = result.payment_amount || quote.payment_amount || quote.fiat_amount;
+        setSuccess(
+          `Order confirmed! You will receive ${quote.crypto_amount?.toFixed(8)} ${quote.crypto_currency}.\n` +
+          `Please complete payment of €${paymentAmount?.toLocaleString()} using reference: ${paymentRef}`
+        );
       } else {
         if (!bankAccount) {
           throw new Error('Please enter your bank account IBAN');
         }
-        await rampApi.executeOfframp(quote.quote_id, bankAccount);
-        setSuccess(`Successfully initiated sale of ${quote.crypto_amount} ${quote.crypto_currency}!`);
+        const result = await rampApi.executeOfframp(quote.quote_id, bankAccount);
+        const depositAddr = result.deposit_address || quote.deposit_address;
+        setSuccess(
+          `Order confirmed! Send ${quote.crypto_amount} ${quote.crypto_currency} to:\n` +
+          `${depositAddr}\n` +
+          `You will receive €${(quote.net_payout || (quote.fiat_amount - quote.fee_amount))?.toLocaleString('en-US', {minimumFractionDigits: 2})} after confirmation.`
+        );
       }
       
       // Reset form
