@@ -154,3 +154,14 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 def get_mongodb() -> AsyncIOMotorDatabase:
     """Get MongoDB database (legacy)."""
     return db_config.get_mongodb()
+
+
+async def init_pg_engine():
+    """Initialize PostgreSQL engine and return session factory."""
+    await db_config.initialize_postgresql()
+    return db_config._pg_engine, db_config._pg_session_factory
+
+
+def get_pg_session_factory():
+    """Get PostgreSQL session factory (must be initialized first)."""
+    return db_config._pg_session_factory
