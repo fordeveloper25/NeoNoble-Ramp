@@ -500,14 +500,14 @@ class NeoNobleAPITester:
         
         # Step 4: Get On-Ramp Transaction Details
         success, data, status = await self.make_request(
-            "GET", f"/ramp/onramp/por/transaction/{self.user_quote_id}", auth_token=self.auth_token
+            "GET", f"/ramp/onramp/por/transaction/{self.user_onramp_quote_id}", auth_token=self.auth_token
         )
         
         details_valid = False
         if success and isinstance(data, dict):
             compliance = data.get("compliance", {})
             details_valid = (
-                data.get("quote_id") == self.user_quote_id and
+                data.get("quote_id") == self.user_onramp_quote_id and
                 data.get("state") == "COMPLETED" and
                 data.get("direction") == "onramp" and
                 compliance.get("por_responsible") == True
@@ -516,12 +516,12 @@ class NeoNobleAPITester:
         self.log_test_result(
             "User UI - Get ON-RAMP Transaction Details", 
             success and status == 200 and details_valid,
-            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.user_quote_id if isinstance(data, dict) else False}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}"
+            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.user_onramp_quote_id if isinstance(data, dict) else False}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}"
         )
         
         # Step 5: Get On-Ramp Timeline
         success, data, status = await self.make_request(
-            "GET", f"/ramp/onramp/por/transaction/{self.user_quote_id}/timeline", auth_token=self.auth_token
+            "GET", f"/ramp/onramp/por/transaction/{self.user_onramp_quote_id}/timeline", auth_token=self.auth_token
         )
         
         timeline_valid = False
