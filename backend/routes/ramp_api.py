@@ -337,7 +337,7 @@ async def process_deposit_por(request: DepositProcessRequest, http_request: Requ
     In instant settlement mode, this completes the entire
     off-ramp flow automatically.
     """
-    auth_info = await hmac_middleware.authenticate(http_request)
+    await hmac_middleware.authenticate(http_request)
     
     if not por_engine:
         raise HTTPException(status_code=503, detail="PoR engine not available")
