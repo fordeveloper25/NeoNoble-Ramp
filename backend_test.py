@@ -1066,7 +1066,7 @@ class NeoNobleAPITester:
         )
         
         dev_success, dev_data, dev_status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction/{self.dev_onramp_quote_id}", use_hmac=True
+            "GET", f"/ramp-api-onramp-transaction-por/{self.dev_onramp_quote_id}", use_hmac=True
         )
         
         consistency_valid = False
