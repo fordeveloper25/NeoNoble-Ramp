@@ -1056,17 +1056,17 @@ class NeoNobleAPITester:
         """Validate consistency between User UI and Developer API ON-RAMP responses"""
         logger.info("\n=== Testing ON-RAMP Consistency Validation ===")
         
-        if not self.user_quote_id or not self.dev_quote_id:
+        if not self.user_onramp_quote_id or not self.dev_onramp_quote_id:
             self.log_test_result("ON-RAMP Consistency Validation", False, "Missing on-ramp quote IDs from previous tests")
             return False
         
         # Get both on-ramp transactions for comparison
         user_success, user_data, user_status = await self.make_request(
-            "GET", f"/ramp/onramp/por/transaction/{self.user_quote_id}", auth_token=self.auth_token
+            "GET", f"/ramp/onramp/por/transaction/{self.user_onramp_quote_id}", auth_token=self.auth_token
         )
         
         dev_success, dev_data, dev_status = await self.make_request(
-            "GET", f"/ramp-api-onramp-transaction/{self.dev_quote_id}", use_hmac=True
+            "GET", f"/ramp-api-onramp-transaction/{self.dev_onramp_quote_id}", use_hmac=True
         )
         
         consistency_valid = False
