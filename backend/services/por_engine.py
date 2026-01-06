@@ -1223,6 +1223,9 @@ class InternalPoRProvider(BaseProvider):
             
             await self._store_transaction(quote)
             
+            # Broadcast webhook event
+            await self._broadcast_state_change(quote, "PAYMENT_DETECTED")
+            
             logger.info(f"PoR on-ramp payment confirmed: {quote_id} | €{amount_paid}")
             
             # Auto-trigger crypto delivery in INSTANT mode
