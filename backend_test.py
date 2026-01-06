@@ -686,6 +686,160 @@ class NeoNobleAPITester:
         
         return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
     
+    async def test_developer_api_onramp_flow(self):
+        """Test complete Developer API ON-RAMP PoR Engine flow with HMAC authentication"""
+        logger.info("\n=== Testing Developer API ON-RAMP PoR Engine Flow (HMAC) ===")
+        
+        if not self.api_key or not self.api_secret:
+            self.log_test_result("Developer API ON-RAMP Flow", False, "No API key/secret available")
+            return False
+        
+        # Step 1: Create On-Ramp Quote via Dev API
+        quote_data = {
+            "fiat_amount": 20000.0,
+            "crypto_currency": "NENO",
+            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp-api-onramp-quote", quote_data, use_hmac=True
+        )
+        
+        quote_valid = False
+        if success and isinstance(data, dict):
+            self.dev_quote_id = data.get("quote_id")
+            direction = data.get("direction")
+            fiat_amount = data.get("fiat_amount")
+            fee_percentage = data.get("fee_percentage")
+            fee_amount = data.get("fee_amount")
+            crypto_amount = data.get("crypto_amount")
+            exchange_rate = data.get("exchange_rate")
+            state = data.get("state")
+            payment_reference = data.get("payment_reference")
+            compliance = data.get("compliance", {})
+            
+            quote_valid = (
+                self.dev_quote_id and self.dev_quote_id.startswith("por_on_") and
+                direction == "onramp" and
+                fiat_amount == 20000 and
+                fee_percentage == 1.5 and
+                fee_amount == 300 and  # 1.5% of 20000
+                crypto_amount == 1.97 and  # (20000 - 300) / 10000
+                exchange_rate == 10000 and
+                state == "QUOTE_CREATED" and
+                payment_reference and
+                compliance.get("por_responsible") == True
+            )
+        
+        self.log_test_result(
+            "Dev API - Create ON-RAMP PoR Quote (HMAC)", 
+            success and status == 200 and quote_valid,
+            f"Status: {status}, Quote ID: {self.dev_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Fiat: {data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Crypto: {data.get('crypto_amount') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not quote_valid:
+            return False
+        
+        # Step 2: Execute On-Ramp via Dev API
+        execute_data = {
+            "quote_id": self.dev_quote_id,
+            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12"
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp-api-onramp", execute_data, use_hmac=True
+        )
+        
+        execute_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            timeline = data.get("timeline", [])
+            
+            execute_valid = (
+                state == "PAYMENT_PENDING" and
+                len(timeline) >= 2
+            )
+        
+        self.log_test_result(
+            "Dev API - Execute ON-RAMP PoR Quote (HMAC)", 
+            success and status == 200 and execute_valid,
+            f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        if not execute_valid:
+            return False
+        
+        # Step 3: Process Payment via Dev API
+        payment_data = {
+            "quote_id": self.dev_quote_id,
+            "payment_ref": data.get("payment_reference") if isinstance(data, dict) else None,
+            "amount_paid": 20000.0
+        }
+        
+        success, data, status = await self.make_request(
+            "POST", "/ramp-api-payment-process", payment_data, use_hmac=True
+        )
+        
+        settlement_valid = False
+        if success and isinstance(data, dict):
+            state = data.get("state")
+            timeline = data.get("timeline", [])
+            metadata = data.get("metadata", {})
+            
+            settlement_valid = (
+                state == "COMPLETED" and
+                len(timeline) >= 9 and
+                metadata.get("delivery_id") and
+                metadata.get("crypto_tx_hash")
+            )
+        
+        self.log_test_result(
+            "Dev API - Process ON-RAMP Payment (HMAC)", 
+            success and status == 200 and settlement_valid,
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Timeline Events: {len(data.get('timeline', [])) if isinstance(data, dict) else 0}"
+        )
+        
+        # Step 4: Get On-Ramp Transaction via Dev API
+        success, data, status = await self.make_request(
+            "GET", f"/ramp-api-onramp-transaction/{self.dev_quote_id}", use_hmac=True
+        )
+        
+        details_valid = False
+        if success and isinstance(data, dict):
+            compliance = data.get("compliance", {})
+            details_valid = (
+                data.get("quote_id") == self.dev_quote_id and
+                data.get("state") == "COMPLETED" and
+                data.get("direction") == "onramp" and
+                compliance.get("por_responsible") == True
+            )
+        
+        self.log_test_result(
+            "Dev API - Get ON-RAMP Transaction Details (HMAC)", 
+            success and status == 200 and details_valid,
+            f"Status: {status}, Quote ID Match: {data.get('quote_id') == self.dev_quote_id if isinstance(data, dict) else False}"
+        )
+        
+        # Step 5: Get On-Ramp Timeline via Dev API
+        success, data, status = await self.make_request(
+            "GET", f"/ramp-api-onramp-transaction/{self.dev_quote_id}/timeline", use_hmac=True
+        )
+        
+        timeline_valid = False
+        if success and isinstance(data, dict):
+            events = data.get("events", [])
+            timeline_valid = len(events) >= 9  # All on-ramp state transitions logged
+        elif success and isinstance(data, list):
+            timeline_valid = len(data) >= 9
+        
+        self.log_test_result(
+            "Dev API - Get ON-RAMP Transaction Timeline (HMAC)", 
+            success and status == 200 and timeline_valid,
+            f"Status: {status}, Timeline Events: {len(data.get('events', [])) if isinstance(data, dict) else len(data) if isinstance(data, list) else 0}"
+        )
+        
+        return quote_valid and execute_valid and settlement_valid and details_valid and timeline_valid
+    
     async def test_developer_api_por_flow(self):
         """Test complete Developer API PoR Engine flow with HMAC authentication"""
         logger.info("\n=== Testing Developer API PoR Engine Flow (HMAC) ===")
