@@ -654,6 +654,7 @@ class InternalPoRProvider(BaseProvider):
         return {
             "quote_id": quote.quote_id,
             "provider": quote.provider.value,
+            "direction": quote.direction,
             "crypto_amount": quote.crypto_amount,
             "crypto_currency": quote.crypto_currency,
             "fiat_amount": quote.fiat_amount,
@@ -663,6 +664,9 @@ class InternalPoRProvider(BaseProvider):
             "fee_percentage": quote.fee_percentage,
             "net_payout": quote.net_payout,
             "deposit_address": quote.deposit_address,
+            "wallet_address": quote.wallet_address,
+            "payment_reference": quote.payment_reference,
+            "payment_amount": quote.payment_amount,
             "expires_at": quote.expires_at,
             "created_at": quote.created_at,
             "state": quote.state.value,
