@@ -64,6 +64,8 @@ from services.blockchain_listener import BlockchainListener
 from services.stripe_payout_service import StripePayoutService
 from services.por_engine import InternalPoRProvider
 from services.settlement_service import SettlementService
+from services.audit_logger import AuditLogger, set_audit_logger
+from services.webhook_service import WebhookService, set_webhook_service
 
 # Import routes
 from routes.auth import router as auth_router, set_auth_service
@@ -72,6 +74,7 @@ from routes.ramp_api import router as ramp_api_router, set_services as set_ramp_
 from routes.user_ramp import router as user_ramp_router, set_ramp_service
 from routes.webhooks import router as webhooks_router, set_payout_service
 from routes.por_api import router as por_router, set_por_engine
+from routes.webhook_routes import router as webhook_mgmt_router, set_hmac_middleware as set_webhook_hmac
 
 # Initialize services
 auth_service = AuthService(db)
