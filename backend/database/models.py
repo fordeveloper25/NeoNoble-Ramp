@@ -257,6 +257,8 @@ class AuditLog(Base):
     crypto_currency = Column(String(20), nullable=True)
     fiat_amount = Column(Float, nullable=True)
     
+    extra_details = Column(JSONB, default=dict)
+    
     created_at = Column(DateTime(timezone=True), default=utc_now, index=True)
     
     __table_args__ = (
