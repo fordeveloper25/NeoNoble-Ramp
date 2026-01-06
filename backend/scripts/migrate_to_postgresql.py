@@ -182,12 +182,18 @@ class DatabaseMigrator:
             cursor = self.mongo_db.platform_api_keys.find({})
             async for doc in cursor:
                 try:
+                    # Handle missing encrypted_api_secret - use placeholder for legacy keys
+                    encrypted_secret = doc.get("encrypted_api_secret")
+                    if not encrypted_secret:
+                        encrypted_secret = "LEGACY_KEY_NO_SECRET_STORED"
+                        logger.warning(f"API key {doc.get('api_key')} has no secret - using placeholder")
+                    
                     api_key = PlatformApiKey(
                         id=doc.get("id", str(doc.get("_id"))),
                         user_id=doc.get("user_id"),
                         name=doc.get("name", "Migrated Key"),
                         api_key=doc.get("api_key"),
-                        encrypted_api_secret=doc.get("encrypted_api_secret"),
+                        encrypted_api_secret=encrypted_secret,
                         status=doc.get("status", "active"),
                         created_at=self._parse_datetime(doc.get("created_at")),
                         last_used_at=self._parse_datetime(doc.get("last_used_at"), default_now=False)
