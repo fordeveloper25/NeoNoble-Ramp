@@ -598,6 +598,9 @@ class InternalPoRProvider(BaseProvider):
             
             await self._store_transaction(quote)
             
+            # Broadcast final webhook event
+            await self._broadcast_state_change(quote, "PAYOUT_COMPLETED" if self._settlement_mode == SettlementMode.INSTANT else "PAYOUT_INITIATED")
+            
             # Store settlement record
             settlement_doc = {
                 "settlement_id": settlement_id,
