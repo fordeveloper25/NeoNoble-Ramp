@@ -34,20 +34,22 @@ logger = logging.getLogger(__name__)
 # Backend URL from frontend .env
 BACKEND_URL = "https://por-platform-1.preview.emergentagent.com/api"
 
-class NeoNobleAPITester:
+class NeoNobleE2ETester:
     def __init__(self):
         self.session = None
-        self.auth_token = None
-        self.dev_auth_token = None
-        self.api_key = None
-        self.api_secret = None
         self.test_results = {}
         
-        # Test data for PoR Engine validation
-        self.user_quote_id = None
-        self.dev_quote_id = None
-        self.user_onramp_quote_id = None
-        self.dev_onramp_quote_id = None
+        # Test credentials and tokens
+        self.user_jwt = None
+        self.dev_jwt = None
+        self.api_key = None
+        self.api_secret = None
+        
+        # E2E Test Quote IDs for validation
+        self.e2e_user_onramp_quote_id = None
+        self.e2e_user_offramp_quote_id = None
+        self.e2e_dev_onramp_quote_id = None
+        self.e2e_dev_offramp_quote_id = None
         
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
