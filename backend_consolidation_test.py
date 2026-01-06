@@ -440,10 +440,11 @@ class ConsolidationTester:
                 isinstance(compliance_metadata, dict)
             )
         
+        compliance_present = isinstance(data.get('compliance'), dict) if isinstance(data, dict) else False
         self.log_test_result(
             "Test 4 - Step 1: Create Off-Ramp Quote (HMAC)",
             quote_valid,
-            f"Quote ID: {self.dev_offramp_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Compliance metadata: {'Present' if isinstance(data.get('compliance'), dict) if isinstance(data, dict) else False else 'Missing'}"
+            f"Quote ID: {self.dev_offramp_quote_id}, Direction: {data.get('direction') if isinstance(data, dict) else 'N/A'}, Compliance metadata: {'Present' if compliance_present else 'Missing'}"
         )
         
         if not quote_valid:
