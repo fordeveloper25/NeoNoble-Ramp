@@ -549,7 +549,7 @@ async def process_payment_por(request: PoRPaymentProcessRequest, http_request: R
     return por_quote_to_response(quote)
 
 
-@router.get("/ramp-api-onramp-transaction/{quote_id}")
+@router.get("/ramp-api-onramp-transaction-por/{quote_id}")
 async def get_onramp_transaction_por(quote_id: str, http_request: Request):
     """
     Get on-ramp transaction details by quote ID via PoR engine.
