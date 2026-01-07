@@ -243,7 +243,7 @@ class RealPayoutIntegrationTester:
         self.log_test_result(
             "Process Deposit (Real Payout Triggered)",
             process_valid,
-            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'Check transaction for state'}"
         )
         
         return quote_valid and execute_valid and process_valid
