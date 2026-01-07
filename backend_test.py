@@ -519,22 +519,24 @@ class HybridLiquidityArchitectureTester:
         
         return integrity_valid and (reconstruct_valid if self.exposure_id else True)
 
-    async def run_real_payout_integration_tests(self):
-        """Run all real payout integration tests"""
-        logger.info("🚀 Starting REAL PAYOUT INTEGRATION E2E TESTING")
+    async def run_hybrid_liquidity_architecture_tests(self):
+        """Run all Phase 1 Hybrid PoR Liquidity Architecture tests"""
+        logger.info("🚀 Starting PHASE 1 HYBRID PoR LIQUIDITY ARCHITECTURE TESTING")
         logger.info(f"Testing against: {BACKEND_URL}")
-        logger.info("Stripe: LIVE mode with €0.00 balance (insufficient_funds expected)")
-        logger.info("Destination: IBAN IT22B0200822800000103317304 (Massimo Fornara)")
+        logger.info("Phase 1 Services:")
+        logger.info("  - Treasury Service (REAL) - €100M virtual floor balance")
+        logger.info("  - Exposure Service (REAL) - Full lifecycle tracking")
+        logger.info("  - Routing Service (SHADOW) - Log-only market conversion simulation")
+        logger.info("  - Hedging Service (SHADOW) - Policy evaluation and proposals")
+        logger.info("  - Reconciliation Service (REAL) - Coverage events and audit ledger")
         
-        # Real Payout Integration Test sequence
+        # Phase 1 Hybrid Liquidity Architecture Test sequence
         tests = [
+            ("Liquidity API Endpoints", self.test_liquidity_api_endpoints),
             ("User Authentication", self.test_user_authentication),
-            ("Off-Ramp Flow with Real Payout", self.test_offramp_flow_with_real_payout),
-            ("Payout Integration Verification", self.test_payout_integration_verification),
-            ("Payout Record Verification", self.test_payout_record_verification),
-            ("Payout Summary Verification", self.test_payout_summary_verification),
-            ("Audit Trail Verification", self.test_audit_trail_verification),
-            ("Error Handling Verification", self.test_error_handling_verification),
+            ("Complete Off-Ramp Flow with Liquidity Hooks", self.test_complete_offramp_flow_with_liquidity_hooks),
+            ("Liquidity Data Verification", self.test_liquidity_data_verification),
+            ("Financial Auditability", self.test_financial_auditability),
         ]
         
         for test_name, test_func in tests:
@@ -546,7 +548,7 @@ class HybridLiquidityArchitectureTester:
         
         # Summary
         logger.info("\n" + "="*80)
-        logger.info("REAL PAYOUT INTEGRATION E2E TESTING SUMMARY")
+        logger.info("PHASE 1 HYBRID PoR LIQUIDITY ARCHITECTURE TESTING SUMMARY")
         logger.info("="*80)
         
         passed = 0
@@ -568,18 +570,19 @@ class HybridLiquidityArchitectureTester:
         logger.info(f"\nTotal: {passed + failed}, Passed: {passed}, Failed: {failed}")
         
         if critical_failures:
-            logger.error(f"\n🚨 CRITICAL REAL PAYOUT INTEGRATION FAILURES: {critical_failures}")
-            logger.error("❌ Real payout integration testing FAILED")
+            logger.error(f"\n🚨 CRITICAL LIQUIDITY ARCHITECTURE FAILURES: {critical_failures}")
+            logger.error("❌ Phase 1 Hybrid PoR Liquidity Architecture testing FAILED")
         else:
-            logger.info(f"\n✅ REAL PAYOUT INTEGRATION E2E TESTING COMPLETE")
-            logger.info("🏆 STRIPE SEPA PAYOUT INTEGRATION VERIFIED")
-            logger.info("🎯 ERROR HANDLING AND AUDIT TRAIL CONFIRMED")
+            logger.info(f"\n✅ PHASE 1 HYBRID PoR LIQUIDITY ARCHITECTURE TESTING COMPLETE")
+            logger.info("🏆 TREASURY, EXPOSURE, AND RECONCILIATION SERVICES VERIFIED (REAL)")
+            logger.info("🎯 ROUTING AND HEDGING SERVICES VERIFIED (SHADOW MODE)")
+            logger.info("🔒 FINANCIAL AUDITABILITY AND LEDGER INTEGRITY CONFIRMED")
         
         return self.test_results
 
     async def run_all_tests(self):
-        """Run real payout integration tests"""
-        return await self.run_real_payout_integration_tests()
+        """Run Phase 1 Hybrid PoR Liquidity Architecture tests"""
+        return await self.run_hybrid_liquidity_architecture_tests()
 
 async def main():
     """Main test runner for real payout integration testing"""
