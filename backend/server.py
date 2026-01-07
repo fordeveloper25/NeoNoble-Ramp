@@ -356,6 +356,7 @@ api_router.include_router(por_router)
 api_router.include_router(webhook_mgmt_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(migration_router)
+api_router.include_router(stripe_payout_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
