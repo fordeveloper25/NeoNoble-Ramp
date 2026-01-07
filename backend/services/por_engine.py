@@ -680,6 +680,15 @@ class InternalPoRProvider(BaseProvider):
             quote.state = TransactionState.PAYOUT_INITIATED
             await self._store_transaction(quote)
             
+            # === LIQUIDITY LIFECYCLE HOOK: Settlement Initiated ===
+            # Called when payout is initiated but not yet confirmed
+            await self._on_settlement_initiated(
+                quote_id=quote_id,
+                settlement_id=settlement_id,
+                net_payout_eur=quote.net_payout,
+                fee_eur=quote.fee_amount
+            )
+            
             # For real payouts, we wait for webhook confirmation
             # For virtual payouts or if real payout created successfully with instant confirmation
             payout_status = payout_result.status.value if payout_result and payout_result.status else None
@@ -698,6 +707,15 @@ class InternalPoRProvider(BaseProvider):
                     provider="stripe"
                 ))
                 quote.state = TransactionState.PAYOUT_COMPLETED
+                
+                # === LIQUIDITY LIFECYCLE HOOK: Payout Completed (Instant) ===
+                await self._on_payout_completed(
+                    quote_id=quote_id,
+                    net_payout_eur=quote.net_payout,
+                    fee_eur=quote.fee_amount,
+                    settlement_id=settlement_id,
+                    payout_reference=stripe_payout_id or payout_ref
+                )
                 
                 quote.timeline.append(TimelineEvent(
                     timestamp=now.isoformat(),
@@ -725,6 +743,15 @@ class InternalPoRProvider(BaseProvider):
                     provider="internal_por"
                 ))
                 quote.state = TransactionState.PAYOUT_COMPLETED
+                
+                # === LIQUIDITY LIFECYCLE HOOK: Payout Completed (Virtual) ===
+                await self._on_payout_completed(
+                    quote_id=quote_id,
+                    net_payout_eur=quote.net_payout,
+                    fee_eur=quote.fee_amount,
+                    settlement_id=settlement_id,
+                    payout_reference=payout_ref
+                )
                 
                 quote.timeline.append(TimelineEvent(
                     timestamp=now.isoformat(),
