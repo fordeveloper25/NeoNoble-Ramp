@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-NeoNoble Ramp Backend API Test Suite - REAL PAYOUT INTEGRATION E2E TESTING
+NeoNoble Ramp Backend API Test Suite - PHASE 1 HYBRID PoR LIQUIDITY ARCHITECTURE
 
-Performs comprehensive end-to-end testing of the real Stripe SEPA payout integration:
-- User authentication and off-ramp flow
-- Real Stripe payout integration with SEPA Credit Transfer
-- Payout timeline verification and audit trail
-- Error handling for insufficient funds scenarios
+Performs comprehensive end-to-end testing of the Phase 1 Hybrid PoR Liquidity Architecture:
+- New Liquidity API Endpoints (Treasury, Exposure, Routing, Hedging, Reconciliation)
+- Complete Off-Ramp Flow with Liquidity Lifecycle Hooks
+- Liquidity Data Verification after Off-Ramp Flow
+- Financial Auditability (Treasury ledger integrity, exposure reconstructability)
 
 Test Environment:
 - Backend URL: https://hybrid-treasury.preview.emergentagent.com/api
 - NENO Token: Fixed price €10,000 per token
 - Fee: 1.5%
-- Stripe: LIVE mode with €0.00 balance (insufficient_funds expected)
-- Destination: IBAN IT22B0200822800000103317304 (Massimo Fornara)
+- Phase 1 Services:
+  * Treasury Service (REAL) - €100M virtual floor balance
+  * Exposure Service (REAL) - Full lifecycle tracking
+  * Routing Service (SHADOW) - Log-only market conversion simulation
+  * Hedging Service (SHADOW) - Policy evaluation and proposals
+  * Reconciliation Service (REAL) - Coverage events and audit ledger
 """
 
 import asyncio
