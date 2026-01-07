@@ -117,7 +117,7 @@ class TreasuryService:
     
     async def _create_initial_floor_entry(self):
         """Create initial virtual floor ledger entry."""
-        entry = await self.record_ledger_entry(
+        await self.record_ledger_entry(
             entry_type=LedgerEntryType.VIRTUAL_FLOOR_CREDIT,
             amount=self._config.virtual_floor_eur,
             currency="EUR",
