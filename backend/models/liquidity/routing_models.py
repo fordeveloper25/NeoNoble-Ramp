@@ -94,10 +94,12 @@ class MarketConversionEvent:
     source_currency: str              # Source currency
     source_amount: float              # Amount to convert
     destination_currency: str         # Destination currency
+    venue: RoutingVenue               # Execution venue
+    
+    # Amounts with defaults
     destination_amount: float = 0.0   # Amount received
     
     # Routing
-    venue: RoutingVenue               # Execution venue
     path: Optional[ConversionPath] = None  # Full conversion path
     
     # Execution details
