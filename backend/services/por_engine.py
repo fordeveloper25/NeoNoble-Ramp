@@ -1258,7 +1258,6 @@ class InternalPoRProvider(BaseProvider):
         logger.info(f"[LIQUIDITY] Payout completed for {quote_id}: €{net_payout_eur:,.2f}")
         
         fiat_ledger_id = None
-        fee_ledger_id = None
         
         # 1. Record fiat payout outflow (REAL)
         if self._treasury_service:
