@@ -585,17 +585,17 @@ class HybridLiquidityArchitectureTester:
         return await self.run_hybrid_liquidity_architecture_tests()
 
 async def main():
-    """Main test runner for real payout integration testing"""
-    async with RealPayoutIntegrationTester() as tester:
-        results = await tester.run_real_payout_integration_tests()
+    """Main test runner for Phase 1 Hybrid PoR Liquidity Architecture testing"""
+    async with HybridLiquidityArchitectureTester() as tester:
+        results = await tester.run_hybrid_liquidity_architecture_tests()
         
         # Return exit code based on results
         failed_tests = [name for name, result in results.items() if not result["success"]]
         if failed_tests:
-            logger.error(f"\n❌ {len(failed_tests)} real payout integration tests failed")
+            logger.error(f"\n❌ {len(failed_tests)} liquidity architecture tests failed")
             return 1
         else:
-            logger.info(f"\n✅ All real payout integration tests passed!")
+            logger.info(f"\n✅ All liquidity architecture tests passed!")
             return 0
 
 if __name__ == "__main__":
