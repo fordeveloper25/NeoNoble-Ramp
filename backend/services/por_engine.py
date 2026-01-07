@@ -1177,14 +1177,16 @@ class InternalPoRProvider(BaseProvider):
         # 2. Create exposure record (REAL)
         if self._exposure_service:
             try:
+                from models.liquidity.exposure_models import ExposureType
                 exposure = await self._exposure_service.create_exposure(
                     quote_id=quote_id,
-                    exposure_type="offramp_payout",
-                    amount_eur=eur_equivalent,
-                    source_currency=crypto_currency,
-                    source_amount=crypto_amount,
-                    deposit_reference=tx_hash,
-                    ledger_entry_id=ledger_entry_id
+                    exposure_type=ExposureType.OFFRAMP_PAYOUT,
+                    crypto_amount=crypto_amount,
+                    crypto_currency=crypto_currency,
+                    fiat_amount=eur_equivalent,
+                    fiat_currency="EUR",
+                    direction="offramp",
+                    deposit_tx_hash=tx_hash
                 )
                 exposure_id = exposure.exposure_id
                 logger.info(f"[EXPOSURE] Created: {exposure_id} | €{eur_equivalent:,.2f}")
