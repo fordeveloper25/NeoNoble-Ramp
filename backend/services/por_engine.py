@@ -1156,7 +1156,6 @@ class InternalPoRProvider(BaseProvider):
         """
         logger.info(f"[LIQUIDITY] Deposit confirmed for {quote_id}: {crypto_amount} {crypto_currency}")
         
-        ledger_entry_id = None
         exposure_id = None
         
         # 1. Record crypto inflow to treasury (REAL)
