@@ -405,7 +405,7 @@ class RealPayoutIntegrationTester:
         self.log_test_result(
             "Audit Trail State Transitions",
             audit_valid,
-            f"Status: {status}, Audit Entries: {len(data.get('audit_trail', [])) if isinstance(data, dict) else 0}, Stripe Payout ID: {data.get('metadata', {}).get('stripe_payout_id') if isinstance(data, dict) else 'N/A'}"
+            f"Status: {status}, Audit Entries: {len(data.get('audit_trail', [])) if isinstance(data, dict) else 0}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Stripe Payout ID: {data.get('metadata', {}).get('stripe_payout_id') if isinstance(data, dict) else 'N/A'}"
         )
         
         return audit_valid
