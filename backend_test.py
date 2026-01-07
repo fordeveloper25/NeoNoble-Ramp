@@ -220,7 +220,7 @@ class RealPayoutIntegrationTester:
         }
         
         success, data, status = await self.make_request(
-            "POST", "/por/offramp/process", deposit_data, auth_token=self.user_jwt
+            "POST", "/ramp/offramp/deposit/process", deposit_data, auth_token=self.user_jwt
         )
         
         process_valid = False
