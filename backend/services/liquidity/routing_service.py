@@ -474,6 +474,45 @@ class MarketRoutingService:
             "enabled_connectors": list(self._connectors.keys()),
             "shadow_mode": self._config.shadow_mode
         }
+    
+    async def simulate_conversion(
+        self,
+        quote_id: str,
+        source_currency: str,
+        destination_currency: str,
+        source_amount: float,
+        exposure_id: Optional[str] = None
+    ) -> Optional[MarketConversionEvent]:
+        """
+        Simulate a market conversion (shadow-mode only).
+        
+        This method always runs in shadow mode regardless of config,
+        and is used to log what conversion would happen for audit purposes.
+        """
+        # Force shadow mode for this operation
+        original_shadow = self._config.shadow_mode
+        self._config.shadow_mode = True
+        
+        try:
+            event = await self.execute_conversion(
+                source_currency=source_currency,
+                source_amount=source_amount,
+                destination_currency=destination_currency,
+                exposure_id=exposure_id,
+                quote_id=quote_id
+            )
+            
+            # Mark as simulation
+            if event:
+                await self.conversions_collection.update_one(
+                    {"conversion_id": event.conversion_id},
+                    {"$set": {"is_simulation": True, "simulation_reason": "lifecycle_hook"}}
+                )
+            
+            return event
+        finally:
+            # Restore original shadow mode setting
+            self._config.shadow_mode = original_shadow
 
 
 # Global instance
