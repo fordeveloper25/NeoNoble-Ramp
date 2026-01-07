@@ -517,6 +517,16 @@ class InternalPoRProvider(BaseProvider):
             
             logger.info(f"PoR deposit confirmed: {quote_id} | {amount} {quote.crypto_currency}")
             
+            # === LIQUIDITY LIFECYCLE HOOK: Deposit Confirmed ===
+            # Record crypto inflow, create exposure, simulate routing & hedging
+            await self._on_deposit_confirmed(
+                quote_id=quote_id,
+                crypto_amount=amount,
+                crypto_currency=quote.crypto_currency,
+                eur_equivalent=quote.fiat_amount,  # Use quote fiat amount as EUR equivalent
+                tx_hash=tx_hash
+            )
+            
             # Auto-trigger settlement in INSTANT mode
             if self._settlement_mode == SettlementMode.INSTANT:
                 settlement_result, error = await self.execute_settlement(quote_id)
