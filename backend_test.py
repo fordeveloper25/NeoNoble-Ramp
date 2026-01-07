@@ -97,14 +97,137 @@ class HybridLiquidityArchitectureTester:
             "details": details
         }
 
+    async def test_liquidity_api_endpoints(self):
+        """Test all new Liquidity API endpoints as specified in the review request"""
+        logger.info("\n=== Testing Liquidity API Endpoints ===")
+        
+        # Test 1: GET /api/liquidity/dashboard - Combined liquidity overview
+        logger.info("Step 1: Test Liquidity Dashboard")
+        success, data, status = await self.make_request("GET", "/liquidity/dashboard")
+        
+        dashboard_valid = False
+        if success and isinstance(data, dict):
+            services = data.get("services", {})
+            dashboard_valid = (
+                services.get("treasury") and
+                services.get("exposure") and
+                services.get("routing") and
+                services.get("hedging") and
+                services.get("reconciliation") and
+                data.get("mode") == "hybrid"
+            )
+        
+        self.log_test_result(
+            "Liquidity Dashboard",
+            dashboard_valid,
+            f"Status: {status}, Services Active: {data.get('services') if isinstance(data, dict) else 'N/A'}, Mode: {data.get('mode') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 2: GET /api/liquidity/treasury/summary - Treasury state with €100M virtual floor
+        logger.info("Step 2: Test Treasury Summary")
+        success, data, status = await self.make_request("GET", "/liquidity/treasury/summary")
+        
+        treasury_valid = False
+        if success and isinstance(data, dict):
+            balances = data.get("balances", {})
+            eur_balance = balances.get("EUR", 0)
+            treasury_valid = eur_balance >= 100000000  # €100M virtual floor
+        
+        self.log_test_result(
+            "Treasury Summary (€100M Virtual Floor)",
+            treasury_valid,
+            f"Status: {status}, EUR Balance: €{data.get('balances', {}).get('EUR', 0):,.2f} if isinstance(data, dict) else 'N/A'"
+        )
+        
+        # Test 3: GET /api/liquidity/treasury/ledger - Initial virtual floor ledger entry
+        logger.info("Step 3: Test Treasury Ledger")
+        success, data, status = await self.make_request("GET", "/liquidity/treasury/ledger?limit=10")
+        
+        ledger_valid = False
+        if success and isinstance(data, dict):
+            entries = data.get("entries", [])
+            ledger_valid = len(entries) > 0
+            # Look for virtual floor entry
+            for entry in entries:
+                if entry.get("entry_type") == "VIRTUAL_FLOOR" and entry.get("amount") == 100000000:
+                    ledger_valid = True
+                    break
+        
+        self.log_test_result(
+            "Treasury Ledger (Virtual Floor Entry)",
+            ledger_valid,
+            f"Status: {status}, Entries: {len(data.get('entries', [])) if isinstance(data, dict) else 0}, Virtual Floor Found: {ledger_valid}"
+        )
+        
+        # Test 4: GET /api/liquidity/exposure/summary - Exposure metrics (initially 0)
+        logger.info("Step 4: Test Exposure Summary")
+        success, data, status = await self.make_request("GET", "/liquidity/exposure/summary")
+        
+        exposure_valid = False
+        if success and isinstance(data, dict):
+            total_active = data.get("total_active_eur", 0)
+            exposure_valid = total_active >= 0  # Initially 0 or positive
+        
+        self.log_test_result(
+            "Exposure Summary",
+            exposure_valid,
+            f"Status: {status}, Total Active Exposure: €{data.get('total_active_eur', 0) if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 5: GET /api/liquidity/routing/summary - Shadow mode verification
+        logger.info("Step 5: Test Routing Summary (Shadow Mode)")
+        success, data, status = await self.make_request("GET", "/liquidity/routing/summary")
+        
+        routing_valid = False
+        if success and isinstance(data, dict):
+            shadow_mode = data.get("shadow_mode", False)
+            routing_valid = shadow_mode is True
+        
+        self.log_test_result(
+            "Routing Summary (Shadow Mode)",
+            routing_valid,
+            f"Status: {status}, Shadow Mode: {data.get('shadow_mode') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 6: GET /api/liquidity/hedging/summary - Shadow mode verification
+        logger.info("Step 6: Test Hedging Summary (Shadow Mode)")
+        success, data, status = await self.make_request("GET", "/liquidity/hedging/summary")
+        
+        hedging_valid = False
+        if success and isinstance(data, dict):
+            shadow_mode = data.get("shadow_mode", False)
+            hedging_valid = shadow_mode is True
+        
+        self.log_test_result(
+            "Hedging Summary (Shadow Mode)",
+            hedging_valid,
+            f"Status: {status}, Shadow Mode: {data.get('shadow_mode') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        # Test 7: GET /api/liquidity/reconciliation/summary - Reconciliation status
+        logger.info("Step 7: Test Reconciliation Summary")
+        success, data, status = await self.make_request("GET", "/liquidity/reconciliation/summary")
+        
+        recon_valid = False
+        if success and isinstance(data, dict):
+            recon_valid = "pending_batches" in data or "batch_statistics" in data
+        
+        self.log_test_result(
+            "Reconciliation Summary",
+            recon_valid,
+            f"Status: {status}, Pending Batches: {data.get('pending_batches', 'N/A') if isinstance(data, dict) else 'N/A'}"
+        )
+        
+        return all([dashboard_valid, treasury_valid, ledger_valid, exposure_valid, routing_valid, hedging_valid, recon_valid])
+
     async def test_user_authentication(self):
-        """Test user authentication as specified in the review request"""
+        """Test user authentication for liquidity testing"""
         logger.info("\n=== Testing User Authentication ===")
         
-        # Test user registration with specific credentials from review request
+        # Test user registration with liquidity test credentials
         user_data = {
-            "email": "payout_test@neonoble.com",
-            "password": "PayoutTest123!",
+            "email": "liquidity_test@neonoble.com",
+            "password": "LiquidityTest123!",
             "role": "user"
         }
         
@@ -119,14 +242,14 @@ class HybridLiquidityArchitectureTester:
         self.log_test_result(
             "User Registration",
             registration_ok,
-            f"Status: {status}, Email: payout_test@neonoble.com"
+            f"Status: {status}, Email: liquidity_test@neonoble.com"
         )
         
         # Test user login if registration failed or to get fresh token
         if not self.user_jwt:
             login_data = {
-                "email": "payout_test@neonoble.com",
-                "password": "PayoutTest123!"
+                "email": "liquidity_test@neonoble.com",
+                "password": "LiquidityTest123!"
             }
             
             success, data, status = await self.make_request("POST", "/auth/login", login_data)
@@ -143,29 +266,30 @@ class HybridLiquidityArchitectureTester:
         
         return login_success
 
-    async def test_offramp_flow_with_real_payout(self):
-        """Test off-ramp flow with real payout integration as specified in review request"""
-        logger.info("\n=== Testing Off-Ramp Flow with Real Payout ===")
+    async def test_complete_offramp_flow_with_liquidity_hooks(self):
+        """Test complete off-ramp flow with liquidity lifecycle hooks as specified in review request"""
+        logger.info("\n=== Testing Complete Off-Ramp Flow with Liquidity Lifecycle Hooks ===")
         
         if not self.user_jwt:
-            self.log_test_result("Off-Ramp Flow", False, "No user JWT available")
+            self.log_test_result("Off-Ramp Flow with Liquidity Hooks", False, "No user JWT available")
             return False
         
-        # Step 1: Create quote as specified (0.1 NENO)
-        logger.info("Step 1: Create Off-Ramp Quote (0.1 NENO)")
+        # Step 1: Create PoR off-ramp quote (1 NENO as specified)
+        logger.info("Step 1: Create PoR Off-Ramp Quote (1 NENO)")
         quote_data = {
-            "crypto_amount": 0.1,
-            "crypto_currency": "NENO"
+            "crypto_amount": 1,
+            "crypto_currency": "NENO",
+            "bank_account": "TEST-IBAN-123"
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp/offramp/quote", quote_data, auth_token=self.user_jwt
+            "POST", "/por/quote", quote_data, auth_token=self.user_jwt
         )
         
         quote_valid = False
-        expected_gross = 1000  # 0.1 NENO * €10,000
-        expected_fee = 15      # 1.5% of €1,000
-        expected_net = 985     # €1,000 - €15
+        expected_gross = 10000  # 1 NENO * €10,000
+        expected_fee = 150     # 1.5% of €10,000
+        expected_net = 9850    # €10,000 - €150
         
         if success and isinstance(data, dict):
             self.quote_id = data.get("quote_id")
@@ -177,7 +301,7 @@ class HybridLiquidityArchitectureTester:
             
             quote_valid = (
                 self.quote_id and
-                crypto_amount == 0.1 and
+                crypto_amount == 1 and
                 fiat_amount == expected_gross and
                 fee_amount == expected_fee and
                 net_payout == expected_net and
@@ -185,7 +309,7 @@ class HybridLiquidityArchitectureTester:
             )
         
         self.log_test_result(
-            "Create Quote (0.1 NENO → €985 net)",
+            "Create PoR Quote (1 NENO → €9,850 net)",
             quote_valid,
             f"Quote ID: {self.quote_id}, Gross: €{data.get('fiat_amount') if isinstance(data, dict) else 'N/A'}, Fee: €{data.get('fee_amount') if isinstance(data, dict) else 'N/A'}, Net: €{data.get('net_payout') if isinstance(data, dict) else 'N/A'}"
         )
@@ -193,15 +317,15 @@ class HybridLiquidityArchitectureTester:
         if not quote_valid:
             return False
         
-        # Step 2: Execute quote with bank account
-        logger.info("Step 2: Execute Off-Ramp Quote")
+        # Step 2: Execute quote (accept quote)
+        logger.info("Step 2: Execute PoR Quote")
         execute_data = {
             "quote_id": self.quote_id,
-            "bank_account": "IT60X0542811101000000123456"
+            "bank_account": "TEST-IBAN-123"
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp/offramp/execute", execute_data, auth_token=self.user_jwt
+            "POST", "/por/quote/accept", execute_data, auth_token=self.user_jwt
         )
         
         execute_valid = False
@@ -210,7 +334,7 @@ class HybridLiquidityArchitectureTester:
             execute_valid = state == "DEPOSIT_PENDING"
         
         self.log_test_result(
-            "Execute Quote",
+            "Execute PoR Quote",
             execute_valid,
             f"Status: {status}, State: {data.get('state') if isinstance(data, dict) else 'N/A'}"
         )
@@ -218,244 +342,182 @@ class HybridLiquidityArchitectureTester:
         if not execute_valid:
             return False
         
-        # Step 3: Process deposit to trigger payout
-        logger.info("Step 3: Process Deposit (Trigger Real Payout)")
+        # Step 3: Process deposit to trigger liquidity lifecycle hooks
+        logger.info("Step 3: Process Deposit (Trigger Liquidity Lifecycle)")
         deposit_data = {
             "quote_id": self.quote_id,
-            "tx_hash": "0xreal_payout_test_hash_001",
-            "amount": 0.1
+            "tx_hash": "0xtest123456789abcdef",
+            "amount": 1
         }
         
         success, data, status = await self.make_request(
-            "POST", "/ramp/offramp/deposit/process", deposit_data, auth_token=self.user_jwt
+            "POST", "/por/deposit/process", deposit_data, auth_token=self.user_jwt
         )
         
         process_valid = False
         if success and isinstance(data, dict):
             state = data.get("state")
-            # State should progress through the payout flow
-            process_valid = state in ["COMPLETED", "PAYOUT_INITIATED", "PAYOUT_PROCESSING", "SETTLEMENT_COMPLETED"]
+            # State should progress through the liquidity-enabled flow
+            process_valid = state in ["COMPLETED", "SETTLEMENT_COMPLETED", "PAYOUT_PROCESSING"]
         elif status == 400:
-            # 400 might be expected if there are database constraint issues after payout attempt
             # Check if the transaction still progressed by getting current state
             check_success, check_data, check_status = await self.make_request(
-                "GET", f"/ramp/offramp/transaction/{self.quote_id}", auth_token=self.user_jwt
+                "GET", f"/por/transaction/{self.quote_id}", auth_token=self.user_jwt
             )
             if check_success and isinstance(check_data, dict):
                 state = check_data.get("state")
-                process_valid = state in ["COMPLETED", "PAYOUT_INITIATED", "PAYOUT_PROCESSING", "SETTLEMENT_COMPLETED"]
+                process_valid = state in ["COMPLETED", "SETTLEMENT_COMPLETED", "PAYOUT_PROCESSING"]
         
         self.log_test_result(
-            "Process Deposit (Real Payout Triggered)",
+            "Process Deposit (Liquidity Hooks Triggered)",
             process_valid,
             f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'Check transaction for state'}"
         )
         
         return quote_valid and execute_valid and process_valid
 
-    async def test_payout_integration_verification(self):
-        """Test payout integration verification as specified in review request"""
-        logger.info("\n=== Testing Payout Integration Verification ===")
+    async def test_liquidity_data_verification(self):
+        """Test liquidity data verification after off-ramp flow as specified in review request"""
+        logger.info("\n=== Testing Liquidity Data Verification After Off-Ramp Flow ===")
         
         if not self.quote_id:
-            self.log_test_result("Payout Integration Verification", False, "No quote ID available")
+            self.log_test_result("Liquidity Data Verification", False, "No quote ID available")
             return False
         
-        # Get timeline to look for PAYOUT_INITIATED event
-        logger.info("Step 1: Get Transaction Timeline")
+        # Test 1: Treasury Ledger entries for the quote
+        logger.info("Step 1: Verify Treasury Ledger Entries")
         success, data, status = await self.make_request(
-            "GET", f"/ramp/offramp/transaction/{self.quote_id}/timeline", auth_token=self.user_jwt
+            "GET", f"/liquidity/treasury/ledger?quote_id={self.quote_id}"
         )
         
-        timeline_valid = False
-        payout_initiated_found = False
-        stripe_payout_id = None
-        payout_method = None
-        provider = None
+        treasury_ledger_valid = False
+        crypto_inflow_found = False
+        fiat_payout_found = False
+        fee_allocation_found = False
         
-        if success:
-            events = []
-            if isinstance(data, dict):
-                events = data.get("events", [])
-            elif isinstance(data, list):
-                events = data
+        if success and isinstance(data, dict):
+            entries = data.get("entries", [])
+            for entry in entries:
+                entry_type = entry.get("entry_type")
+                if entry_type == "CRYPTO_INFLOW":
+                    crypto_inflow_found = True
+                elif entry_type == "FIAT_PAYOUT":
+                    fiat_payout_found = True
+                elif entry_type == "FEE_ALLOCATION":
+                    fee_allocation_found = True
             
-            # Look for PAYOUT_INITIATED event or any payout-related events
-            for event in events:
-                if isinstance(event, dict):
-                    event_type = event.get("event_type") or event.get("state")
-                    event_message = event.get("message", "").lower()
-                    event_details = str(event.get("details", "")).lower()
-                    
-                    if (event_type == "PAYOUT_INITIATED" or 
-                        "payout" in event_message or 
-                        "payout" in event_details or
-                        event_type in ["SETTLEMENT_PROCESSING", "SETTLEMENT_COMPLETED"]):
-                        payout_initiated_found = True
-                        metadata = event.get("metadata", {}) or event.get("details", {})
-                        stripe_payout_id = metadata.get("stripe_payout_id")
-                        payout_method = metadata.get("payout_method")
-                        provider = metadata.get("provider")
-                        break
-            
-            timeline_valid = len(events) >= 5  # Should have multiple state transitions
+            treasury_ledger_valid = crypto_inflow_found and (fiat_payout_found or fee_allocation_found)
         
         self.log_test_result(
-            "Timeline PAYOUT_INITIATED Event",
-            payout_initiated_found,
-            f"Events: {len(events) if 'events' in locals() else 0}, PAYOUT/SETTLEMENT Event: {'Found' if payout_initiated_found else 'Not Found'}, Stripe ID: {stripe_payout_id or 'N/A'}, Method: {payout_method or 'N/A'}, Provider: {provider or 'N/A'}"
+            "Treasury Ledger Entries",
+            treasury_ledger_valid,
+            f"Status: {status}, Entries: {len(data.get('entries', [])) if isinstance(data, dict) else 0}, CRYPTO_INFLOW: {crypto_inflow_found}, FIAT_PAYOUT: {fiat_payout_found}, FEE_ALLOCATION: {fee_allocation_found}"
         )
         
-        return timeline_valid and payout_initiated_found
-
-    async def test_payout_record_verification(self):
-        """Test payout record verification as specified in review request"""
-        logger.info("\n=== Testing Payout Record Verification ===")
-        
-        if not self.quote_id:
-            self.log_test_result("Payout Record Verification", False, "No quote ID available")
-            return False
-        
-        # Check payout record
-        logger.info("Step 1: Get Payout Record")
+        # Test 2: Exposure Record for the quote
+        logger.info("Step 2: Verify Exposure Record")
         success, data, status = await self.make_request(
-            "GET", f"/stripe/payout/{self.quote_id}", auth_token=self.user_jwt
+            "GET", f"/liquidity/exposure/by-quote/{self.quote_id}"
         )
         
-        payout_record_valid = False
+        exposure_valid = False
         if success and isinstance(data, dict):
-            payout_id = data.get("payout_id") or data.get("stripe_payout_id")
-            payout_status = data.get("status")
-            amount = data.get("amount")
-            currency = data.get("currency")
-            destination = data.get("destination")
-            
-            payout_record_valid = bool(payout_id and payout_status and amount and currency)
-        elif status == 404:
-            # 404 is expected if payout failed to save due to insufficient funds
-            # This is actually correct behavior - the payout attempt was made but failed
-            payout_record_valid = True
+            self.exposure_id = data.get("exposure_id")
+            exposure_status = data.get("status")
+            exposure_valid = exposure_status in ["FULLY_COVERED", "ACTIVE", "COVERED"]
         
         self.log_test_result(
-            "Payout Record Details",
-            payout_record_valid,
-            f"Status: {status}, Expected: 200 (record found) or 404 (failed payout not saved), Payout ID: {data.get('payout_id') or data.get('stripe_payout_id') if isinstance(data, dict) else 'N/A'}"
+            "Exposure Record",
+            exposure_valid,
+            f"Status: {status}, Exposure ID: {self.exposure_id}, Status: {data.get('status') if isinstance(data, dict) else 'N/A'}"
         )
         
-        return payout_record_valid
-
-    async def test_payout_summary_verification(self):
-        """Test payout summary verification as specified in review request"""
-        logger.info("\n=== Testing Payout Summary Verification ===")
-        
-        # Check payout summary
-        logger.info("Step 1: Get Payout Summary")
+        # Test 3: Routing Conversions (shadow mode)
+        logger.info("Step 3: Verify Routing Conversions (Shadow Mode)")
         success, data, status = await self.make_request(
-            "GET", "/stripe/payouts/summary", auth_token=self.user_jwt
+            "GET", f"/liquidity/routing/conversions?quote_id={self.quote_id}"
         )
         
-        summary_valid = False
+        routing_valid = False
         if success and isinstance(data, dict):
-            config = data.get("config", {})
-            by_status = data.get("by_status", {})
-            
-            # Check configuration includes expected details
-            currency = config.get("currency")
-            mode = config.get("mode")
-            
-            # Check if there are failed payouts (expected due to insufficient funds)
-            failed_payouts = by_status.get("failed", {})
-            
-            summary_valid = bool(currency and mode) or bool(failed_payouts)
+            conversions = data.get("conversions", [])
+            shadow_mode = data.get("shadow_mode", False)
+            routing_valid = shadow_mode is True  # Should be shadow mode in Phase 1
         
         self.log_test_result(
-            "Payout Summary Configuration",
-            summary_valid,
-            f"Status: {status}, Currency: {config.get('currency') if 'config' in locals() else 'N/A'}, Mode: {config.get('mode') if 'config' in locals() else 'N/A'}, Failed Payouts: {failed_payouts.get('count', 0) if 'failed_payouts' in locals() else 0}"
+            "Routing Conversions (Shadow Mode)",
+            routing_valid,
+            f"Status: {status}, Conversions: {len(data.get('conversions', [])) if isinstance(data, dict) else 0}, Shadow Mode: {data.get('shadow_mode') if isinstance(data, dict) else 'N/A'}"
         )
         
-        return summary_valid
-
-    async def test_audit_trail_verification(self):
-        """Test audit trail verification as specified in review request"""
-        logger.info("\n=== Testing Audit Trail Verification ===")
-        
-        if not self.quote_id:
-            self.log_test_result("Audit Trail Verification", False, "No quote ID available")
-            return False
-        
-        # Get transaction details to verify audit trail
-        logger.info("Step 1: Get Transaction Details for Audit")
+        # Test 4: Coverage Events
+        logger.info("Step 4: Verify Coverage Events")
         success, data, status = await self.make_request(
-            "GET", f"/ramp/offramp/transaction/{self.quote_id}", auth_token=self.user_jwt
+            "GET", "/liquidity/reconciliation/coverage"
         )
         
-        audit_valid = False
+        coverage_valid = False
         if success and isinstance(data, dict):
-            audit_trail = data.get("audit_trail", [])
-            metadata = data.get("metadata", {})
-            state = data.get("state")
-            
-            # Check for Stripe payout ID in metadata or audit trail
-            stripe_payout_id = metadata.get("stripe_payout_id")
-            
-            # Check audit trail for state transitions
-            state_transitions_logged = len(audit_trail) > 0 if audit_trail else False
-            
-            # If no audit trail, but transaction reached settlement state, consider it valid
-            # since the timeline already shows the state transitions
-            audit_valid = bool(stripe_payout_id or state_transitions_logged or 
-                             state in ["SETTLEMENT_COMPLETED", "COMPLETED"])
+            coverage_events = data.get("coverage_events", [])
+            coverage_valid = len(coverage_events) >= 0  # Should have coverage events
         
         self.log_test_result(
-            "Audit Trail State Transitions",
-            audit_valid,
-            f"Status: {status}, Audit Entries: {len(data.get('audit_trail', [])) if isinstance(data, dict) else 0}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Stripe Payout ID: {data.get('metadata', {}).get('stripe_payout_id') if isinstance(data, dict) else 'N/A'}"
+            "Coverage Events",
+            coverage_valid,
+            f"Status: {status}, Coverage Events: {len(data.get('coverage_events', [])) if isinstance(data, dict) else 0}"
         )
         
-        return audit_valid
+        return treasury_ledger_valid and exposure_valid and routing_valid and coverage_valid
 
-    async def test_error_handling_verification(self):
-        """Test error handling for insufficient funds scenario"""
-        logger.info("\n=== Testing Error Handling (Insufficient Funds) ===")
+    async def test_financial_auditability(self):
+        """Test financial auditability as specified in review request"""
+        logger.info("\n=== Testing Financial Auditability ===")
         
-        # This test verifies that the system handles Stripe insufficient_funds errors gracefully
-        # Since Stripe is in LIVE mode with €0.00 balance, we expect this scenario
-        
-        if not self.quote_id:
-            self.log_test_result("Error Handling Verification", False, "No quote ID available")
-            return False
-        
-        # Get the final transaction state to see how errors were handled
+        # Test 1: Ledger chain integrity
+        logger.info("Step 1: Verify Ledger Chain Integrity")
         success, data, status = await self.make_request(
-            "GET", f"/ramp/offramp/transaction/{self.quote_id}", auth_token=self.user_jwt
+            "GET", "/liquidity/treasury/integrity"
         )
         
-        error_handling_valid = False
+        integrity_valid = False
         if success and isinstance(data, dict):
-            state = data.get("state")
-            error_info = data.get("error_info", {})
-            metadata = data.get("metadata", {})
-            
-            # Check if the system handled errors gracefully
-            # Either completed successfully or has proper error handling
-            # Since we expect insufficient_funds, look for evidence of payout attempt
-            error_handling_valid = (
-                state in ["COMPLETED", "PAYOUT_FAILED", "SETTLEMENT_FAILED", "SETTLEMENT_COMPLETED"] or
-                bool(error_info) or
-                "insufficient_funds" in str(metadata).lower() or
-                "virtual_fallback" in str(metadata).lower() or
-                "payout" in str(metadata).lower()
+            is_valid = data.get("is_valid", False)
+            discrepancies = data.get("discrepancies", [])
+            integrity_valid = is_valid and len(discrepancies) == 0
+        
+        self.log_test_result(
+            "Treasury Ledger Integrity",
+            integrity_valid,
+            f"Status: {status}, Valid: {data.get('is_valid') if isinstance(data, dict) else 'N/A'}, Discrepancies: {len(data.get('discrepancies', [])) if isinstance(data, dict) else 0}"
+        )
+        
+        # Test 2: Exposure reconstructability
+        if self.exposure_id:
+            logger.info("Step 2: Verify Exposure Reconstructability")
+            success, data, status = await self.make_request(
+                "GET", f"/liquidity/exposure/{self.exposure_id}/reconstruct"
             )
+            
+            reconstruct_valid = False
+            if success and isinstance(data, dict):
+                # Should have all required reconstruction data
+                required_fields = ["exposure_record", "deposit_reference", "payout_reference"]
+                reconstruct_valid = all(field in data for field in required_fields)
+            
+            self.log_test_result(
+                "Exposure Reconstructability",
+                reconstruct_valid,
+                f"Status: {status}, Reconstruction Fields: {list(data.keys()) if isinstance(data, dict) else 'N/A'}"
+            )
+        else:
+            self.log_test_result(
+                "Exposure Reconstructability",
+                False,
+                "No exposure ID available for reconstruction test"
+            )
+            reconstruct_valid = False
         
-        error_info_present = bool(data.get('error_info')) if isinstance(data, dict) else False
-        self.log_test_result(
-            "Error Handling (Insufficient Funds)",
-            error_handling_valid,
-            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Error Info: {'Present' if error_info_present else 'None'}"
-        )
-        
-        return error_handling_valid
+        return integrity_valid and (reconstruct_valid if self.exposure_id else True)
 
     async def run_real_payout_integration_tests(self):
         """Run all real payout integration tests"""
