@@ -68,6 +68,15 @@ from services.audit_logger import AuditLogger, set_audit_logger
 from services.webhook_service import WebhookService, set_webhook_service
 from services.real_payout_service import RealPayoutService, set_real_payout_service
 
+# Import liquidity services (Hybrid PoR Liquidity Architecture)
+from services.liquidity import (
+    TreasuryService, set_treasury_service,
+    ExposureService, set_exposure_service,
+    MarketRoutingService, set_routing_service,
+    HedgingService, set_hedging_service,
+    ReconciliationService, set_reconciliation_service
+)
+
 # Import database modules for PostgreSQL migration
 from database.dual_manager import get_dual_db_manager
 from database.config import get_pg_session_factory, init_pg_engine
@@ -87,6 +96,7 @@ from routes.stripe_payout_routes import (
     set_payout_service as set_stripe_payout_service,
     set_por_engine as set_stripe_por_engine
 )
+from routes.liquidity_routes import router as liquidity_router
 
 # Initialize services
 auth_service = AuthService(db)
