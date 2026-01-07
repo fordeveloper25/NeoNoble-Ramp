@@ -415,10 +415,11 @@ class RealPayoutIntegrationTester:
                 "virtual_fallback" in str(metadata).lower()
             )
         
+        error_info_present = bool(data.get('error_info')) if isinstance(data, dict) else False
         self.log_test_result(
             "Error Handling (Insufficient Funds)",
             error_handling_valid,
-            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Error Info: {'Present' if data.get('error_info') if isinstance(data, dict) else False else 'None'}"
+            f"Status: {status}, Final State: {data.get('state') if isinstance(data, dict) else 'N/A'}, Error Info: {'Present' if error_info_present else 'None'}"
         )
         
         return error_handling_valid
