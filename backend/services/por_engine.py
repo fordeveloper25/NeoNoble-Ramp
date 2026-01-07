@@ -1079,11 +1079,249 @@ class InternalPoRProvider(BaseProvider):
             # Broadcast webhook event
             await self._broadcast_state_change(quote, "PAYOUT_INITIATED")
             
+            # === LIQUIDITY LIFECYCLE HOOK: Post-Payout ===
+            # Triggered when payout is confirmed - record fiat outflow and mark exposure covered
+            if payout_status == 'paid':
+                await self._on_payout_completed(
+                    quote_id=quote_id,
+                    net_payout_eur=quote.net_payout,
+                    fee_eur=quote.fee_amount,
+                    settlement_id=quote.metadata.get("settlement_id"),
+                    payout_reference=payout_id
+                )
+            
             return quote, None
             
         except Exception as e:
             logger.error(f"Error handling payout webhook: {e}")
             return None, str(e)
+    
+    # =========================================================================
+    # LIQUIDITY LIFECYCLE HOOKS (Hybrid PoR Architecture - Phase 1)
+    # =========================================================================
+    
+    async def _on_deposit_confirmed(
+        self,
+        quote_id: str,
+        crypto_amount: float,
+        crypto_currency: str,
+        eur_equivalent: float,
+        tx_hash: str
+    ):
+        """
+        Lifecycle hook: Crypto deposit confirmed.
+        
+        Triggers:
+        1. Treasury crypto inflow ledger entry (REAL)
+        2. Exposure record creation (REAL)
+        3. Shadow-mode market routing simulation
+        4. Shadow-mode hedge evaluation
+        """
+        logger.info(f"[LIQUIDITY] Deposit confirmed for {quote_id}: {crypto_amount} {crypto_currency}")
+        
+        ledger_entry_id = None
+        exposure_id = None
+        
+        # 1. Record crypto inflow to treasury (REAL)
+        if self._treasury_service:
+            try:
+                entry = await self._treasury_service.record_crypto_inflow(
+                    quote_id=quote_id,
+                    crypto_amount=crypto_amount,
+                    crypto_currency=crypto_currency,
+                    eur_equivalent=eur_equivalent,
+                    tx_hash=tx_hash
+                )
+                ledger_entry_id = entry.entry_id
+                logger.info(f"[TREASURY] Crypto inflow recorded: {entry.entry_id} | {crypto_amount} {crypto_currency}")
+            except Exception as e:
+                logger.error(f"[TREASURY] Failed to record crypto inflow: {e}")
+        
+        # 2. Create exposure record (REAL)
+        if self._exposure_service:
+            try:
+                exposure = await self._exposure_service.create_exposure(
+                    quote_id=quote_id,
+                    exposure_type="offramp_payout",
+                    amount_eur=eur_equivalent,
+                    source_currency=crypto_currency,
+                    source_amount=crypto_amount,
+                    deposit_reference=tx_hash,
+                    ledger_entry_id=ledger_entry_id
+                )
+                exposure_id = exposure.exposure_id
+                logger.info(f"[EXPOSURE] Created: {exposure_id} | €{eur_equivalent:,.2f}")
+            except Exception as e:
+                logger.error(f"[EXPOSURE] Failed to create exposure: {e}")
+        
+        # 3. Shadow-mode market routing simulation (LOG-ONLY)
+        if self._routing_service:
+            try:
+                # Simulate what market route would be used
+                conversion_event = await self._routing_service.simulate_conversion(
+                    quote_id=quote_id,
+                    source_currency=crypto_currency,
+                    destination_currency="EUR",
+                    source_amount=crypto_amount,
+                    exposure_id=exposure_id
+                )
+                if conversion_event:
+                    logger.info(
+                        f"[ROUTING:SHADOW] Simulated conversion: {crypto_currency} → EUR | "
+                        f"Path: {conversion_event.conversion_path.path if conversion_event.conversion_path else 'direct'}"
+                    )
+            except Exception as e:
+                logger.error(f"[ROUTING:SHADOW] Simulation failed: {e}")
+        
+        # 4. Shadow-mode hedge evaluation (AUDIT-ONLY)
+        if self._hedging_service and self._exposure_service and self._treasury_service:
+            try:
+                total_exposure = await self._exposure_service.get_total_active_exposure()
+                coverage_ratio = await self._treasury_service.calculate_coverage_ratio(total_exposure)
+                active_exposures = await self._exposure_service.get_active_exposures(limit=20)
+                active_ids = [e["exposure_id"] for e in active_exposures]
+                
+                proposal = await self._hedging_service.evaluate_hedge_triggers(
+                    total_exposure_eur=total_exposure,
+                    coverage_ratio=coverage_ratio,
+                    active_exposure_ids=active_ids
+                )
+                if proposal:
+                    logger.info(
+                        f"[HEDGING:SHADOW] Hedge proposal generated: {proposal.proposal_id} | "
+                        f"Action: {proposal.recommended_action} | "
+                        f"Exposure: €{total_exposure:,.2f} | Coverage: {coverage_ratio:.2%}"
+                    )
+                else:
+                    logger.info(
+                        f"[HEDGING:SHADOW] No hedge trigger | "
+                        f"Exposure: €{total_exposure:,.2f} | Coverage: {coverage_ratio:.2%}"
+                    )
+            except Exception as e:
+                logger.error(f"[HEDGING:SHADOW] Evaluation failed: {e}")
+    
+    async def _on_payout_completed(
+        self,
+        quote_id: str,
+        net_payout_eur: float,
+        fee_eur: float,
+        settlement_id: str,
+        payout_reference: str
+    ):
+        """
+        Lifecycle hook: Fiat payout completed.
+        
+        Triggers:
+        1. Treasury fiat outflow ledger entry (REAL)
+        2. Fee collection ledger entry (REAL)
+        3. Exposure marked as covered (REAL)
+        4. Coverage event for reconciliation (REAL)
+        """
+        logger.info(f"[LIQUIDITY] Payout completed for {quote_id}: €{net_payout_eur:,.2f}")
+        
+        fiat_ledger_id = None
+        fee_ledger_id = None
+        
+        # 1. Record fiat payout outflow (REAL)
+        if self._treasury_service:
+            try:
+                fiat_entry = await self._treasury_service.record_fiat_payout(
+                    quote_id=quote_id,
+                    settlement_id=settlement_id,
+                    amount_eur=net_payout_eur,
+                    payout_reference=payout_reference,
+                    payout_provider="stripe"
+                )
+                fiat_ledger_id = fiat_entry.entry_id
+                logger.info(f"[TREASURY] Fiat payout recorded: {fiat_entry.entry_id} | €{net_payout_eur:,.2f}")
+            except Exception as e:
+                logger.error(f"[TREASURY] Failed to record fiat payout: {e}")
+        
+        # 2. Record fee collection (REAL)
+        if self._treasury_service and fee_eur > 0:
+            try:
+                fee_entry = await self._treasury_service.record_fee_collection(
+                    quote_id=quote_id,
+                    fee_amount=fee_eur,
+                    fee_currency="EUR"
+                )
+                fee_ledger_id = fee_entry.entry_id
+                logger.info(f"[TREASURY] Fee collected: {fee_entry.entry_id} | €{fee_eur:,.2f}")
+            except Exception as e:
+                logger.error(f"[TREASURY] Failed to record fee collection: {e}")
+        
+        # 3. Mark exposure as covered (REAL)
+        exposure_id = None
+        exposure_before = 0.0
+        exposure_after = 0.0
+        
+        if self._exposure_service:
+            try:
+                # Get the exposure for this quote
+                exposure = await self._exposure_service.get_exposure_by_quote(quote_id)
+                if exposure:
+                    exposure_id = exposure.get("exposure_id")
+                    exposure_before = await self._exposure_service.get_total_active_exposure()
+                    
+                    # Mark as covered
+                    await self._exposure_service.mark_covered(
+                        exposure_id=exposure_id,
+                        coverage_amount=net_payout_eur,
+                        settlement_id=settlement_id,
+                        ledger_entry_id=fiat_ledger_id
+                    )
+                    
+                    exposure_after = await self._exposure_service.get_total_active_exposure()
+                    logger.info(f"[EXPOSURE] Marked covered: {exposure_id} | Active: €{exposure_after:,.2f}")
+            except Exception as e:
+                logger.error(f"[EXPOSURE] Failed to mark covered: {e}")
+        
+        # 4. Create coverage event for reconciliation (REAL)
+        if self._reconciliation_service:
+            try:
+                coverage_event = await self._reconciliation_service.create_coverage_event(
+                    action_type="payout_settlement",
+                    amount_eur=net_payout_eur,
+                    exposure_id=exposure_id,
+                    ledger_entry_id=fiat_ledger_id,
+                    exposure_before_eur=exposure_before,
+                    exposure_after_eur=exposure_after,
+                    description=f"Payout completed for {quote_id}",
+                    provider="stripe",
+                    is_shadow=False  # This is a REAL coverage event
+                )
+                logger.info(f"[RECONCILIATION] Coverage event: {coverage_event.coverage_id} | €{net_payout_eur:,.2f}")
+            except Exception as e:
+                logger.error(f"[RECONCILIATION] Failed to create coverage event: {e}")
+    
+    async def _on_settlement_initiated(
+        self,
+        quote_id: str,
+        settlement_id: str,
+        net_payout_eur: float,
+        fee_eur: float
+    ):
+        """
+        Lifecycle hook: Settlement initiated (payout in transit).
+        
+        Called when payout is initiated but not yet confirmed (async payout flow).
+        Updates exposure status to PARTIALLY_COVERED.
+        """
+        logger.info(f"[LIQUIDITY] Settlement initiated for {quote_id}: {settlement_id}")
+        
+        # Update exposure to partially covered
+        if self._exposure_service:
+            try:
+                exposure = await self._exposure_service.get_exposure_by_quote(quote_id)
+                if exposure:
+                    await self._exposure_service.update_status(
+                        exposure_id=exposure.get("exposure_id"),
+                        status="partially_covered",
+                        metadata={"settlement_id": settlement_id, "payout_pending": True}
+                    )
+                    logger.info(f"[EXPOSURE] Status updated to partially_covered: {exposure.get('exposure_id')}")
+            except Exception as e:
+                logger.error(f"[EXPOSURE] Failed to update status: {e}")
     
     def _quote_to_doc(self, quote: ProviderQuote) -> Dict:
         """Convert quote to MongoDB document."""
