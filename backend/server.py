@@ -341,6 +341,29 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Liquidity services wired to PoR engine")
     
+    # Initialize DEX Service (C-SAFE Real Market Conversion)
+    try:
+        await dex_service.initialize()
+        set_dex_service(dex_service)
+        logger.info("DEX Service initialized - Real on-chain swaps (1inch + PancakeSwap)")
+    except Exception as e:
+        logger.warning(f"DEX Service initialization failed: {e}")
+    
+    # Initialize Batch Executor for progressive swaps
+    try:
+        await batch_executor.initialize()
+        logger.info("Batch Executor initialized - TWAP-like progressive execution")
+    except Exception as e:
+        logger.warning(f"Batch Executor initialization failed: {e}")
+    
+    # Initialize Transak Service (On/Off-Ramp Widget)
+    try:
+        await transak_service.initialize()
+        set_transak_service(transak_service)
+        logger.info("Transak Service initialized - On/Off-ramp widget enabled")
+    except Exception as e:
+        logger.warning(f"Transak Service initialization failed: {e}")
+    
     # Initialize PostgreSQL and Dual Database Manager for migration
     try:
         pg_engine, pg_session_factory = await init_pg_engine()
