@@ -142,6 +142,38 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
     }
   }, [mode, auditSessionId]);
 
+  // Log amount changes (debounced)
+  useEffect(() => {
+    if (!auditSessionId || !amount) return;
+    const timer = setTimeout(() => {
+      logAuditEvent('amount_entered', `Amount set to ${amount}`, { 
+        amount: parseFloat(amount) || 0,
+        currency: mode === 'BUY' ? fiatCurrency : cryptoCurrency 
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [amount, auditSessionId]);
+
+  // Log currency changes
+  useEffect(() => {
+    if (!auditSessionId) return;
+    logAuditEvent('currency_selected', `Currencies: ${fiatCurrency} / ${cryptoCurrency}`, {
+      fiat_currency: fiatCurrency,
+      crypto_currency: cryptoCurrency
+    });
+  }, [fiatCurrency, cryptoCurrency, auditSessionId]);
+
+  // Log wallet address changes (debounced)
+  useEffect(() => {
+    if (!auditSessionId || !walletAddress || walletAddress.length < 10) return;
+    const timer = setTimeout(() => {
+      logAuditEvent('wallet_entered', `Wallet address entered`, { 
+        wallet_address: walletAddress.substring(0, 10) + '...' 
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [walletAddress, auditSessionId]);
+
   // Generate widget URL
   const generateWidgetUrl = async () => {
     if (!amount || parseFloat(amount) <= 0) {
