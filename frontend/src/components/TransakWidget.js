@@ -48,6 +48,7 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
   const [orderId, setOrderId] = useState(null);
   const [auditSessionId, setAuditSessionId] = useState(null);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [timelineExpanded, setTimelineExpanded] = useState(false);
 
   // Create audit session when widget opens
   const createAuditSession = async () => {
