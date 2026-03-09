@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from services.email_service import get_email_service, EmailService
+from utils.password import hash_password, verify_password
 
 import logging
 
