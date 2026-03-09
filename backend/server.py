@@ -157,6 +157,9 @@ transak_service = TransakService(db)
 # Initialize Email service (Password Reset)
 email_service = EmailService()
 
+# Initialize Audit service (Transaction Timeline)
+audit_service = TransactionAuditService(db)
+
 # Set global service instances
 set_audit_logger(audit_logger)
 set_webhook_service(webhook_service)
