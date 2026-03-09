@@ -136,6 +136,7 @@ function App() {
         <AuthProvider>
           <AppRoutes />
           <Toaster />
+          <NotificationToaster />
         </AuthProvider>
       </BrowserRouter>
     </div>
