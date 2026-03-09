@@ -27,7 +27,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/dex", tags=["DEX"])
+router = APIRouter(prefix="/dex", tags=["DEX"])
 
 
 # Request/Response Models
