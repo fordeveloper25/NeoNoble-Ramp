@@ -272,6 +272,13 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
       
       if (data.event_id === 'TRANSAK_ORDER_CREATED') {
         setStatus({ type: 'info', message: 'Order created! Processing...' });
+        
+        // Log to audit
+        logAuditEvent('order_linked', `Transak order created: ${data.data?.id}`, {
+          transak_order_id: data.data?.id,
+          transak_status: data.data?.status
+        });
+        
         // Link the Transak order ID
         if (orderId && data.data?.id) {
           fetch(`${BACKEND_URL}/api/transak/orders/link`, {
@@ -290,6 +297,14 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
       
       if (data.event_id === 'TRANSAK_ORDER_SUCCESSFUL') {
         setStatus({ type: 'success', message: 'Transaction completed successfully!' });
+        
+        // Log success and close session
+        logAuditEvent('order_completed', 'Transaction completed successfully', {
+          transak_order_id: data.data?.id,
+          final_status: 'completed'
+        });
+        closeAuditSession('completed');
+        
         setTimeout(() => {
           setShowWidget(false);
           onClose?.();
@@ -298,15 +313,56 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
       
       if (data.event_id === 'TRANSAK_ORDER_FAILED') {
         setStatus({ type: 'error', message: 'Transaction failed. Please try again.' });
+        
+        // Log failure
+        logAuditEvent('order_failed', 'Transaction failed', {
+          transak_order_id: data.data?.id,
+          error: data.data?.errorMessage || 'Unknown error'
+        });
+        closeAuditSession('failed');
       }
       
       if (data.event_id === 'TRANSAK_WIDGET_CLOSE') {
         setShowWidget(false);
+        
+        // Log widget close
+        logAuditEvent('widget_closed', 'User closed the widget', {});
+        closeAuditSession('cancelled');
+      }
+
+      // Log KYC events
+      if (data.event_id === 'TRANSAK_KYC_STARTED') {
+        logAuditEvent('kyc_started', 'KYC verification started', {
+          transak_order_id: data.data?.id
+        });
+      }
+
+      if (data.event_id === 'TRANSAK_KYC_COMPLETED') {
+        logAuditEvent('kyc_completed', 'KYC verification completed', {
+          transak_order_id: data.data?.id
+        });
+      }
+
+      // Log payment events
+      if (data.event_id === 'TRANSAK_ORDER_PROCESSING') {
+        logAuditEvent('payment_initiated', 'Payment processing started', {
+          transak_order_id: data.data?.id,
+          status: data.data?.status
+        });
+      }
+
+      // Log any status update
+      if (data.event_id?.startsWith('TRANSAK_') && data.data?.status) {
+        logAuditEvent('status_update', `Status: ${data.data.status}`, {
+          transak_event: data.event_id,
+          transak_status: data.data.status,
+          transak_order_id: data.data?.id
+        });
       }
     } catch (e) {
       // Not a JSON message, ignore
     }
-  }, [orderId, onClose]);
+  }, [orderId, onClose, auditSessionId]);
 
   useEffect(() => {
     window.addEventListener('message', handleTransakMessage);
