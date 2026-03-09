@@ -57,6 +57,8 @@ export default function NenoTradingWidget({ compact = false }) {
   const [showOrders, setShowOrders] = useState(false);
   const [status, setStatus] = useState(null);
   const [balance, setBalance] = useState({ neno: 0, eur: 0 });
+  const [showChart, setShowChart] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   // WebSocket connection for real-time ticker
   const connectWebSocket = useCallback(() => {
