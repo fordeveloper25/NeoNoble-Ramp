@@ -51,7 +51,7 @@ export default function NenoCandlestickChart({
       
       const data = await response.json();
       
-      // Transform data - use date string format for v5
+      // Transform data - use UNIX timestamp (seconds) for lightweight-charts v4
       const candles = data.candles.map(c => ({
         time: Math.floor(c.timestamp / 1000),
         open: c.open,
