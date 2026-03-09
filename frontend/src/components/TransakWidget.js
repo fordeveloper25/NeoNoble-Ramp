@@ -215,6 +215,15 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
       const order = await orderResponse.json();
       setOrderId(order.order_id);
 
+      // Log order creation in audit
+      await logAuditEvent('order_created', `Order created: ${order.order_id}`, {
+        order_id: order.order_id,
+        product_type: mode,
+        fiat_currency: fiatCurrency,
+        crypto_currency: cryptoCurrency,
+        amount: parseFloat(amount)
+      });
+
       // Generate widget URL
       const widgetResponse = await fetch(`${BACKEND_URL}/api/transak/widget-url`, {
         method: 'POST',
