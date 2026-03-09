@@ -87,6 +87,7 @@ class ConnectorManager:
         # Initialize connectors (without credentials yet)
         self._connectors["binance"] = BinanceConnector()
         self._connectors["kraken"] = KrakenConnector()
+        self._connectors["coinbase"] = CoinbaseConnector()
         
         # Load and initialize credentials from environment
         await self._load_credentials()
