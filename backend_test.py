@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 # Backend URL from frontend .env
 BACKEND_URL = "https://hybrid-treasury.preview.emergentagent.com/api"
 
-class CSafeDexTransakTester:
+class Phase2Phase3Tester:
     def __init__(self):
         self.session = None
         self.test_results = {}
