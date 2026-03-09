@@ -77,6 +77,12 @@ from services.liquidity import (
     ReconciliationService, set_reconciliation_service
 )
 
+# Import DEX services (C-SAFE Real Market Conversion)
+from services.dex import DEXService, BatchExecutor, set_dex_service
+
+# Import Transak service (On/Off-Ramp Widget)
+from services.transak_service import TransakService, set_transak_service
+
 # Import database modules for PostgreSQL migration
 from database.dual_manager import get_dual_db_manager
 from database.config import get_pg_session_factory, init_pg_engine
