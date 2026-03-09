@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # Backend URL from frontend .env
 BACKEND_URL = "https://hybrid-treasury.preview.emergentagent.com/api"
 
-class HybridLiquidityArchitectureTester:
+class CSafeDexTransakTester:
     def __init__(self):
         self.session = None
         self.test_results = {}
@@ -52,6 +52,7 @@ class HybridLiquidityArchitectureTester:
         self.user_jwt = None
         self.quote_id = None
         self.exposure_id = None
+        self.transak_order_id = None
         
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
