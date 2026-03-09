@@ -132,6 +132,20 @@ class ConnectorManager:
             logger.info("[CONNECTORS] Kraken connector configured")
         else:
             logger.warning("[CONNECTORS] Kraken credentials not configured")
+        
+        # Coinbase
+        coinbase_key = os.environ.get("COINBASE_API_KEY")
+        coinbase_secret = os.environ.get("COINBASE_API_SECRET")
+        
+        if coinbase_key and coinbase_secret:
+            await self._connectors["coinbase"].initialize(
+                api_key=coinbase_key,
+                api_secret=coinbase_secret
+            )
+            await self._connectors["coinbase"].connect()
+            logger.info("[CONNECTORS] Coinbase connector configured")
+        else:
+            logger.warning("[CONNECTORS] Coinbase credentials not configured")
     
     def is_enabled(self) -> bool:
         """Check if exchange trading is enabled."""
