@@ -517,6 +517,7 @@ api_router.include_router(dex_router)
 api_router.include_router(transak_router)
 api_router.include_router(exchange_router)
 api_router.include_router(password_router)
+api_router.include_router(audit_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
