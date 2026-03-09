@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
+import NenoCandlestickChart from './NenoCandlestickChart';
+import { PriceAlertCreator, showNotificationToast } from './NotificationSystem';
 import {
   TrendingUp,
   TrendingDown,
@@ -14,7 +17,9 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Zap
+  Zap,
+  LineChart,
+  Bell
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
