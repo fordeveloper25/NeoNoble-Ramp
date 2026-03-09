@@ -128,6 +128,13 @@ routing_service = MarketRoutingService(db)
 hedging_service = HedgingService(db)
 reconciliation_service = ReconciliationService(db)
 
+# Initialize DEX services (C-SAFE Real Market Conversion)
+dex_service = DEXService(db)
+batch_executor = BatchExecutor(db, dex_service)
+
+# Initialize Transak service (On/Off-Ramp Widget)
+transak_service = TransakService(db)
+
 # Set global service instances
 set_audit_logger(audit_logger)
 set_webhook_service(webhook_service)
