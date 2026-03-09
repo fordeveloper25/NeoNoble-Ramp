@@ -74,15 +74,16 @@ Build the "NeoNoble Ramp" platform, a full-stack crypto on/off-ramp application 
 - **Conversion Wallet**: `0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E`
 - **Settlement Wallet**: `0xD91bFc93976054B9fF17672169F6AB558caBCf59`
 
-## Live Trading Status
+## Live Trading Status (Updated March 9, 2026)
 | Service | Status |
 |---------|--------|
 | DEX | ✅ ENABLED, READY |
 | Exchange Trading | ✅ LIVE MODE (shadow_mode=false) |
 | Kraken | ✅ Connected |
+| Coinbase | ✅ Connected |
 | Binance | ⚠️ Geo-blocked 451 |
-| Coinbase | ⏳ Needs API keys |
-| PostgreSQL | ✅ Dual-write active |
+| PostgreSQL | ✅ **PRIMARY (postgresql_only mode)** |
+| MongoDB | ✅ Connected (legacy backup) |
 
 ## Key API Endpoints
 - `/api/auth/*` - Authentication
