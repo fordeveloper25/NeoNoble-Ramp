@@ -520,19 +520,70 @@ export default function NenoTradingWidget({ compact = false }) {
         </button>
 
         {/* Recent Orders */}
-        <div className="border-t border-gray-800 pt-4">
-          <button
-            onClick={() => setShowOrders(!showOrders)}
-            className="w-full flex items-center justify-between text-gray-400 hover:text-white transition-colors"
-            data-testid="toggle-orders-btn"
-          >
-            <span className="flex items-center gap-2">
+        <div className="border-t border-gray-800 pt-4 space-y-3">
+          {/* Toggle buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowChart(!showChart)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+                showChart
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                  : 'bg-gray-800 text-gray-400 hover:text-white'
+              }`}
+              data-testid="toggle-chart-btn"
+            >
+              <LineChart className="w-4 h-4" />
+              Grafico
+            </button>
+            <button
+              onClick={() => setShowAlerts(!showAlerts)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+                showAlerts
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                  : 'bg-gray-800 text-gray-400 hover:text-white'
+              }`}
+              data-testid="toggle-alerts-btn"
+            >
+              <Bell className="w-4 h-4" />
+              Alert
+            </button>
+            <button
+              onClick={() => setShowOrders(!showOrders)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+                showOrders
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                  : 'bg-gray-800 text-gray-400 hover:text-white'
+              }`}
+              data-testid="toggle-orders-btn"
+            >
               <BarChart3 className="w-4 h-4" />
-              Ordini Recenti ({orders.length})
-            </span>
-            {showOrders ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+              Ordini ({orders.length})
+            </button>
+          </div>
 
+          {/* Candlestick Chart */}
+          {showChart && (
+            <div className="mt-3">
+              <NenoCandlestickChart 
+                symbol={selectedPair.symbol} 
+                height={300}
+                compact={true}
+                showControls={true}
+              />
+            </div>
+          )}
+
+          {/* Price Alerts */}
+          {showAlerts && (
+            <div className="mt-3">
+              <PriceAlertCreator 
+                symbol={selectedPair.symbol}
+                currentPrice={ticker?.last || 10000}
+              />
+            </div>
+          )}
+
+          {/* Orders List */}
           {showOrders && (
             <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
               {orders.length === 0 ? (
