@@ -10,7 +10,10 @@ import {
   CheckCircle,
   AlertCircle,
   RefreshCw,
-  Clock
+  Clock,
+  History,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import TransactionTimeline from './TransactionTimeline';
 
