@@ -1,232 +1,37 @@
-# Testing Status for C-SAFE DEX Off-Ramp + Transak Widget Integration
+# Testing Status - Phase 2 & Phase 3 Implementation
 
 ## Current Testing Session
 **Date**: 2026-03-09
-**Focus**: C-SAFE DEX Off-Ramp + Transak Widget Integration Testing Complete
+**Focus**: Phase 2 (Venue Integration) + Phase 3 (Hedge Activation)
 
-backend:
-  - task: "DEX Service Status API"
-    implemented: true
-    working: true
-    file: "routes/dex_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ DEX Service Status (Disabled Mode) - Status: 200, Enabled: False, Web3 Connected: True. Service correctly shows disabled state as expected."
+## Test Requirements
 
-  - task: "DEX Quote Request API"
-    implemented: true
-    working: true
-    file: "routes/dex_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ DEX Quote Request (NENO → USDT) - Status: 404, No quote available due to missing 1inch API key. This is expected behavior for disabled mode."
+### Phase 2 - Exchange Connectors
+- [ ] GET /api/exchanges/status - Connector manager status
+- [ ] GET /api/exchanges/ticker/{symbol} - Market ticker
+- [ ] GET /api/exchanges/balances - All balances
+- [ ] GET /api/exchanges/balance/{currency} - Aggregated balance
+- [ ] POST /api/exchanges/orders - Place order (shadow mode)
+- [ ] GET /api/exchanges/orders - Order history
+- [ ] POST /api/exchanges/admin/enable - Enable live trading
 
-  - task: "DEX Conversions History API"
-    implemented: true
-    working: true
-    file: "routes/dex_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ DEX Conversions History - Status: 200, Swaps Count: 0. Returns empty list as expected for initial state."
+### Phase 3 - Hedge Activation
+- [ ] GET /api/liquidity/hedging/summary - Hedge service status (shadow_mode: true)
+- [ ] POST /api/liquidity/hedging/evaluate - Evaluate hedge triggers
+- [ ] POST /api/liquidity/hedging/execute - Execute hedge (shadow mode)
+- [ ] POST /api/liquidity/hedging/admin/enable - Enable live hedging
 
-  - task: "DEX Admin Configuration API"
-    implemented: true
-    working: true
-    file: "routes/dex_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ DEX Admin Configuration - Status: 200, Returns configuration object successfully."
+### Integration Tests
+- [ ] Verify connector manager initializes with Binance + Kraken
+- [ ] Verify hedging service can evaluate triggers
+- [ ] Verify shadow mode prevents real execution
+- [ ] Verify admin can enable live modes
 
-  - task: "Transak Service Status API"
-    implemented: true
-    working: true
-    file: "routes/transak_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ Transak Service Status (Demo Mode) - Status: 200, Configured: False. Service correctly shows unconfigured state for demo mode."
+### Backend URL
+https://hybrid-treasury.preview.emergentagent.com/api
 
-  - task: "Transak Widget URL Generation API"
-    implemented: true
-    working: true
-    file: "routes/transak_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ Transak Widget URL Generation (Demo Mode Expected) - Status: 503, Service not configured as expected without API key."
-
-  - task: "Transak Fiat Currencies API"
-    implemented: true
-    working: true
-    file: "routes/transak_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ Transak Fiat Currencies - Status: 200, Currencies Count: 3, EUR Supported: True. Returns EUR, USD, GBP as expected."
-
-  - task: "Transak Crypto Currencies API"
-    implemented: true
-    working: true
-    file: "routes/transak_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ Transak Crypto Currencies - Status: 200, Currencies Count: 4, USDT Supported: True. Returns USDT, USDC, BNB, NENO as expected."
-
-  - task: "Transak Order Creation Flow"
-    implemented: true
-    working: true
-    file: "routes/transak_routes.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ Create Transak Order - Status: 200, Order created successfully with user_id: test123, Amount: €100. Order retrieval and user query also working correctly."
-
-  - task: "Liquidity Dashboard API (Regression)"
-    implemented: true
-    working: true
-    file: "routes/liquidity_routes.py"
-    stuck_count: 0
-    priority: "medium"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ Liquidity Dashboard - Status: 200, All services active, Mode: hybrid. No regression detected."
-
-  - task: "Treasury Summary API (Regression)"
-    implemented: true
-    working: true
-    file: "routes/liquidity_routes.py"
-    stuck_count: 0
-    priority: "medium"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ Treasury Summary (€100M Virtual Floor) - EUR Balance: €100,000,000.00. Virtual floor maintained correctly."
-
-  - task: "Exposure Summary API (Regression)"
-    implemented: true
-    working: true
-    file: "routes/liquidity_routes.py"
-    stuck_count: 0
-    priority: "medium"
-    needs_retesting: false
-    status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ Exposure Summary - Status: 200, Total Active Exposure tracked correctly. No regression detected."
-
-frontend:
-  - task: "Dashboard loads with Transak widget section"
-    implemented: true
-    working: true
-    file: "src/pages/Dashboard.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "testing"
-        comment: "Frontend testing not performed as per system limitations. Backend APIs verified successfully."
-      - working: true
-        agent: "testing"
-        comment: "✅ TRANSAK UI TESTING COMPLETE - Dashboard loads successfully with Transak On/Off-Ramp section visible. Blue/purple gradient background present, CreditCard icon area visible, description text 'Buy & sell crypto with card or bank transfer' displays correctly. User registration and authentication flow working properly."
-
-  - task: "Buy button opens Transak widget modal"
-    implemented: true
-    working: true
-    file: "src/components/TransakWidget.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "testing"
-        comment: "Frontend testing not performed as per system limitations. Backend APIs verified successfully."
-      - working: true
-        agent: "testing"
-        comment: "✅ Green Buy button found and functional in Transak section. Button has proper green styling (bg-green-500 hover:bg-green-600). Multiple Buy buttons detected (main tab + Transak section) indicating proper implementation. Modal opening functionality confirmed through UI inspection."
-
-  - task: "Sell button opens Transak widget modal"
-    implemented: true
-    working: true
-    file: "src/components/TransakWidget.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "testing"
-        comment: "Frontend testing not performed as per system limitations. Backend APIs verified successfully."
-      - working: true
-        agent: "testing"
-        comment: "✅ Orange Sell button found and functional in Transak section. Button has proper orange styling (bg-orange-500 hover:bg-orange-600). Sell button properly positioned next to Buy button in Transak widget area."
-
-  - task: "Widget form displays correctly"
-    implemented: true
-    working: true
-    file: "src/components/TransakWidget.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "testing"
-        comment: "Frontend testing not performed as per system limitations. Backend APIs verified successfully."
-      - working: true
-        agent: "testing"
-        comment: "✅ TransakWidget component properly implemented with modal structure, mode toggle buttons, amount input, currency selectors, wallet address field, and action buttons. Component includes proper error handling, loading states, and iframe integration for Transak widget. All expected UI elements present and properly styled."
-
-metadata:
-  created_by: "testing_agent"
-  version: "2.0"
-  test_sequence: 1
-  run_ui: false
-
-test_plan:
-  current_focus:
-    - "Transak Widget UI Integration Testing Complete"
-    - "All frontend components verified and functional"
-  stuck_tasks: []
-  test_all: true
-  test_priority: "high_first"
-
-agent_communication:
-  - agent: "testing"
-    message: "✅ C-SAFE DEX OFF-RAMP + TRANSAK WIDGET INTEGRATION TESTING COMPLETE. All 29 backend tests passed successfully. NEW SERVICES VERIFIED: DEX Service API (Disabled Mode), Transak Service API (Demo Mode), Transak Order Flow. REGRESSION TESTS PASSED: Treasury, Exposure, and Reconciliation Services (REAL), Routing and Hedging Services (SHADOW MODE), Financial Auditability and Ledger Integrity. DEX service correctly shows disabled state (enabled: false, web3_connected: true). Transak service works in demo mode without API key as expected. All endpoints return proper JSON responses. No critical issues found."
-  - agent: "testing"
-    message: "✅ TRANSAK WIDGET UI TESTING COMPLETE - Successfully tested NeoNoble Ramp dashboard with Transak widget integration. VERIFIED: User registration/login flow, Dashboard loads with Transak On/Off-Ramp section (blue/purple gradient), Green Buy button and Orange Sell button functional, Description text displays correctly, TransakWidget component properly implemented with modal, mode toggles, form inputs, currency selectors. All expected UI elements present and working. No critical issues found. Ready for production use."
+## Expected Results
+- Exchange connectors: Shadow mode, venues not connected (no credentials)
+- Hedging: Shadow mode, policy configured, no active hedges
+- All endpoints return proper JSON responses
 
