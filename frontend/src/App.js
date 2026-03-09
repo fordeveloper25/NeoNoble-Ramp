@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
+import { NotificationToaster } from "./components/NotificationSystem";
 
 // Pages
 import Home from "./pages/Home";
