@@ -209,16 +209,28 @@ export default function NenoTradingWidget({ compact = false }) {
 
       if (response.ok) {
         const order = result.order;
+        const statusMsg = `Ordine ${order.status === 'filled' ? 'eseguito' : 'piazzato'}: ${orderSide.toUpperCase()} ${quantity} NENO @ €${order.price?.toLocaleString()}`;
         setStatus({
           type: 'success',
-          message: `Ordine ${order.status === 'filled' ? 'eseguito' : 'piazzato'}: ${orderSide.toUpperCase()} ${quantity} NENO @ €${order.price?.toLocaleString()}`
+          message: statusMsg
         });
+        
+        // Show toast notification
+        showNotificationToast({
+          type: 'order_filled',
+          title: 'Ordine Eseguito ✓',
+          message: statusMsg
+        });
+        
         setQuantity('');
         setLimitPrice('');
         fetchOrders();
         fetchBalance();
       } else {
         setStatus({ type: 'error', message: result.detail || 'Errore nell\'ordine' });
+        
+        // Show error toast
+        toast.error(result.detail || 'Errore nell\'ordine');
       }
     } catch (error) {
       setStatus({ type: 'error', message: 'Errore di connessione' });
