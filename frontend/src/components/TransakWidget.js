@@ -9,8 +9,10 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Clock
 } from 'lucide-react';
+import TransactionTimeline from './TransactionTimeline';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
