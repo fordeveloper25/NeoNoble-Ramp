@@ -112,13 +112,14 @@ See `/app/backend/.env` for configuration:
 ## Backlog
 
 ### P0 - Immediate
-- [ ] Provide Coinbase API keys to enable third exchange
+- [x] ~~Provide Coinbase API keys~~ ✅ DONE
 
-### P1 - Next
-- [ ] Run migration validation once data accumulates
-- [ ] Switch to `postgresql_only` mode after validation passes
+### P1 - Completed
+- [x] ~~Run migration validation~~ ✅ DONE (2/3 checks passed)
+- [x] ~~Switch to postgresql_only mode~~ ✅ DONE
 
 ### P2 - Future
 - [ ] Repository pattern refactoring
 - [ ] Add more exchange connectors
 - [ ] Performance optimization
+- [ ] Complete remaining 2 API keys migration (system keys)
