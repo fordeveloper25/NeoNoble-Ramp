@@ -70,44 +70,34 @@ async def get_ticker(
     venue: Optional[str] = None,
     manager: ConnectorManager = Depends(get_manager)
 ):
-    """Get ticker for a symbol."""
-    if venue:
-        connector = manager.get_connector(venue)
-        if not connector or not connector.is_connected():
-            raise HTTPException(status_code=404, detail=f"Venue {venue} not connected")
-        
-        ticker = await connector.get_ticker(symbol)
-        if not ticker:
-            raise HTTPException(status_code=404, detail=f"No ticker for {symbol}")
-        
-        return {
-            "venue": venue,
-            "symbol": ticker.symbol,
-            "bid": ticker.bid,
-            "ask": ticker.ask,
-            "last": ticker.last,
-            "mid": ticker.mid,
-            "spread_pct": ticker.spread_pct,
-            "volume_24h": ticker.volume_24h,
-            "timestamp": ticker.timestamp
-        }
-    else:
-        # Get best price across venues
-        ticker, best_venue = await manager.get_best_price(symbol)
-        if not ticker:
-            raise HTTPException(status_code=404, detail=f"No ticker for {symbol}")
-        
-        return {
-            "venue": best_venue,
-            "symbol": ticker.symbol,
-            "bid": ticker.bid,
-            "ask": ticker.ask,
-            "last": ticker.last,
-            "mid": ticker.mid,
-            "spread_pct": ticker.spread_pct,
-            "volume_24h": ticker.volume_24h,
-            "timestamp": ticker.timestamp
-        }
+    """
+    Get ticker for a symbol.
+    
+    For NENO pairs (e.g., NENO-EUR, NENOEUR), returns data from 
+    the virtual NENO exchange with fixed pricing.
+    """
+    # Use the manager's get_ticker which handles NENO automatically
+    ticker = await manager.get_ticker(symbol, venue)
+    
+    if not ticker:
+        raise HTTPException(status_code=404, detail=f"No ticker for {symbol}")
+    
+    # Determine venue name
+    ticker_venue = venue if venue else ("neno_exchange" if "NENO" in symbol.upper() else "best")
+    if not venue and "NENO" not in symbol.upper():
+        _, ticker_venue = await manager.get_best_price(symbol)
+    
+    return {
+        "venue": ticker_venue,
+        "symbol": ticker.symbol,
+        "bid": ticker.bid,
+        "ask": ticker.ask,
+        "last": ticker.last,
+        "mid": ticker.mid,
+        "spread_pct": ticker.spread_pct,
+        "volume_24h": ticker.volume_24h,
+        "timestamp": ticker.timestamp
+    }
 
 
 @router.get("/balances")
