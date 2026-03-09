@@ -3,10 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { rampApi } from '../api';
 import TransakWidget from '../components/TransakWidget';
+import NenoTradingWidget from '../components/NenoTradingWidget';
 import {
   Coins, ArrowUpRight, ArrowDownRight, RefreshCw, History,
   Wallet, Building, LogOut, ChevronRight, Loader2, CheckCircle,
-  AlertCircle, TrendingUp, CreditCard
+  AlertCircle, TrendingUp, CreditCard, BarChart3
 } from 'lucide-react';
 
 const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
