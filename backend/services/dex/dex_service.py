@@ -617,7 +617,7 @@ class DEXService:
             else:
                 result.status = SwapStatus.FAILED
                 result.error_message = "Transaction reverted"
-                logger.error(f"[1INCH] Swap FAILED: Transaction reverted")
+                logger.error("[1INCH] Swap FAILED: Transaction reverted")
             
         except Exception as e:
             result.status = SwapStatus.FAILED
