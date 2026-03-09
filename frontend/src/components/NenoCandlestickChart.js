@@ -114,6 +114,10 @@ export default function NenoCandlestickChart({
           labelBackgroundColor: '#6366F1'
         }
       },
+      localization: {
+        locale: 'en-US',
+        dateFormat: 'yyyy-MM-dd',
+      },
       timeScale: {
         borderColor: 'rgba(55, 65, 81, 0.5)',
         timeVisible: true,
