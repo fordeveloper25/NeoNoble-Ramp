@@ -151,6 +151,10 @@ class BinanceConnector(ExchangeConnector):
     
     async def get_ticker(self, symbol: str) -> Optional[MarketTicker]:
         """Get current ticker for a symbol."""
+        # Handle NENO symbols with virtual pricing
+        if self._is_neno_symbol(symbol):
+            return self._get_neno_ticker(symbol)
+        
         try:
             data = await self._public_request("/api/v3/ticker/24hr", {"symbol": symbol})
             
@@ -170,6 +174,24 @@ class BinanceConnector(ExchangeConnector):
         except Exception as e:
             logger.error(f"[BINANCE] Ticker error for {symbol}: {e}")
             return None
+    
+    def _is_neno_symbol(self, symbol: str) -> bool:
+        """Check if symbol is NENO."""
+        return 'NENO' in symbol.upper()
+    
+    def _get_neno_ticker(self, symbol: str) -> MarketTicker:
+        """Get NENO ticker with fixed price."""
+        from .neno_mixin import get_neno_ticker_data
+        data = get_neno_ticker_data(symbol)
+        return MarketTicker(
+            symbol=data['symbol'],
+            bid=data['bid'],
+            ask=data['ask'],
+            last=data['last'],
+            volume_24h=data['volume_24h'],
+            high_24h=data['high_24h'],
+            low_24h=data['low_24h']
+        )
     
     async def get_balances(self) -> List[ExchangeBalance]:
         """Get all account balances."""
