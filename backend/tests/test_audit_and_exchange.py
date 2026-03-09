@@ -301,18 +301,23 @@ class TestExchangeAPI:
         data = response.json()
         
         # Validate response structure
-        assert "connectors" in data, "Response missing connectors"
+        assert "venues" in data, "Response missing venues"
         assert "shadow_mode" in data, "Response missing shadow_mode"
         
-        # Check for expected connectors
-        connectors = data["connectors"]
-        print(f"✓ Exchange status: {len(connectors)} connectors")
+        # Check for expected venues (Binance and Kraken)
+        venues = data["venues"]
+        print(f"✓ Exchange status: {len(venues)} venues")
         
-        for name, status in connectors.items():
-            print(f"  - {name}: connected={status.get('connected', False)}")
+        for name, status in venues.items():
+            print(f"  - {name}: connected={status.get('connected', False)}, initialized={status.get('initialized', False)}")
         
         # Verify Binance and Kraken are present
-        assert "binance" in connectors or "kraken" in connectors, "Expected at least one exchange connector"
+        assert "binance" in venues, "Expected binance venue"
+        assert "kraken" in venues, "Expected kraken venue"
+        
+        # Verify Kraken is connected (Binance may be geo-blocked)
+        assert venues["kraken"]["connected"] == True, "Kraken should be connected"
+        print(f"✓ Kraken connected, Binance connected={venues['binance']['connected']}")
     
     def test_exchange_balances(self):
         """Test GET /api/exchanges/balances - get all balances"""
