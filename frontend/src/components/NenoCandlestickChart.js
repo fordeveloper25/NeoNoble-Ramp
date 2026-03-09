@@ -162,8 +162,8 @@ export default function NenoCandlestickChart({
     });
     chartRef.current = chart;
 
-    // Candlestick series
-    const candlestickSeries = chart.addCandlestickSeries({
+    // Candlestick series (v5 API)
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22C55E',
       downColor: '#EF4444',
       borderUpColor: '#22C55E',
@@ -173,8 +173,8 @@ export default function NenoCandlestickChart({
     });
     candlestickSeriesRef.current = candlestickSeries;
 
-    // Volume series
-    const volumeSeries = chart.addHistogramSeries({
+    // Volume series (v5 API)
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: {
         type: 'volume'
       },
