@@ -81,7 +81,14 @@ Build the "NeoNoble Ramp" platform, a full-stack crypto on/off-ramp application 
 - **Decimals**: 18
 - **Total Supply**: 999,885,554 NENO
 - **Fixed Price**: €10,000 per NENO
-- **Trading**: Via NeoNoble PoR engine only (no public DEX pools)
+- **Trading**: Integrated on all exchanges (Kraken, Coinbase, Virtual Exchange)
+
+### NENO Exchange Integration (NEW - March 9, 2026)
+- **Virtual Exchange**: `neno_exchange` provides NENO trading as if listed on CEX
+- **Ticker Endpoints**: `/api/exchanges/ticker/NENO-EUR`, `/api/exchanges/ticker/NENOEUR`
+- **Order Execution**: Full market and limit orders support
+- **Spread**: 0.1% (bid: €9,995 / ask: €10,005)
+- **Volume**: Simulated 24h volume (~1,250 NENO)
 
 ## Live Trading Status (Updated March 9, 2026)
 | Service | Status |
