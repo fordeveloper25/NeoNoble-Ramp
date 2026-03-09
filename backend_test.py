@@ -61,6 +61,12 @@ class Phase2Phase3Tester:
         self.exposure_id = None
         self.transak_order_id = None
         
+        # Password reset test data
+        self.test_user_email = "pwreset@test.com"
+        self.test_user_password = "OldPassword123!"
+        self.new_password = "NewPassword456!"
+        self.reset_token = None
+        
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
         return self
