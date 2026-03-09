@@ -115,6 +115,9 @@ from routes.dex_routes import router as dex_router
 from routes.transak_routes import router as transak_router
 from routes.exchange_routes import router as exchange_router
 
+# Import Password Reset routes
+from routes.password_routes import router as password_router, set_password_reset_db
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
