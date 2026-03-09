@@ -76,9 +76,9 @@ backend:
 
 frontend:
   - task: "Forgot Password Page"
-    implemented: false
-    working: "NA"
-    file: "N/A"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/ForgotPassword.js"
     stuck_count: 0
     priority: "medium"
     needs_retesting: false
@@ -86,11 +86,14 @@ frontend:
       - working: "NA"
         agent: "testing"
         comment: "Frontend testing not performed as per testing agent limitations."
+      - working: true
+        agent: "testing"
+        comment: "✅ Forgot Password page fully functional. Login page has 'Password dimenticata?' link that correctly navigates to /forgot-password. Page displays proper UI with email input, submit button, and shows success state with green checkmark after email submission. All expected elements present and working correctly."
 
   - task: "Reset Password Page"
-    implemented: false
-    working: "NA"
-    file: "N/A"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/ResetPassword.js"
     stuck_count: 0
     priority: "medium"
     needs_retesting: false
@@ -98,6 +101,9 @@ frontend:
       - working: "NA"
         agent: "testing"
         comment: "Frontend testing not performed as per testing agent limitations."
+      - working: true
+        agent: "testing"
+        comment: "✅ Reset Password page implemented with complete functionality including token verification, password input fields with validation, and success state handling. Component properly handles token validation and password reset flow."
 
 metadata:
   created_by: "testing_agent"
