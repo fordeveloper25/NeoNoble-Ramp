@@ -54,6 +54,9 @@ class ConnectorManager:
         self._fallback_venue = "kraken"
         self._enabled = False
         self._shadow_mode = True  # Start in shadow mode
+        
+        # NENO Virtual Exchange
+        self._neno_exchange: NenoVirtualExchange = get_neno_exchange()
     
     async def initialize(self):
         """Initialize the connector manager."""
