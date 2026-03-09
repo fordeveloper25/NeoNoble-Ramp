@@ -530,6 +530,7 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
             <button
               onClick={generateWidgetUrl}
               disabled={loading || !amount}
+              data-testid="transak-submit-btn"
               className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-colors ${
                 mode === 'BUY'
                   ? 'bg-green-500 hover:bg-green-600 text-white'
@@ -548,6 +549,38 @@ export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) 
                 </>
               )}
             </button>
+
+            {/* Audit Timeline Toggle */}
+            {auditSessionId && (
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <button
+                  onClick={() => setTimelineExpanded(!timelineExpanded)}
+                  data-testid="timeline-toggle-btn"
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <History className="w-5 h-5 text-purple-500" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Cronologia Transazione
+                    </span>
+                  </div>
+                  {timelineExpanded ? (
+                    <ChevronUp className="w-5 h-5 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                  )}
+                </button>
+                
+                {timelineExpanded && (
+                  <div className="mt-3 max-h-96 overflow-y-auto">
+                    <TransactionTimeline 
+                      sessionId={auditSessionId} 
+                      data-testid="transaction-timeline"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Info */}
             <p className="text-xs text-center text-gray-500 dark:text-gray-400">
