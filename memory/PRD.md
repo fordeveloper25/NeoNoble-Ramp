@@ -111,6 +111,12 @@ Build the "NeoNoble Ramp" platform, a full-stack crypto on/off-ramp application 
   - Balance tracking
   - Order history
   - Italian UI language
+  - **Candlestick Chart** (Fixed March 9, 2026):
+    - `lightweight-charts` v4.2.0
+    - Multiple timeframes: 1M, 5M, 15M, 1H, 4H, 1D
+    - Real-time OHLC data from `/api/price-history/candles/{symbol}`
+    - 24h stats (volume, high, low)
+    - Fullscreen mode
 
 ## Live Trading Status (Updated March 9, 2026)
 | Service | Status |
