@@ -6,6 +6,7 @@ Provides:
 - Automatic failover between venues
 - Order routing and execution
 - Balance aggregation
+- NENO virtual exchange integration
 """
 
 import os
@@ -26,6 +27,7 @@ from .base_connector import (
 from .binance_connector import BinanceConnector
 from .kraken_connector import KrakenConnector
 from .coinbase_connector import CoinbaseConnector
+from .neno_virtual_exchange import get_neno_exchange, NenoVirtualExchange
 
 logger = logging.getLogger(__name__)
 
