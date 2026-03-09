@@ -515,6 +515,13 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      
+      {/* Transak Widget Modal */}
+      <TransakWidget
+        isOpen={transakOpen}
+        onClose={() => setTransakOpen(false)}
+        initialMode={transakMode}
+      />
     </div>
   );
 }
