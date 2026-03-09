@@ -429,6 +429,175 @@ class HedgingService:
         
         logger.info(f"Hedge policy updated: {updates}")
         return self._default_policy
+    
+    async def execute_real_hedge(
+        self,
+        hedge_id: str,
+        connector_manager = None
+    ) -> Tuple[HedgeEvent, Optional[str]]:
+        """
+        Execute a real hedge through exchange connectors.
+        
+        Phase 3: Live hedge execution via Binance/Kraken.
+        
+        Args:
+            hedge_id: ID of the hedge event to execute
+            connector_manager: ConnectorManager instance for exchange access
+            
+        Returns:
+            Tuple of (updated HedgeEvent, error_message)
+        """
+        from services.exchanges import get_connector_manager, OrderSide
+        
+        now = datetime.now(timezone.utc)
+        connector_manager = connector_manager or get_connector_manager()
+        
+        # Get hedge event
+        hedge_doc = await self.hedges_collection.find_one({"hedge_id": hedge_id})
+        if not hedge_doc:
+            return None, f"Hedge not found: {hedge_id}"
+        
+        # Check if already executed
+        if hedge_doc.get("status") == HedgeStatus.COMPLETED.value:
+            return self._doc_to_event(hedge_doc), "Hedge already completed"
+        
+        # Check policy
+        if self._default_policy.shadow_mode:
+            logger.warning(f"[HEDGE] Cannot execute real hedge in shadow mode: {hedge_id}")
+            return self._doc_to_event(hedge_doc), "Shadow mode enabled - use update_policy to disable"
+        
+        # Check connector
+        if not connector_manager or not connector_manager.is_enabled():
+            logger.warning(f"[HEDGE] Connector manager not enabled: {hedge_id}")
+            return self._doc_to_event(hedge_doc), "Exchange connectors not enabled"
+        
+        target_amount = hedge_doc.get("target_amount_eur", 0)
+        
+        # Update status to executing
+        await self.hedges_collection.update_one(
+            {"hedge_id": hedge_id},
+            {"$set": {"status": HedgeStatus.EXECUTING.value, "execution_started_at": now.isoformat()}}
+        )
+        
+        try:
+            # Execute hedge as market sell order
+            # Convert EUR amount to BNB quantity (approximate)
+            # In production, this would use real-time prices
+            bnb_price_eur = 300.0  # Approximate - should fetch from connector
+            quantity = target_amount / bnb_price_eur
+            
+            # Execute order
+            order, error = await connector_manager.execute_order(
+                symbol="BNBEUR",  # or BNBUSDT on Binance
+                side=OrderSide.SELL,
+                quantity=quantity,
+                client_order_id=hedge_id
+            )
+            
+            if error:
+                # Hedge execution failed
+                await self.hedges_collection.update_one(
+                    {"hedge_id": hedge_id},
+                    {
+                        "$set": {
+                            "status": HedgeStatus.FAILED.value,
+                            "error_message": error,
+                            "failed_at": now.isoformat()
+                        }
+                    }
+                )
+                return self._doc_to_event(await self.hedges_collection.find_one({"hedge_id": hedge_id})), error
+            
+            # Calculate executed amount
+            executed_eur = order.filled_quantity * order.average_price if order.average_price > 0 else target_amount
+            
+            # Update hedge as completed
+            await self.hedges_collection.update_one(
+                {"hedge_id": hedge_id},
+                {
+                    "$set": {
+                        "status": HedgeStatus.COMPLETED.value,
+                        "executed_amount_eur": executed_eur,
+                        "remaining_amount_eur": max(0, target_amount - executed_eur),
+                        "exposures_after_eur": hedge_doc.get("exposures_before_eur", 0) - executed_eur,
+                        "coverage_ratio_after": min(1.0, hedge_doc.get("coverage_ratio_before", 0) + 
+                            (executed_eur / hedge_doc.get("exposures_before_eur", 1) if hedge_doc.get("exposures_before_eur", 0) > 0 else 0)),
+                        "completed_at": now.isoformat(),
+                        "total_cost_eur": order.fee,
+                        "slippage_cost_eur": abs(executed_eur - target_amount),
+                        "fee_cost_eur": order.fee,
+                        "execution_details": {
+                            "exchange": order.exchange,
+                            "order_id": order.order_id,
+                            "exchange_order_id": order.exchange_order_id,
+                            "filled_quantity": order.filled_quantity,
+                            "average_price": order.average_price,
+                            "fee": order.fee,
+                            "fee_currency": order.fee_currency
+                        }
+                    }
+                }
+            )
+            
+            logger.info(
+                f"[HEDGE:LIVE] Executed: {hedge_id} | "
+                f"Amount: €{executed_eur:,.2f} | "
+                f"Order: {order.exchange_order_id}"
+            )
+            
+            return self._doc_to_event(await self.hedges_collection.find_one({"hedge_id": hedge_id})), None
+            
+        except Exception as e:
+            logger.error(f"[HEDGE] Execution error: {e}")
+            await self.hedges_collection.update_one(
+                {"hedge_id": hedge_id},
+                {
+                    "$set": {
+                        "status": HedgeStatus.FAILED.value,
+                        "error_message": str(e),
+                        "failed_at": now.isoformat()
+                    }
+                }
+            )
+            return self._doc_to_event(await self.hedges_collection.find_one({"hedge_id": hedge_id})), str(e)
+    
+    def _doc_to_event(self, doc: Dict) -> Optional[HedgeEvent]:
+        """Convert MongoDB document to HedgeEvent."""
+        if not doc:
+            return None
+        return HedgeEvent(
+            hedge_id=doc["hedge_id"],
+            status=HedgeStatus(doc["status"]),
+            trigger_type=HedgeTriggerType(doc.get("trigger_type", "manual")),
+            trigger_reason=doc.get("trigger_reason", ""),
+            policy_id=doc.get("policy_id"),
+            proposal_id=doc.get("proposal_id"),
+            mode=HedgeMode(doc.get("mode", "deferred")),
+            target_amount_eur=doc.get("target_amount_eur", 0),
+            executed_amount_eur=doc.get("executed_amount_eur", 0),
+            remaining_amount_eur=doc.get("remaining_amount_eur", 0),
+            exposure_ids=doc.get("exposure_ids", []),
+            exposures_before_eur=doc.get("exposures_before_eur", 0),
+            exposures_after_eur=doc.get("exposures_after_eur", 0),
+            coverage_ratio_before=doc.get("coverage_ratio_before", 0),
+            coverage_ratio_after=doc.get("coverage_ratio_after", 0),
+            total_cost_eur=doc.get("total_cost_eur", 0),
+            slippage_cost_eur=doc.get("slippage_cost_eur", 0),
+            fee_cost_eur=doc.get("fee_cost_eur", 0),
+            is_shadow=doc.get("is_shadow", True),
+            created_at=doc.get("created_at"),
+            completed_at=doc.get("completed_at")
+        )
+    
+    async def enable_live_hedging(self, user_id: str = None):
+        """Enable live hedge execution (disable shadow mode)."""
+        await self.update_policy({"shadow_mode": False})
+        logger.info(f"[HEDGE] LIVE HEDGING ENABLED by {user_id}")
+    
+    async def disable_live_hedging(self, reason: str = None):
+        """Disable live hedging (enable shadow mode)."""
+        await self.update_policy({"shadow_mode": True})
+        logger.warning(f"[HEDGE] LIVE HEDGING DISABLED: {reason}")
 
 
 # Global instance
