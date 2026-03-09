@@ -83,12 +83,34 @@ Build the "NeoNoble Ramp" platform, a full-stack crypto on/off-ramp application 
 - **Fixed Price**: €10,000 per NENO
 - **Trading**: Integrated on all exchanges (Kraken, Coinbase, Virtual Exchange)
 
-### NENO Exchange Integration (NEW - March 9, 2026)
+### NENO Exchange Integration (March 9, 2026)
 - **Virtual Exchange**: `neno_exchange` provides NENO trading as if listed on CEX
+- **All Exchanges Support**: Binance, Kraken, Coinbase, NeoNoble - all return NENO ticker
 - **Ticker Endpoints**: `/api/exchanges/ticker/NENO-EUR`, `/api/exchanges/ticker/NENOEUR`
 - **Order Execution**: Full market and limit orders support
 - **Spread**: 0.1% (bid: €9,995 / ask: €10,005)
 - **Volume**: Simulated 24h volume (~1,250 NENO)
+
+### WebSocket Real-Time Streaming (NEW - March 9, 2026)
+- **Endpoint**: `wss://app-url/api/ws/ticker/{symbol}`
+- **Multi-subscription**: `wss://app-url/api/ws/multi`
+- **Features**:
+  - Real-time ticker updates every second
+  - Subscribe/unsubscribe to multiple symbols
+  - Automatic reconnection
+  - Ping/pong keepalive
+
+### NENO Trading Widget (NEW - March 9, 2026)
+- **Location**: Dashboard → "$NENO Trading" section
+- **Features**:
+  - Live price display with WebSocket streaming
+  - Buy/Sell toggle
+  - Market/Limit order types
+  - Exchange selector (NeoNoble, Kraken, Coinbase, Binance)
+  - Trading pair selector (NENO/EUR, NENO/USD, NENO/USDT)
+  - Balance tracking
+  - Order history
+  - Italian UI language
 
 ## Live Trading Status (Updated March 9, 2026)
 | Service | Status |
