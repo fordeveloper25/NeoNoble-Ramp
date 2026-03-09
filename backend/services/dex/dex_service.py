@@ -166,8 +166,7 @@ class DEXService:
         # Initialize Web3
         try:
             self._web3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(BSC_RPC_URL))
-            # Inject PoA middleware for BSC
-            self._web3.middleware_onion.inject(geth_poa_middleware, layer=0)
+            # Note: Web3 v7 auto-handles PoA chains, no middleware needed
             
             chain_id = await self._web3.eth.chain_id
             if chain_id != BSC_CHAIN_ID:
