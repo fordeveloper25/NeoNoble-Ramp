@@ -79,18 +79,22 @@ See `/app/backend/.env` for configuration. Critical variables:
 - `CONVERSION_WALLET_PRIVATE_KEY` (required for C-SAFE)
 
 ## Known Issues
-1. Binance API returns 451 (geo-blocked) - expected from certain regions
-2. C-SAFE DEX Off-Ramp requires valid 32-byte private key
-3. PostgreSQL migration incomplete (using MongoDB only mode)
+1. Binance API returns 451 (geo-blocked) - expected from certain regions, Kraken works as fallback
+2. DEX service disabled by default (enable via API when ready for live trading)
+
+## Configured Wallets (March 9, 2026)
+- **Conversion Wallet**: `0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E`
+- **Settlement Wallet**: `0xD91bFc93976054B9fF17672169F6AB558caBCf59`
 
 ## Backlog
 
-### P0 - Blocked
-- [ ] Configure C-SAFE wallet with valid private key
+### P0 - Ready to Enable
+- [ ] Enable DEX service for live swaps (currently disabled for safety)
+- [ ] Enable Exchange trading (shadow mode active)
 
 ### P1 - Next
-- [ ] Enable live trading on exchanges (verify Binance access or use Kraken only)
 - [ ] PostgreSQL migration completion
+- [ ] Test live trading with small amounts
 
 ### P2 - Future
 - [ ] Repository pattern refactoring
