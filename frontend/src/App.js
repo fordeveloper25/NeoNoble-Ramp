@@ -139,6 +139,38 @@ function AppRoutes() {
         }
       />
 
+      {/* Token Routes */}
+      <Route
+        path="/tokens/create"
+        element={
+          <ProtectedRoute>
+            <TokenCreation />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tokens/list"
+        element={
+          <ProtectedRoute>
+            <TokenList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tokens"
+        element={<Navigate to="/tokens/list" replace />}
+      />
+
+      {/* Subscription Routes */}
+      <Route
+        path="/subscriptions"
+        element={
+          <ProtectedRoute>
+            <SubscriptionPlans />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
