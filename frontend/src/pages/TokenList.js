@@ -31,7 +31,11 @@ const CHAIN_ICONS = {
 
 export default function TokenList() {
   const navigate = useNavigate();
-  const { token, user } = useAuth();
+  const { user } = useAuth();
+  
+  // Get token from localStorage
+  const token = localStorage.getItem('token');
+  
   const [loading, setLoading] = useState(true);
   const [tokens, setTokens] = useState([]);
   const [filter, setFilter] = useState('all'); // all, my, pending, live
