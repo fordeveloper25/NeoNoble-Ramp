@@ -44,16 +44,18 @@ class EmailService:
     
     def __init__(self):
         self._initialized = False
-        self._api_key = RESEND_API_KEY
+        self._api_key = None
         
     async def initialize(self):
         """Initialize email service."""
         if self._initialized:
             return
         
+        self._api_key = os.environ.get('RESEND_API_KEY', '')
+        
         if self._api_key:
             resend.api_key = self._api_key
-            logger.info(f"Email Service initialized with Resend (sender: {SENDER_EMAIL})")
+            logger.info(f"Email Service initialized with Resend (sender: {get_sender_email()})")
         else:
             logger.warning("Email Service initialized WITHOUT API KEY - emails will not be sent")
         
