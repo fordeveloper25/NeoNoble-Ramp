@@ -16,11 +16,20 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# Configuration
-RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
-SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
-SENDER_NAME = os.environ.get('SENDER_NAME', 'NeoNoble Ramp')
-APP_URL = os.environ.get('APP_URL', 'https://crypto-liquidity-1.preview.emergentagent.com')
+
+def get_app_url():
+    """Get APP_URL from environment (lazy loading to ensure dotenv is loaded first)."""
+    return os.environ.get('APP_URL', 'https://crypto-liquidity-1.preview.emergentagent.com')
+
+
+def get_sender_email():
+    """Get SENDER_EMAIL from environment."""
+    return os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+
+
+def get_sender_name():
+    """Get SENDER_NAME from environment."""
+    return os.environ.get('SENDER_NAME', 'NeoNoble Ramp')
 
 
 class EmailService:
