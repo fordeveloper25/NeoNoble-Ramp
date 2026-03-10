@@ -270,7 +270,7 @@ async def seed_default_plans(current_user: dict = Depends(get_current_user)):
     Seed default subscription plans.
     Admin only.
     """
-    if current_user.get("role") != "admin":
+    if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
     
     db = get_database()
@@ -308,7 +308,7 @@ async def create_plan(request: PlanCreateRequest, current_user: dict = Depends(g
     Create a new subscription plan.
     Admin only.
     """
-    if current_user.get("role") != "admin":
+    if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
     
     db = get_database()
@@ -649,7 +649,7 @@ async def admin_list_subscriptions(
     current_user: dict = Depends(get_current_user)
 ):
     """List all subscriptions. Admin only."""
-    if current_user.get("role") != "admin":
+    if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
     
     db = get_database()
@@ -682,7 +682,7 @@ async def admin_list_subscriptions(
 @router.get("/admin/stats")
 async def admin_subscription_stats(current_user: dict = Depends(get_current_user)):
     """Get subscription statistics. Admin only."""
-    if current_user.get("role") != "admin":
+    if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
     
     db = get_database()

@@ -351,7 +351,7 @@ async def update_token(token_id: str, request: TokenCreateRequest, current_user:
         raise HTTPException(status_code=404, detail="Token not found")
     
     # Check permissions
-    if token["creator_id"] != current_user["user_id"] and current_user.get("role") != "admin":
+    if token["creator_id"] != current_user["user_id"] and current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Not authorized to update this token")
     
     # Update fields (symbol cannot be changed)
@@ -397,7 +397,7 @@ async def admin_token_action(
     - Updates token status accordingly
     """
     # Check admin role
-    if current_user.get("role") != "admin":
+    if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
     
     db = get_database()
@@ -457,7 +457,7 @@ async def create_listing(request: ListingCreateRequest, current_user: dict = Dep
         raise HTTPException(status_code=404, detail="Token not found")
     
     # Check if user owns the token or is admin
-    if token["creator_id"] != current_user["user_id"] and current_user.get("role") != "admin":
+    if token["creator_id"] != current_user["user_id"] and current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Only token creator can request listing")
     
     # Check for existing pending listing
@@ -556,7 +556,7 @@ async def admin_listing_action(
     
     - Only admins can perform these actions
     """
-    if current_user.get("role") != "admin":
+    if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
     
     db = get_database()
