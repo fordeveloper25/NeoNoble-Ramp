@@ -75,8 +75,11 @@ export default function TokenList() {
           requested_pairs: ['EUR', 'USD', 'USDT']
         })
       });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Errore nella richiesta listing');
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Errore nella richiesta listing');
       setListingSuccess(`Listing richiesto con successo! Fee: €${data.listing_fee}`);
       setTimeout(() => { setListingModal(null); setListingSuccess(''); }, 2000);
     } catch (e) {
