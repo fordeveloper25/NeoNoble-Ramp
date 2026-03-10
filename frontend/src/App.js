@@ -146,11 +146,14 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-          <Toaster />
-          <NotificationToaster />
-        </AuthProvider>
+        <Web3Provider>
+          <AuthProvider>
+            <AppRoutes />
+            <Toaster />
+            <NotificationToaster />
+            <WalletModal />
+          </AuthProvider>
+        </Web3Provider>
       </BrowserRouter>
     </div>
   );
