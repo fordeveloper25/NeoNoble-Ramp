@@ -90,14 +90,16 @@ class EmailService:
             logger.warning(f"[EMAIL] Skipped (no API key): {subject} → {to_email}")
             return {"status": "skipped", "reason": "No API key configured"}
         
-        sender = from_email or f"{SENDER_NAME} <{SENDER_EMAIL}>"
+        sender_email = get_sender_email()
+        sender_name = get_sender_name()
+        sender = from_email or f"{sender_name} <{sender_email}>"
         
         params = {
             "from": sender,
             "to": [to_email],
             "subject": subject,
             "html": html_content,
-            "reply_to": SENDER_EMAIL
+            "reply_to": sender_email
         }
         
         # Add plain text version for better deliverability
