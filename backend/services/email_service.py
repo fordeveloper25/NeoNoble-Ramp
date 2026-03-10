@@ -139,7 +139,8 @@ class EmailService:
             reset_token: Password reset token
             user_name: Optional user name for personalization
         """
-        reset_link = f"{APP_URL}/reset-password?token={reset_token}"
+        app_url = get_app_url()
+        reset_link = f"{app_url}/reset-password?token={reset_token}"
         
         # Plain text version for better deliverability
         greeting = f"Ciao {user_name}," if user_name else "Ciao,"
