@@ -33,13 +33,16 @@ const PLAN_COLORS = {
 
 export default function SubscriptionPlans() {
   const navigate = useNavigate();
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
   const [plans, setPlans] = useState([]);
   const [currentSubscription, setCurrentSubscription] = useState(null);
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [error, setError] = useState('');
+
+  // Get token from localStorage
+  const token = localStorage.getItem('token');
 
   useEffect(() => {
     fetchData();
