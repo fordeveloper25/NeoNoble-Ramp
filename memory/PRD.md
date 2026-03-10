@@ -157,20 +157,40 @@ See `/app/backend/.env` for configuration:
 
 ## Backlog
 
-### P0 - Immediate
+### P0 - Completed
 - [x] ~~Candlestick chart fix~~ ✅ DONE (March 9, 2026)
-  - Fixed `Invalid language tag: en-US@posix` error
-  - Added `localization: { locale: 'en-US' }` option to chart
+- [x] ~~Token Creation Infrastructure~~ ✅ DONE (March 10, 2026)
+- [x] ~~Token Listing Marketplace~~ ✅ DONE (March 10, 2026)
+- [x] ~~Subscription System~~ ✅ DONE (March 10, 2026)
+- [x] ~~Multi-Wallet Connect~~ ✅ DONE (March 10, 2026)
+- [x] ~~Admin Dashboard base~~ ✅ DONE (March 10, 2026)
 
-### P1 - Completed
-- [x] ~~Provide Coinbase API keys~~ ✅ DONE
-- [x] ~~Run migration validation~~ ✅ DONE (2/3 checks passed)
-- [x] ~~Switch to postgresql_only mode~~ ✅ DONE
+### P1 - In Progress
+- [ ] 30 Crypto Market Data integration
+- [ ] Exchange Engine + Order Book
+- [ ] TradingView Integration
+- [ ] Complete Token/Listing Frontend UI
 
 ### P2 - Future
 - [ ] Create Liquidity Pool on PancakeSwap for $NENO
+- [ ] Microservices Architecture
 - [ ] Repository pattern refactoring
 - [ ] Add more exchange connectors
 - [ ] Performance optimization
-- [ ] Fix `concurrent_load_test.py` script
-- [ ] Complete remaining 2 API keys migration (system keys)
+
+## Token Infrastructure (NEW)
+- **Token Creation**: `/api/tokens/create` - Create custom tokens
+- **Token Listing**: `/api/tokens/listings/create` - Request token listing
+- **Trading Pairs**: `/api/tokens/pairs/create` - Create trading pairs
+- **Admin Actions**: `/api/tokens/{id}/admin-action` - Approve/reject tokens
+
+## Subscription System (NEW)
+- **Plans**: Free, Pro Trader (€29.99), Premium (€99.99), Developer Basic (€49.99), Developer Pro (€199.99), Enterprise (€999.99)
+- **Features**: API access, trading fee discounts, token creation limits
+- **Endpoints**: `/api/subscriptions/plans/list`, `/api/subscriptions/subscribe`
+
+## Admin Credentials
+- Email: `admin@neonobleramp.com`
+- Password: `Admin1234!`
+- Role: ADMIN
+
