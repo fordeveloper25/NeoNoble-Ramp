@@ -23,8 +23,12 @@ const CHAINS = [
 
 export default function TokenCreation() {
   const navigate = useNavigate();
-  const { token } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+
+  // Get token from localStorage
+  const token = localStorage.getItem('token');
+  
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [createdToken, setCreatedToken] = useState(null);
