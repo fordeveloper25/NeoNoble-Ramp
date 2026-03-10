@@ -18,7 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 def get_app_url():
-    """Get APP_URL from environment (lazy loading to ensure dotenv is loaded first)."""
+    """Get APP_URL - reads directly from .env file to avoid supervisor override."""
+    from pathlib import Path
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                if line.startswith('APP_URL='):
+                    return line.split('=', 1)[1].strip().strip('"\'')
+    # Fallback to environment variable then default
     return os.environ.get('APP_URL', 'https://crypto-liquidity-1.preview.emergentagent.com')
 
 
