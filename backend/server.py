@@ -133,6 +133,12 @@ from routes.price_history_routes import router as price_history_router
 # Import Notification routes
 from routes.notification_routes import router as notification_router
 
+# Import Token Infrastructure routes
+from routes.token_routes import router as token_router
+
+# Import Subscription Infrastructure routes
+from routes.subscription_routes import router as subscription_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
