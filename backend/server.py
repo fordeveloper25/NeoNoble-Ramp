@@ -536,6 +536,8 @@ api_router.include_router(audit_router)
 api_router.include_router(websocket_router)
 api_router.include_router(price_history_router)
 api_router.include_router(notification_router)
+api_router.include_router(token_router)
+api_router.include_router(subscription_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
