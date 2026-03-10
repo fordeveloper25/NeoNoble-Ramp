@@ -4,10 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import { rampApi } from '../api';
 import TransakWidget from '../components/TransakWidget';
 import NenoTradingWidget from '../components/NenoTradingWidget';
+import { WalletConnectButton, ChainSelector } from '../components/WalletConnect';
+import { useWeb3 } from '../context/Web3Context';
 import {
   Coins, ArrowUpRight, ArrowDownRight, RefreshCw, History,
   Wallet, Building, LogOut, ChevronRight, Loader2, CheckCircle,
-  AlertCircle, TrendingUp, CreditCard, BarChart3
+  AlertCircle, TrendingUp, CreditCard, BarChart3, Shield
 } from 'lucide-react';
 
 const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
