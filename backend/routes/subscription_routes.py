@@ -416,7 +416,7 @@ async def subscribe_to_plan(request: SubscribeRequest, current_user: dict = Depe
     
     # Check for existing active subscription
     existing = await db.subscriptions.find_one({
-        "user_id": current_user["id"],
+        "user_id": current_user["user_id"],
         "status": SubscriptionStatus.ACTIVE.value
     })
     if existing:
@@ -437,7 +437,7 @@ async def subscribe_to_plan(request: SubscribeRequest, current_user: dict = Depe
     subscription = {
         "_id": subscription_id,
         "id": subscription_id,
-        "user_id": current_user["id"],
+        "user_id": current_user["user_id"],
         "plan_id": plan["id"],
         "plan_name": plan["name"],
         "plan_code": plan["code"],
@@ -467,7 +467,7 @@ async def subscribe_to_plan(request: SubscribeRequest, current_user: dict = Depe
         "_id": generate_id(),
         "id": generate_id(),
         "subscription_id": subscription_id,
-        "user_id": current_user["id"],
+        "user_id": current_user["user_id"],
         "invoice_number": generate_invoice_number(),
         "amount": amount,
         "currency": plan["currency"],
@@ -483,7 +483,7 @@ async def subscribe_to_plan(request: SubscribeRequest, current_user: dict = Depe
     # Update user role if developer plan
     if plan["plan_type"] == "developer":
         await db.users.update_one(
-            {"id": current_user["id"]},
+            {"id": current_user["user_id"]},
             {"$set": {"role": "developer"}}
         )
     
@@ -501,7 +501,7 @@ async def get_my_subscription(current_user: dict = Depends(get_current_user)):
     db = get_database()
     
     subscription = await db.subscriptions.find_one({
-        "user_id": current_user["id"],
+        "user_id": current_user["user_id"],
         "status": SubscriptionStatus.ACTIVE.value
     })
     
@@ -522,7 +522,7 @@ async def cancel_subscription(current_user: dict = Depends(get_current_user)):
     db = get_database()
     
     subscription = await db.subscriptions.find_one({
-        "user_id": current_user["id"],
+        "user_id": current_user["user_id"],
         "status": SubscriptionStatus.ACTIVE.value
     })
     
@@ -563,7 +563,7 @@ async def track_usage(
     db = get_database()
     
     subscription = await db.subscriptions.find_one({
-        "user_id": current_user["id"],
+        "user_id": current_user["user_id"],
         "status": SubscriptionStatus.ACTIVE.value
     })
     
@@ -597,7 +597,7 @@ async def check_subscription_limit(
     db = get_database()
     
     subscription = await db.subscriptions.find_one({
-        "user_id": current_user["id"],
+        "user_id": current_user["user_id"],
         "status": SubscriptionStatus.ACTIVE.value
     })
     

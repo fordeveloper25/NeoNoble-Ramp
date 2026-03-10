@@ -351,7 +351,7 @@ async def update_token(token_id: str, request: TokenCreateRequest, current_user:
         raise HTTPException(status_code=404, detail="Token not found")
     
     # Check permissions
-    if token["creator_id"] != current_user["id"] and current_user.get("role") != "admin":
+    if token["creator_id"] != current_user["user_id"] and current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to update this token")
     
     # Update fields (symbol cannot be changed)
@@ -411,7 +411,7 @@ async def admin_token_action(
     
     if request.action == "approve":
         update_data["status"] = TokenStatus.APPROVED.value
-        update_data["approved_by"] = current_user["id"]
+        update_data["approved_by"] = current_user["user_id"]
         update_data["approved_at"] = now
         update_data["rejection_reason"] = None
     elif request.action == "reject":
@@ -457,7 +457,7 @@ async def create_listing(request: ListingCreateRequest, current_user: dict = Dep
         raise HTTPException(status_code=404, detail="Token not found")
     
     # Check if user owns the token or is admin
-    if token["creator_id"] != current_user["id"] and current_user.get("role") != "admin":
+    if token["creator_id"] != current_user["user_id"] and current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Only token creator can request listing")
     
     # Check for existing pending listing
@@ -479,7 +479,7 @@ async def create_listing(request: ListingCreateRequest, current_user: dict = Dep
         "id": listing_id,
         "token_id": request.token_id,
         "token_symbol": token["symbol"],
-        "requested_by": current_user["id"],
+        "requested_by": current_user["user_id"],
         "listing_type": request.listing_type.value,
         "listing_fee": listing_fee,
         "listing_fee_paid": False,
@@ -568,7 +568,7 @@ async def admin_listing_action(
     now = utc_now()
     update_data = {
         "updated_at": now,
-        "reviewed_by": current_user["id"],
+        "reviewed_by": current_user["user_id"],
         "reviewed_at": now
     }
     
