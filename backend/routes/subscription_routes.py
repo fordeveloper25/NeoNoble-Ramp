@@ -19,7 +19,7 @@ from enum import Enum
 from database.mongodb import get_database
 from routes.auth import get_current_user
 
-router = APIRouter(prefix="/api/subscriptions", tags=["Subscription Infrastructure"])
+router = APIRouter(prefix="/subscriptions", tags=["Subscription Infrastructure"])
 
 
 # ========================
