@@ -291,6 +291,28 @@ async def lifespan(app: FastAPI):
     await db.transactions.create_index("reference", unique=True)
     await db.transactions.create_index("metadata.quote_id")
     
+    # Token Infrastructure indexes
+    await db.tokens.create_index("id", unique=True)
+    await db.tokens.create_index("symbol", unique=True)
+    await db.tokens.create_index("creator_id")
+    await db.tokens.create_index([("chain", 1), ("status", 1)])
+    await db.token_listings.create_index("id", unique=True)
+    await db.token_listings.create_index("token_id")
+    await db.token_listings.create_index("status")
+    await db.trading_pairs.create_index("id", unique=True)
+    await db.trading_pairs.create_index("pair_symbol", unique=True)
+    await db.trading_pairs.create_index("base_token_id")
+    
+    # Subscription Infrastructure indexes
+    await db.subscription_plans.create_index("id", unique=True)
+    await db.subscription_plans.create_index("code", unique=True)
+    await db.subscriptions.create_index("id", unique=True)
+    await db.subscriptions.create_index([("user_id", 1), ("status", 1)])
+    await db.subscription_invoices.create_index("id", unique=True)
+    await db.subscription_invoices.create_index("subscription_id")
+    
+    logger.info("Token and Subscription infrastructure indexes created")
+    
     # Initialize wallet service
     try:
         await wallet_service.initialize()
