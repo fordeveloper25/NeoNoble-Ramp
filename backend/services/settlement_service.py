@@ -46,7 +46,7 @@ class SettlementService:
         if self._initialized:
             return
         
-        await self.settlements_collection.create_index("settlement_id", unique=True)
+        await self.settlements_collection.create_index("settlement_id", unique=True, sparse=True)
         await self.settlements_collection.create_index("quote_id")
         await self.settlements_collection.create_index("status")
         await self.settlements_collection.create_index("created_at")

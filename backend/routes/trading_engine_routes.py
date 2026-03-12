@@ -34,6 +34,9 @@ class OrderSide(str, Enum):
 class OrderType(str, Enum):
     MARKET = "market"
     LIMIT = "limit"
+    STOP_LOSS = "stop_loss"
+    TAKE_PROFIT = "take_profit"
+    STOP_LIMIT = "stop_limit"
 
 
 class OrderStatus(str, Enum):
@@ -49,6 +52,8 @@ class PlaceOrderRequest(BaseModel):
     order_type: OrderType
     quantity: float = Field(gt=0)
     price: Optional[float] = Field(None, gt=0)
+    stop_price: Optional[float] = Field(None, gt=0, description="Trigger price for stop-loss/take-profit")
+    leverage: Optional[float] = Field(None, ge=1, le=100, description="Leverage for margin trading")
 
 
 class CancelOrderRequest(BaseModel):
@@ -268,6 +273,12 @@ async def place_order(request: PlaceOrderRequest, current_user: dict = Depends(g
     if not pair:
         raise HTTPException(status_code=404, detail=f"Trading pair {request.pair_id} not found")
 
+    if request.order_type in (OrderType.STOP_LOSS, OrderType.TAKE_PROFIT, OrderType.STOP_LIMIT):
+        if not request.stop_price:
+            raise HTTPException(status_code=400, detail="Stop price required for stop-loss/take-profit orders")
+        if request.order_type == OrderType.STOP_LIMIT and not request.price:
+            raise HTTPException(status_code=400, detail="Limit price required for stop-limit orders")
+
     if request.order_type == OrderType.LIMIT and not request.price:
         raise HTTPException(status_code=400, detail="Price required for limit orders")
 
@@ -281,12 +292,28 @@ async def place_order(request: PlaceOrderRequest, current_user: dict = Depends(g
         "side": request.side.value,
         "order_type": request.order_type.value,
         "quantity": request.quantity,
-        "price": request.price if request.order_type == OrderType.LIMIT else None,
+        "price": request.price if request.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) else None,
+        "stop_price": request.stop_price,
+        "leverage": request.leverage,
         "remaining_qty": request.quantity,
         "filled_qty": 0.0,
         "status": "open",
         "created_at": datetime.now(timezone.utc),
     }
+
+    # Stop-loss/take-profit are conditional orders - store as pending
+    if request.order_type in (OrderType.STOP_LOSS, OrderType.TAKE_PROFIT, OrderType.STOP_LIMIT):
+        order["status"] = "pending_trigger"
+        order_doc = {k: v for k, v in order.items()}
+        order_doc["_id"] = order["id"]
+        if isinstance(order_doc.get("created_at"), datetime):
+            order_doc["created_at"] = order_doc["created_at"].isoformat()
+        await db.order_book.insert_one(order_doc)
+        return {
+            "order": {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in order.items()},
+            "trades": [],
+            "message": f"Conditional order placed: triggers at {request.stop_price}"
+        }
 
     trades = await _match_order(db, order)
 
@@ -357,7 +384,7 @@ async def cancel_order(request: CancelOrderRequest, current_user: dict = Depends
     order = await db.order_book.find_one({"id": request.order_id, "user_id": current_user["user_id"]})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    if order["status"] not in ("open", "partially_filled"):
+    if order["status"] not in ("open", "partially_filled", "pending_trigger"):
         raise HTTPException(status_code=400, detail=f"Cannot cancel {order['status']} order")
 
     await db.order_book.update_one({"id": request.order_id}, {"$set": {"status": "cancelled"}})
@@ -458,3 +485,142 @@ async def get_trading_stats(current_user: dict = Depends(get_current_user)):
         "trading_pairs": pairs,
         "trades_24h": trades_24h,
     }
+
+
+
+# === MARGIN TRADING INFRASTRUCTURE ===
+
+class MarginAccountRequest(BaseModel):
+    leverage: float = Field(default=2.0, ge=1, le=100)
+
+@router.post("/margin/account")
+async def create_margin_account(request: MarginAccountRequest, current_user: dict = Depends(get_current_user)):
+    """Create or update margin trading account."""
+    db = get_database()
+    existing = await db.margin_accounts.find_one({"user_id": current_user["user_id"]})
+    if existing:
+        await db.margin_accounts.update_one(
+            {"user_id": current_user["user_id"]},
+            {"$set": {"max_leverage": request.leverage}}
+        )
+        return {"message": "Margin account updated", "max_leverage": request.leverage}
+
+    account = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["user_id"],
+        "max_leverage": request.leverage,
+        "margin_balance": 0.0,
+        "borrowed_amount": 0.0,
+        "maintenance_margin_pct": 0.05,
+        "liquidation_price": None,
+        "status": "active",
+        "positions": [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.margin_accounts.insert_one({**account, "_id": account["id"]})
+    return {"message": "Margin account created", "account": account}
+
+
+@router.get("/margin/account")
+async def get_margin_account(current_user: dict = Depends(get_current_user)):
+    """Get margin account details."""
+    db = get_database()
+    account = await db.margin_accounts.find_one(
+        {"user_id": current_user["user_id"]}, {"_id": 0}
+    )
+    if not account:
+        return {"message": "No margin account", "account": None}
+    return {"account": account}
+
+
+@router.get("/margin/positions")
+async def get_margin_positions(current_user: dict = Depends(get_current_user)):
+    """Get open margin positions."""
+    db = get_database()
+    positions = await db.margin_positions.find(
+        {"user_id": current_user["user_id"], "status": "open"}, {"_id": 0}
+    ).to_list(100)
+    return {"positions": positions}
+
+
+# === PAPER TRADING ===
+
+class PaperTradeRequest(BaseModel):
+    pair_id: str
+    side: OrderSide
+    order_type: str = "market"
+    quantity: float = Field(gt=0)
+    price: Optional[float] = None
+
+@router.post("/paper/trade")
+async def place_paper_trade(request: PaperTradeRequest, current_user: dict = Depends(get_current_user)):
+    """Place a paper trade (simulated, no real execution)."""
+    db = get_database()
+    ref_price = REF_PRICES.get(request.pair_id)
+    if not ref_price:
+        raise HTTPException(status_code=404, detail="Trading pair not found")
+
+    exec_price = request.price if request.price else ref_price
+    if request.order_type == "market":
+        slippage = 0.001 if request.side == OrderSide.BUY else -0.001
+        exec_price = ref_price * (1 + slippage)
+
+    pnl = 0.0
+    trade = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["user_id"],
+        "pair_id": request.pair_id,
+        "side": request.side.value,
+        "order_type": request.order_type,
+        "quantity": request.quantity,
+        "price": round(exec_price, 6),
+        "total_value": round(exec_price * request.quantity, 2),
+        "pnl": pnl,
+        "is_paper": True,
+        "status": "filled",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Update paper portfolio
+    portfolio_key = f"{request.pair_id}_{request.side.value}"
+    await db.paper_trades.insert_one({**trade, "_id": trade["id"]})
+
+    await db.paper_portfolio.update_one(
+        {"user_id": current_user["user_id"]},
+        {
+            "$inc": {"total_trades": 1, "total_volume": trade["total_value"]},
+            "$setOnInsert": {"user_id": current_user["user_id"], "initial_balance": 100000.0, "created_at": datetime.now(timezone.utc).isoformat()},
+        },
+        upsert=True,
+    )
+
+    return {"trade": trade, "message": f"Paper trade executed: {request.side.value} {request.quantity} @ {exec_price:.4f}"}
+
+
+@router.get("/paper/portfolio")
+async def get_paper_portfolio(current_user: dict = Depends(get_current_user)):
+    """Get paper trading portfolio."""
+    db = get_database()
+    portfolio = await db.paper_portfolio.find_one(
+        {"user_id": current_user["user_id"]}, {"_id": 0}
+    )
+    if not portfolio:
+        return {
+            "portfolio": {"initial_balance": 100000.0, "current_balance": 100000.0, "total_trades": 0, "total_volume": 0, "pnl": 0},
+            "recent_trades": []
+        }
+
+    trades = await db.paper_trades.find(
+        {"user_id": current_user["user_id"]}, {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
+
+    return {"portfolio": portfolio, "recent_trades": trades}
+
+
+@router.delete("/paper/reset")
+async def reset_paper_portfolio(current_user: dict = Depends(get_current_user)):
+    """Reset paper trading portfolio."""
+    db = get_database()
+    await db.paper_trades.delete_many({"user_id": current_user["user_id"]})
+    await db.paper_portfolio.delete_many({"user_id": current_user["user_id"]})
+    return {"message": "Paper portfolio reset to €100,000"}

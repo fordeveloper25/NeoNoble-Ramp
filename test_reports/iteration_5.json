@@ -9,7 +9,7 @@
     "integration_issues": [
       {
         "flow": "Direct URL access to /api-docs",
-        "issue": "Navigating directly to https://neno-trading.preview.emergentagent.com/api-docs returns 404 from backend due to ingress routing /api* to backend. Works correctly via client-side navigation from dashboard.",
+        "issue": "Navigating directly to https://trading-settle.preview.emergentagent.com/api-docs returns 404 from backend due to ingress routing /api* to backend. Works correctly via client-side navigation from dashboard.",
         "affected_selectors": [],
         "priority": "LOW - cosmetic issue, workaround exists via dashboard navigation"
       }

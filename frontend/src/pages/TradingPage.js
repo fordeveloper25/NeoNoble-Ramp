@@ -149,6 +149,7 @@ function OrderForm({ pairId, pair, onOrderPlaced }) {
   const [side, setSide] = useState('buy');
   const [orderType, setOrderType] = useState('market');
   const [price, setPrice] = useState('');
+  const [stopPrice, setStopPrice] = useState('');
   const [quantity, setQuantity] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -160,7 +161,8 @@ function OrderForm({ pairId, pair, onOrderPlaced }) {
     setResult(null);
     try {
       const body = { pair_id: pairId, side, order_type: orderType, quantity: parseFloat(quantity) };
-      if (orderType === 'limit' && price) body.price = parseFloat(price);
+      if ((orderType === 'limit' || orderType === 'stop_limit') && price) body.price = parseFloat(price);
+      if (['stop_loss', 'take_profit', 'stop_limit'].includes(orderType) && stopPrice) body.stop_price = parseFloat(stopPrice);
       const res = await fetch(`${BACKEND_URL}/api/trading/orders`, {
         method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body)
       });
@@ -169,6 +171,7 @@ function OrderForm({ pairId, pair, onOrderPlaced }) {
       setResult({ success: true, msg: data.message });
       setQuantity('');
       setPrice('');
+      setStopPrice('');
       if (onOrderPlaced) onOrderPlaced();
     } catch (e) {
       setResult({ success: false, msg: e.message });
@@ -188,17 +191,25 @@ function OrderForm({ pairId, pair, onOrderPlaced }) {
         </button>
       </div>
 
-      <div className="flex gap-1 mb-4">
-        {['market', 'limit'].map(t => (
-          <button key={t} onClick={() => setOrderType(t)}
-            className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${orderType === t ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-800 text-gray-400'}`}>
-            {t.charAt(0).toUpperCase() + t.slice(1)}
+      <div className="flex gap-1 mb-4 flex-wrap">
+        {['market', 'limit', 'stop_loss', 'take_profit'].map(t => (
+          <button key={t} onClick={() => setOrderType(t)} data-testid={`order-type-${t}`}
+            className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors min-w-[60px] ${orderType === t ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-800 text-gray-400'}`}>
+            {t === 'stop_loss' ? 'SL' : t === 'take_profit' ? 'TP' : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
-        {orderType === 'limit' && (
+        {['stop_loss', 'take_profit', 'stop_limit'].includes(orderType) && (
+          <div>
+            <label className="text-gray-400 text-xs mb-1 block">Trigger Price ({pair?.quote || 'EUR'})</label>
+            <input type="number" step="any" value={stopPrice} onChange={(e) => setStopPrice(e.target.value)}
+              placeholder="0.00" data-testid="order-stop-price-input" required
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:border-yellow-500 focus:outline-none" />
+          </div>
+        )}
+        {(orderType === 'limit' || orderType === 'stop_limit') && (
           <div>
             <label className="text-gray-400 text-xs mb-1 block">Prezzo ({pair?.quote || 'EUR'})</label>
             <input type="number" step="any" value={price} onChange={(e) => setPrice(e.target.value)}
@@ -333,8 +344,8 @@ function MyOrders({ pairId, refreshKey }) {
                     }`}>{o.status}</span>
                   </td>
                   <td className="px-3 py-1.5 text-right">
-                    {(o.status === 'open' || o.status === 'partially_filled') && (
-                      <button onClick={() => handleCancel(o.id)}
+                    {(o.status === 'open' || o.status === 'partially_filled' || o.status === 'pending_trigger') && (
+                      <button onClick={() => handleCancel(o.id)} data-testid={`cancel-order-${o.id}`}
                         className="text-red-400 hover:text-red-300 text-xs">Cancel</button>
                     )}
                   </td>
@@ -395,7 +406,7 @@ export default function TradingPage() {
 
   const [pairs, setPairs] = useState([]);
   const [selectedPair, setSelectedPair] = useState(searchParams.get('pair') || 'BTC-EUR');
-  const [interval, setInterval] = useState('1h');
+  const [interval, setChartInterval] = useState('1h');
   const [ticker, setTicker] = useState(null);
   const [loading, setLoading] = useState(true);
   const [orderRefresh, setOrderRefresh] = useState(0);
@@ -475,7 +486,7 @@ export default function TradingPage() {
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
               <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-800">
                 {INTERVALS.map(iv => (
-                  <button key={iv.id} onClick={() => setInterval(iv.id)}
+                  <button key={iv.id} onClick={() => setChartInterval(iv.id)}
                     data-testid={`interval-${iv.id}`}
                     className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${interval === iv.id ? 'bg-purple-500/20 text-purple-400' : 'text-gray-400 hover:text-white'}`}>
                     {iv.label}

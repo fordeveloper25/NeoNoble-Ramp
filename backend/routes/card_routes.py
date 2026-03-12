@@ -99,15 +99,19 @@ async def create_card(request: CreateCardRequest, current_user: dict = Depends(g
         "status": "active" if request.card_type == "virtual" else "pending",
         "issuance_fee": fees["issuance"],
         "monthly_fee": fees.get("monthly", 0),
+        "issuer": "NIUM",
+        "funding_sources": ["fiat", "crypto", "neno"],
         "created_at": datetime.now(timezone.utc),
         "expires_at": datetime.now(timezone.utc) + timedelta(days=1095),
     }
 
     await db.cards.insert_one({**card, "_id": card["id"]})
 
+    # Serialize datetimes for response
+    card_resp = {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in card.items()}
     return {
         "message": f"{'Carta virtuale attivata' if request.card_type == 'virtual' else 'Carta fisica in lavorazione'}",
-        "card": card
+        "card": card_resp
     }
 
 

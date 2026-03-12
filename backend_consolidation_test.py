@@ -4,7 +4,7 @@ NeoNoble Ramp Backend Consolidation Test Suite
 OFF-RAMP BACKEND CONSOLIDATION TESTING + WEBHOOK SERVICE VALIDATION
 
 Test Environment:
-- Backend URL: https://neno-trading.preview.emergentagent.com/api
+- Backend URL: https://trading-settle.preview.emergentagent.com/api
 - NENO Token: Fixed price €10,000 per token
 - Fee: 1.5%
 - Settlement: Instant mode
@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://neno-trading.preview.emergentagent.com/api"
+BACKEND_URL = "https://trading-settle.preview.emergentagent.com/api"
 
 class ConsolidationTester:
     def __init__(self):
