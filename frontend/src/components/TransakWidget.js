@@ -1,593 +1,138 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Transak } from '@transak/transak-sdk';
 import { useAuth } from '../context/AuthContext';
-import { 
-  CreditCard, 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  X,
-  ExternalLink,
-  Loader2,
-  CheckCircle,
-  AlertCircle,
-  RefreshCw,
-  Clock,
-  History,
-  ChevronDown,
-  ChevronUp
-} from 'lucide-react';
-import TransactionTimeline from './TransactionTimeline';
+import { X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const TRANSAK_STAGING = 'https://global-stg.transak.com';
+const TRANSAK_API_KEY = process.env.REACT_APP_TRANSAK_API_KEY || '5911d9ec-46b5-48b0-a4c8-0b67aa60baae';
+const REFERRER = typeof window !== 'undefined' ? window.location.origin : 'https://neonobleramp.com';
 
-// Supported currencies
-const FIAT_CURRENCIES = [
-  { code: 'EUR', name: 'Euro', symbol: '€' },
-  { code: 'USD', name: 'US Dollar', symbol: '$' },
-  { code: 'GBP', name: 'British Pound', symbol: '£' }
-];
+function buildWidgetUrl(mode, email) {
+  const params = new URLSearchParams({
+    apiKey: TRANSAK_API_KEY,
+    productsAvailed: mode,
+    defaultCryptoCurrency: 'NENO',
+    cryptoCurrencyList: 'NENO,BNB,ETH,USDT,USDC,BTC',
+    network: 'bsc',
+    defaultNetwork: 'bsc',
+    networks: 'bsc,ethereum,polygon',
+    defaultFiatCurrency: 'EUR',
+    themeColor: '7c3aed',
+    colorMode: 'DARK',
+    hideMenu: 'true',
+    exchangeScreenTitle: mode === 'BUY' ? 'Acquista $NENO' : 'Vendi $NENO',
+    referrerDomain: REFERRER,
+  });
+  if (email) params.set('email', email);
+  return `${TRANSAK_STAGING}?${params.toString()}`;
+}
 
-const CRYPTO_CURRENCIES = [
-  { code: 'USDT', name: 'Tether USD', network: 'bsc' },
-  { code: 'USDC', name: 'USD Coin', network: 'bsc' },
-  { code: 'BNB', name: 'Binance Coin', network: 'bsc' },
-  { code: 'NENO', name: 'NeoNoble Token', network: 'bsc' }
-];
-
+/**
+ * Official Transak SDK widget for $NENO on/off-ramp.
+ */
 export default function TransakWidget({ isOpen, onClose, initialMode = 'BUY' }) {
   const { user } = useAuth();
-  
-  const [mode, setMode] = useState(initialMode); // BUY or SELL
-  const [fiatCurrency, setFiatCurrency] = useState('EUR');
-  const [cryptoCurrency, setCryptoCurrency] = useState('USDT');
-  const [amount, setAmount] = useState('');
-  const [walletAddress, setWalletAddress] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [widgetUrl, setWidgetUrl] = useState(null);
-  const [showWidget, setShowWidget] = useState(false);
+  const transakRef = useRef(null);
   const [status, setStatus] = useState(null);
-  const [orderId, setOrderId] = useState(null);
-  const [auditSessionId, setAuditSessionId] = useState(null);
-  const [showTimeline, setShowTimeline] = useState(false);
-  const [timelineExpanded, setTimelineExpanded] = useState(false);
+  const [ready, setReady] = useState(false);
 
-  // Create audit session when widget opens
-  const createAuditSession = async () => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/audit/sessions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          user_id: user?.id || 'guest',
-          product_type: mode,
-          metadata: { initial_mode: mode }
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setAuditSessionId(data.session_id);
-        console.log('[AUDIT] Session created:', data.session_id);
-      }
-    } catch (err) {
-      console.error('[AUDIT] Failed to create session:', err);
-    }
-  };
-
-  // Log audit event
-  const logAuditEvent = async (eventType, description = '', metadata = {}) => {
-    if (!auditSessionId) return;
-    
-    try {
-      await fetch(`${BACKEND_URL}/api/audit/events`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          session_id: auditSessionId,
-          event_type: eventType,
-          description,
-          order_id: orderId,
-          metadata
-        })
-      });
-    } catch (err) {
-      console.error('[AUDIT] Failed to log event:', err);
-    }
-  };
-
-  // Close audit session
-  const closeAuditSession = async (finalStatus = 'completed') => {
-    if (!auditSessionId) return;
-    
-    try {
-      await fetch(`${BACKEND_URL}/api/audit/sessions/close`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          session_id: auditSessionId,
-          status: finalStatus,
-          summary: {
-            mode,
-            fiat_currency: fiatCurrency,
-            crypto_currency: cryptoCurrency,
-            amount,
-            order_id: orderId
-          }
-        })
-      });
-    } catch (err) {
-      console.error('[AUDIT] Failed to close session:', err);
-    }
-  };
-
-  // Create audit session when modal opens
-  useEffect(() => {
-    if (isOpen && !auditSessionId) {
-      createAuditSession();
-    }
-  }, [isOpen]);
-
-  // Log mode changes
-  useEffect(() => {
-    if (auditSessionId && mode) {
-      logAuditEvent('mode_selected', `Mode changed to ${mode}`, { mode });
-    }
-  }, [mode, auditSessionId]);
-
-  // Log amount changes (debounced)
-  useEffect(() => {
-    if (!auditSessionId || !amount) return;
-    const timer = setTimeout(() => {
-      logAuditEvent('amount_entered', `Amount set to ${amount}`, { 
-        amount: parseFloat(amount) || 0,
-        currency: mode === 'BUY' ? fiatCurrency : cryptoCurrency 
-      });
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [amount, auditSessionId]);
-
-  // Log currency changes
-  useEffect(() => {
-    if (!auditSessionId) return;
-    logAuditEvent('currency_selected', `Currencies: ${fiatCurrency} / ${cryptoCurrency}`, {
-      fiat_currency: fiatCurrency,
-      crypto_currency: cryptoCurrency
-    });
-  }, [fiatCurrency, cryptoCurrency, auditSessionId]);
-
-  // Log wallet address changes (debounced)
-  useEffect(() => {
-    if (!auditSessionId || !walletAddress || walletAddress.length < 10) return;
-    const timer = setTimeout(() => {
-      logAuditEvent('wallet_entered', `Wallet address entered`, { 
-        wallet_address: walletAddress.substring(0, 10) + '...' 
-      });
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [walletAddress, auditSessionId]);
-
-  // Generate widget URL
-  const generateWidgetUrl = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      setStatus({ type: 'error', message: 'Please enter a valid amount' });
-      return;
-    }
-
-    if (mode === 'BUY' && !walletAddress) {
-      setStatus({ type: 'error', message: 'Please enter your wallet address' });
-      return;
-    }
-
-    setLoading(true);
+  const cleanup = useCallback(() => {
+    try { transakRef.current?.close(); } catch (_) {}
+    transakRef.current = null;
+    setReady(false);
     setStatus(null);
+  }, []);
 
+  useEffect(() => {
+    if (!isOpen) { cleanup(); return; }
+
+    const url = buildWidgetUrl(initialMode, user?.email);
     try {
-      // Create order record first
-      const orderResponse = await fetch(`${BACKEND_URL}/api/transak/orders`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          user_id: user?.id || 'guest',
-          product_type: mode,
-          fiat_currency: fiatCurrency,
-          crypto_currency: cryptoCurrency,
-          fiat_amount: mode === 'BUY' ? parseFloat(amount) : null,
-          crypto_amount: mode === 'SELL' ? parseFloat(amount) : null,
-          wallet_address: walletAddress
-        })
+      transakRef.current = new Transak({
+        widgetUrl: url,
+        referrer: REFERRER,
+        containerId: 'transak-mount',
+        themeColor: '#7c3aed',
       });
 
-      if (!orderResponse.ok) {
-        throw new Error('Failed to create order');
-      }
+      transakRef.current.init();
+      setReady(true);
 
-      const order = await orderResponse.json();
-      setOrderId(order.order_id);
-
-      // Log order creation in audit
-      await logAuditEvent('order_created', `Order created: ${order.order_id}`, {
-        order_id: order.order_id,
-        product_type: mode,
-        fiat_currency: fiatCurrency,
-        crypto_currency: cryptoCurrency,
-        amount: parseFloat(amount)
+      Transak.on(Transak.EVENTS.TRANSAK_ORDER_CREATED, () => {
+        setStatus({ type: 'info', msg: 'Ordine creato, elaborazione in corso...' });
       });
 
-      // Generate widget URL
-      const widgetResponse = await fetch(`${BACKEND_URL}/api/transak/widget-url`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          product_type: mode,
-          fiat_currency: fiatCurrency,
-          crypto_currency: cryptoCurrency,
-          network: 'bsc',
-          wallet_address: walletAddress,
-          email: user?.email,
-          fiat_amount: mode === 'BUY' ? parseFloat(amount) : null,
-          crypto_amount: mode === 'SELL' ? parseFloat(amount) : null,
-          redirect_url: window.location.origin + '/dashboard?transak=complete'
-        })
+      Transak.on(Transak.EVENTS.TRANSAK_ORDER_SUCCESSFUL, () => {
+        setStatus({ type: 'success', msg: 'Transazione completata!' });
+        setTimeout(() => { cleanup(); onClose?.(); }, 2500);
       });
 
-      if (!widgetResponse.ok) {
-        const error = await widgetResponse.json();
-        throw new Error(error.detail || 'Failed to generate widget URL');
-      }
+      Transak.on(Transak.EVENTS.TRANSAK_ORDER_FAILED, () => {
+        setStatus({ type: 'error', msg: 'Transazione fallita. Riprova.' });
+      });
 
-      const data = await widgetResponse.json();
-      setWidgetUrl(data.widget_url);
-      setShowWidget(true);
-      setStatus({ type: 'success', message: 'Widget ready! Opening Transak...' });
-
+      Transak.on(Transak.EVENTS.TRANSAK_WIDGET_CLOSE, () => {
+        cleanup();
+        onClose?.();
+      });
     } catch (err) {
-      console.error('Widget generation error:', err);
-      setStatus({ type: 'error', message: err.message || 'Failed to open widget' });
-    } finally {
-      setLoading(false);
+      console.error('[Transak] init error', err);
+      setStatus({ type: 'error', msg: "Errore nell'inizializzazione del widget." });
     }
-  };
 
-  // Handle iframe messages from Transak
-  const handleTransakMessage = useCallback((event) => {
-    // Verify origin
-    if (!event.origin.includes('transak.com')) return;
-
-    try {
-      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-      
-      if (data.event_id === 'TRANSAK_ORDER_CREATED') {
-        setStatus({ type: 'info', message: 'Order created! Processing...' });
-        
-        // Log to audit
-        logAuditEvent('order_linked', `Transak order created: ${data.data?.id}`, {
-          transak_order_id: data.data?.id,
-          transak_status: data.data?.status
-        });
-        
-        // Link the Transak order ID
-        if (orderId && data.data?.id) {
-          fetch(`${BACKEND_URL}/api/transak/orders/link`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({
-              order_id: orderId,
-              transak_order_id: data.data.id
-            })
-          }).catch(console.error);
-        }
-      }
-      
-      if (data.event_id === 'TRANSAK_ORDER_SUCCESSFUL') {
-        setStatus({ type: 'success', message: 'Transaction completed successfully!' });
-        
-        // Log success and close session
-        logAuditEvent('order_completed', 'Transaction completed successfully', {
-          transak_order_id: data.data?.id,
-          final_status: 'completed'
-        });
-        closeAuditSession('completed');
-        
-        setTimeout(() => {
-          setShowWidget(false);
-          onClose?.();
-        }, 2000);
-      }
-      
-      if (data.event_id === 'TRANSAK_ORDER_FAILED') {
-        setStatus({ type: 'error', message: 'Transaction failed. Please try again.' });
-        
-        // Log failure
-        logAuditEvent('order_failed', 'Transaction failed', {
-          transak_order_id: data.data?.id,
-          error: data.data?.errorMessage || 'Unknown error'
-        });
-        closeAuditSession('failed');
-      }
-      
-      if (data.event_id === 'TRANSAK_WIDGET_CLOSE') {
-        setShowWidget(false);
-        
-        // Log widget close
-        logAuditEvent('widget_closed', 'User closed the widget', {});
-        closeAuditSession('cancelled');
-      }
-
-      // Log KYC events
-      if (data.event_id === 'TRANSAK_KYC_STARTED') {
-        logAuditEvent('kyc_started', 'KYC verification started', {
-          transak_order_id: data.data?.id
-        });
-      }
-
-      if (data.event_id === 'TRANSAK_KYC_COMPLETED') {
-        logAuditEvent('kyc_completed', 'KYC verification completed', {
-          transak_order_id: data.data?.id
-        });
-      }
-
-      // Log payment events
-      if (data.event_id === 'TRANSAK_ORDER_PROCESSING') {
-        logAuditEvent('payment_initiated', 'Payment processing started', {
-          transak_order_id: data.data?.id,
-          status: data.data?.status
-        });
-      }
-
-      // Log any status update
-      if (data.event_id?.startsWith('TRANSAK_') && data.data?.status) {
-        logAuditEvent('status_update', `Status: ${data.data.status}`, {
-          transak_event: data.event_id,
-          transak_status: data.data.status,
-          transak_order_id: data.data?.id
-        });
-      }
-    } catch (e) {
-      // Not a JSON message, ignore
-    }
-  }, [orderId, onClose, auditSessionId]);
-
-  useEffect(() => {
-    window.addEventListener('message', handleTransakMessage);
-    return () => window.removeEventListener('message', handleTransakMessage);
-  }, [handleTransakMessage]);
-
-  // Reset when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setShowWidget(false);
-      setWidgetUrl(null);
-      setStatus(null);
-      setAmount('');
-    }
-  }, [isOpen]);
+    return cleanup;
+  }, [isOpen, initialMode, user, onClose, cleanup]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="relative w-full max-w-[480px] bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden shadow-2xl"
+        data-testid="transak-widget-modal">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-blue-500" />
-            <h2 className="text-lg font-semibold">
-              {mode === 'BUY' ? 'Buy Crypto' : 'Sell Crypto'}
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+          <span className="text-white font-semibold text-sm">
+            {initialMode === 'BUY' ? 'Acquista $NENO' : 'Vendi $NENO'} — Transak
+          </span>
+          <button onClick={() => { cleanup(); onClose?.(); }} data-testid="transak-close-btn"
+            className="p-1.5 hover:bg-gray-800 rounded-lg transition-colors">
+            <X className="w-4 h-4 text-gray-400" />
           </button>
         </div>
 
-        {/* Widget iframe or Form */}
-        {showWidget && widgetUrl ? (
-          <div className="relative">
-            <iframe
-              src={widgetUrl}
-              title="Transak Widget"
-              className="w-full h-[600px] border-0"
-              allow="camera;microphone;payment"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
-            />
-            <button
-              onClick={() => setShowWidget(false)}
-              className="absolute top-2 right-2 p-2 bg-white/90 rounded-full shadow hover:bg-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="p-6 space-y-6">
-            {/* Mode Toggle */}
-            <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
-              <button
-                onClick={() => setMode('BUY')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md font-medium transition-colors ${
-                  mode === 'BUY'
-                    ? 'bg-green-500 text-white'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <ArrowDownRight className="w-4 h-4" />
-                Buy
-              </button>
-              <button
-                onClick={() => setMode('SELL')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md font-medium transition-colors ${
-                  mode === 'SELL'
-                    ? 'bg-orange-500 text-white'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <ArrowUpRight className="w-4 h-4" />
-                Sell
-              </button>
-            </div>
-
-            {/* Amount Input */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {mode === 'BUY' ? 'You Pay' : 'You Sell'}
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <select
-                  value={mode === 'BUY' ? fiatCurrency : cryptoCurrency}
-                  onChange={(e) => mode === 'BUY' ? setFiatCurrency(e.target.value) : setCryptoCurrency(e.target.value)}
-                  className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-                >
-                  {mode === 'BUY' 
-                    ? FIAT_CURRENCIES.map(c => (
-                        <option key={c.code} value={c.code}>{c.code}</option>
-                      ))
-                    : CRYPTO_CURRENCIES.map(c => (
-                        <option key={c.code} value={c.code}>{c.code}</option>
-                      ))
-                  }
-                </select>
-              </div>
-            </div>
-
-            {/* Receive Currency */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {mode === 'BUY' ? 'You Receive' : 'You Receive'}
-              </label>
-              <select
-                value={mode === 'BUY' ? cryptoCurrency : fiatCurrency}
-                onChange={(e) => mode === 'BUY' ? setCryptoCurrency(e.target.value) : setFiatCurrency(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-              >
-                {mode === 'BUY'
-                  ? CRYPTO_CURRENCIES.map(c => (
-                      <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
-                    ))
-                  : FIAT_CURRENCIES.map(c => (
-                      <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
-                    ))
-                }
-              </select>
-            </div>
-
-            {/* Wallet Address (for BUY) */}
-            {mode === 'BUY' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Your BSC Wallet Address
-                </label>
-                <input
-                  type="text"
-                  value={walletAddress}
-                  onChange={(e) => setWalletAddress(e.target.value)}
-                  placeholder="0x..."
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            )}
-
-            {/* Status Messages */}
-            {status && (
-              <div className={`flex items-center gap-2 p-3 rounded-lg ${
-                status.type === 'error' ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                status.type === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-              }`}>
-                {status.type === 'error' && <AlertCircle className="w-5 h-5" />}
-                {status.type === 'success' && <CheckCircle className="w-5 h-5" />}
-                {status.type === 'info' && <RefreshCw className="w-5 h-5 animate-spin" />}
-                <span className="text-sm">{status.message}</span>
-              </div>
-            )}
-
-            {/* Action Button */}
-            <button
-              onClick={generateWidgetUrl}
-              disabled={loading || !amount}
-              data-testid="transak-submit-btn"
-              className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-colors ${
-                mode === 'BUY'
-                  ? 'bg-green-500 hover:bg-green-600 text-white'
-                  : 'bg-orange-500 hover:bg-orange-600 text-white'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                <>
-                  <ExternalLink className="w-5 h-5" />
-                  {mode === 'BUY' ? 'Buy with Transak' : 'Sell with Transak'}
-                </>
-              )}
-            </button>
-
-            {/* Audit Timeline Toggle */}
-            {auditSessionId && (
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <button
-                  onClick={() => setTimelineExpanded(!timelineExpanded)}
-                  data-testid="timeline-toggle-btn"
-                  className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <History className="w-5 h-5 text-purple-500" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Cronologia Transazione
-                    </span>
-                  </div>
-                  {timelineExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                  )}
-                </button>
-                
-                {timelineExpanded && (
-                  <div className="mt-3 max-h-96 overflow-y-auto">
-                    <TransactionTimeline 
-                      sessionId={auditSessionId} 
-                      data-testid="transaction-timeline"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Info */}
-            <p className="text-xs text-center text-gray-500 dark:text-gray-400">
-              Powered by Transak • Secure & Compliant
-            </p>
+        {/* Status bar */}
+        {status && (
+          <div className={`flex items-center gap-2 px-4 py-2 text-xs ${
+            status.type === 'error'   ? 'bg-red-500/10 text-red-400' :
+            status.type === 'success' ? 'bg-green-500/10 text-green-400' :
+            'bg-blue-500/10 text-blue-400'
+          }`}>
+            {status.type === 'success' && <CheckCircle className="w-3.5 h-3.5" />}
+            {status.type === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
+            {status.type === 'info' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {status.msg}
           </div>
         )}
+
+        {/* SDK mount point */}
+        <div id="transak-mount"
+          className="w-full bg-gray-950"
+          style={{ minHeight: 560 }}
+          data-testid="transak-sdk-container"
+        >
+          {!ready && (
+            <div className="flex flex-col items-center justify-center h-[560px] gap-3">
+              <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+              <span className="text-gray-400 text-sm">Caricamento Transak...</span>
+            </div>
+          )}
+        </div>
+
+        <div className="px-4 py-2 border-t border-gray-800 text-center">
+          <span className="text-gray-500 text-[10px]">
+            Powered by Transak — Sicuro & Regolamentato
+          </span>
+        </div>
       </div>
     </div>
   );

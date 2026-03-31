@@ -1,6 +1,19 @@
 # NeoNoble Ramp - Changelog
 
-## [5.0.0] - 2026-03-12 - Financial Infrastructure Activation (Phase 5)
+## [5.1.0] - 2026-03-31 - Transak $NENO On/Off-Ramp Widget
+
+### Changed
+- **TransakWidget** rewritten with official `@transak/transak-sdk` v4.0.2
+  - Uses real Transak SDK iframe (replaces custom mock widget)
+  - Pre-configured for $NENO on BSC with EUR fiat default
+  - Supports BUY and SELL modes
+  - Transak event listeners: order created, successful, failed, widget close
+  - Dark theme matching NeoNoble brand (`#7c3aed`)
+- Dashboard "$NENO On/Off-Ramp" card with Acquista/Vendi buttons (Italian)
+- Installed `@transak/transak-sdk@4.0.2`, pinned `query-string@7.1.3` for CJS compat
+
+### Note
+- Using Transak **staging** API key — iframe content loads fully only with production key + whitelisted domain
 
 ### Added
 - **Multi-Chain Wallet Service** (`multichain_service.py`) - Real on-chain balance sync for ETH/BSC/Polygon via public RPCs
