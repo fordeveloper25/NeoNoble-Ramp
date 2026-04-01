@@ -23,6 +23,7 @@ import MarketData from "./pages/MarketData";
 import CardManagement from "./pages/CardManagement";
 import TradingPage from "./pages/TradingPage";
 import WalletPage from "./pages/WalletPage";
+import NenoExchange from "./pages/NenoExchange";
 import ApiDocs from "./pages/ApiDocs";
 import { usePageTracking } from "./hooks/usePageTracking";
 
@@ -214,6 +215,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <WalletPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* NENO Exchange */}
+      <Route
+        path="/neno-exchange"
+        element={
+          <ProtectedRoute>
+            <NenoExchange />
           </ProtectedRoute>
         }
       />

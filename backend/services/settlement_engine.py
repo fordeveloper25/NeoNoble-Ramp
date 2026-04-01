@@ -33,7 +33,7 @@ CONVERSION_RATES = {
     "DOT": {"EUR": 4.20, "USD": 4.56, "USDT": 4.56},
     "LINK": {"EUR": 12.50, "USD": 13.58, "USDT": 13.58},
     "AVAX": {"EUR": 18.50, "USD": 20.1, "USDT": 20.1},
-    "NENO": {"EUR": 0.50, "USD": 0.54, "USDT": 0.54},
+    "NENO": {"EUR": 10000.0, "USD": 10870.0, "USDT": 10870.0},
     "EUR": {"USD": 1.087, "USDT": 1.087, "EUR": 1.0},
     "USD": {"EUR": 0.92, "USDT": 1.0, "USD": 1.0},
     "USDT": {"EUR": 0.92, "USD": 1.0, "USDT": 1.0},

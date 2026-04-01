@@ -167,6 +167,9 @@ from routes.multichain_routes import router as multichain_router
 # Import Banking Rails routes
 from routes.banking_routes import router as banking_router
 
+# Import NENO Exchange routes
+from routes.neno_exchange_routes import router as neno_exchange_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
@@ -596,6 +599,7 @@ api_router.include_router(public_api_router)
 api_router.include_router(wallet_router)
 api_router.include_router(multichain_router)
 api_router.include_router(banking_router)
+api_router.include_router(neno_exchange_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)

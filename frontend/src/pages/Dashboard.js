@@ -9,7 +9,7 @@ import { useWeb3 } from '../context/Web3Context';
 import {
   Coins, ArrowUpRight, ArrowDownRight, RefreshCw, History,
   Wallet, Building, LogOut, ChevronRight, Loader2, CheckCircle,
-  AlertCircle, TrendingUp, CreditCard, BarChart3, Shield
+  AlertCircle, TrendingUp, CreditCard, BarChart3, Shield, ArrowRightLeft
 } from 'lucide-react';
 
 const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
@@ -228,7 +228,7 @@ export default function Dashboard() {
                 </button>
               </div>
               
-              {/* Transak On/Off-Ramp — $NENO Focus */}
+              {/* NeoNoble Exchange — $NENO On/Off-Ramp interno */}
               <div className="mb-6 p-4 bg-gradient-to-r from-violet-600/20 to-purple-600/20 border border-violet-500/30 rounded-xl" data-testid="neno-onofframp-card">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -236,27 +236,16 @@ export default function Dashboard() {
                       $N
                     </div>
                     <div>
-                      <h3 className="text-white font-medium">$NENO On/Off-Ramp</h3>
-                      <p className="text-gray-400 text-xs">Acquista o vendi $NENO con carta o bonifico via Transak</p>
+                      <h3 className="text-white font-medium">$NENO Exchange</h3>
+                      <p className="text-gray-400 text-xs">Acquista, vendi e converti $NENO — On/Off-Ramp interno</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => { setTransakMode('BUY'); setTransakOpen(true); }}
-                      data-testid="transak-buy-btn"
-                      className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-1"
-                    >
-                      <ArrowDownRight className="h-4 w-4" />
-                      Acquista
-                    </button>
-                    <button
-                      onClick={() => { setTransakMode('SELL'); setTransakOpen(true); }}
-                      data-testid="transak-sell-btn"
-                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-1"
-                    >
-                      <ArrowUpRight className="h-4 w-4" />
-                      Vendi
-                    </button>
+                    <Link to="/neno-exchange" data-testid="neno-exchange-link"
+                      className="px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-1">
+                      <ArrowRightLeft className="h-4 w-4" />
+                      Apri Exchange
+                    </Link>
                   </div>
                 </div>
               </div>
