@@ -21,19 +21,20 @@ Build "NeoNoble Ramp", a global enterprise-grade fintech infrastructure platform
 - i18n: 4 languages (IT, EN, DE, FR) via React Context
 - Rate Limiting: In-memory sliding window middleware
 - Microservices: Domain-based modular architecture (7 domains ready for split)
+- Real-time: WebSocket portfolio tracker with live price feeds
 
-## Completed Features
+## Completed Features — ALL ROADMAP ITEMS DONE
 
-### Phase 1-4
+### Phase 1-4: Core Platform
 - User Auth, Trading Engine, Settlement, Blockchain Monitoring
 
-### Phase 5
+### Phase 5: Financial Infrastructure
 - Multi-chain Wallet Sync (ETH, BSC, Polygon)
 - Virtual IBAN / SEPA Banking Rails (NIUM real + simulated fallback)
 - Physical Card Issuing & Tracking (NIUM live)
 - Internal NENO Exchange (dynamic pricing)
 
-### Phase 6
+### Phase 6: Advanced Trading & Compliance
 - Full Margin Trading PRO with candlestick charts + 10 indicators
 - Unified Wallet (internal + on-chain)
 - Multi-chain Token Discovery
@@ -48,31 +49,30 @@ Build "NeoNoble Ramp", a global enterprise-grade fintech infrastructure platform
 - Real NIUM IBAN/SEPA integration with fallback
 - AI-powered KYC document verification (GPT-4o OCR)
 
-### Phase 7 (Current Session - ROADMAP Completion)
+### Phase 7: Infrastructure & Tooling
 - Real-time WebSocket NENO Order Book
-- API Rate Limiting & Throttling (sliding window, per-route limits)
-- Admin Audit Log Viewer (browse, filter, export CSV)
-- Automated NIUM Customer Onboarding (with simulated fallback)
+- API Rate Limiting & Throttling
+- Admin Audit Log Viewer
+- Automated NIUM Customer Onboarding
 - Export Portfolio/Trade/Margin data as CSV
-- Full i18n context with translations for all UI text (IT/EN/DE/FR)
-- Mobile-responsive CSS optimizations
-- Microservices Architecture Plan (7 domain groups, migration roadmap)
-- Service Registry for modular initialization
+- Full i18n context with translations
+- Mobile-responsive CSS
+- Microservices Architecture Plan
+
+### Phase 8: Portfolio Tracker + Real NIUM (Current)
+- Real-time Portfolio Tracker with WebSocket live price feeds
+- NIUM Onboarding rewritten: ALL 4 KYC modes (E_KYC, MANUAL_KYC, E_DOC_VERIFY, SCREENING_KYC)
+- Zero simulation: real NIUM API errors with troubleshooting
+- Full NIUM compliance flow: create, status, upload documents, respond RFI, update
+
+## Key API Endpoints
+- `WS /api/ws/portfolio/{token}` — Real-time portfolio with live prices
+- `WS /api/ws/orderbook/neno` — NENO order book streaming
+- `GET /api/nium-onboarding/available-methods` — All NIUM KYC modes
+- `POST /api/nium-onboarding/create-customer` — Real NIUM customer creation
+- `GET /api/nium-onboarding/compliance-status` — Real-time compliance check
+- `POST /api/nium-onboarding/upload-document` — KYC document upload to NIUM
+- `GET /api/export/trades/csv` — Trade history CSV export
 
 ## Key Collections
-users, wallets, orders, trades, trading_engine_pairs, margin_accounts, margin_positions, neno_transactions, cards, user_wallets, onchain_wallets, virtual_ibans, banking_transactions, kyc_profiles, kyc_tx_log, aml_alerts, advanced_orders, totp_secrets, notifications
-
-## API Endpoints (New in Phase 7)
-- `GET /api/admin/audit/stats` — Platform audit statistics
-- `GET /api/admin/audit/logs` — Paginated audit log viewer
-- `GET /api/admin/audit/export/csv` — CSV export of audit data
-- `GET /api/export/trades/csv` — User trade history CSV
-- `GET /api/export/portfolio/csv` — User portfolio CSV
-- `GET /api/export/margin/csv` — User margin positions CSV
-- `POST /api/nium-onboarding/create-customer` — Auto NIUM customer creation
-- `GET /api/nium-onboarding/status` — Onboarding status
-- `GET /api/monitoring/architecture` — Microservices plan
-- `WS /api/ws/orderbook/neno` — Real-time NENO order book
-
-## All Completed — No Remaining Backlog
-All P0-P3 features from the original ROADMAP have been implemented and tested.
+users, wallets, orders, trades, trading_engine_pairs, margin_accounts, margin_positions, neno_transactions, cards, user_wallets, onchain_wallets, virtual_ibans, banking_transactions, kyc_profiles, kyc_tx_log, aml_alerts, advanced_orders, totp_secrets, notifications, nium_api_logs, nium_customers
