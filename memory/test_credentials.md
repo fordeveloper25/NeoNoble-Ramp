@@ -9,6 +9,8 @@
 - testchart@example.com / Test1234!
 
 ## NIUM
-- API Key: (configured in backend/.env as NIUM_API_KEY)
-- Client Hash ID: 24dba820-d8da-4ce6-b72f-d07f98ffa2fd
-- Base URL: https://api.nium.com
+- API Key: (in backend/.env as NIUM_API_KEY)
+- Client Hash: 24dba820-d8da-4ce6-b72f-d07f98ffa2fd
+- Working URL: https://gateway.nium.com (auto-discovered)
+- Auth Method: x-api-key header (auto-discovered)
+- Status: Auth OK, customer creation needs templateId in NIUM Portal
