@@ -15,6 +15,10 @@ const LANGUAGES = [
   { code: 'de', label: 'Deutsch', flag: 'DE' },
   { code: 'fr', label: 'Francais', flag: 'FR' },
   { code: 'es', label: 'Espanol', flag: 'ES' },
+  { code: 'pt', label: 'Portugues', flag: 'PT' },
+  { code: 'ja', label: 'Nihongo', flag: 'JA' },
+  { code: 'zh', label: 'Zhongwen', flag: 'ZH' },
+  { code: 'ar', label: 'Al-Arabiyya', flag: 'AR' },
 ];
 
 export default function SettingsPage() {

@@ -1,108 +1,138 @@
 """
-Service Registry — Microservices-ready modular service initialization.
+NeoNoble Ramp — Service Registry & Domain Architecture.
 
-Organizes all service initialization into domain groups:
-- Core: Auth, API Keys, Pricing
-- Exchange: Trading Engine, NENO Exchange, Advanced Orders
-- Wallet: Wallet, Multi-chain, Banking
-- Compliance: KYC, AML, Audit
-- Infrastructure: Cards, Notifications, Email, TOTP
+Maps the monolith's logical microservice domains to their routes and services.
+This registry enables future extraction into independent services.
 
-Each domain can be extracted into its own microservice later.
+Domains:
+  1. EXCHANGE    — NENO Exchange, Trading Engine, Order Book
+  2. WALLET      — Multi-chain Wallet, Balances, Deposits
+  3. BANKING     — IBAN/SEPA, Card Issuing (NIUM), Off-Ramp
+  4. COMPLIANCE  — KYC/AML, PEP Screening, Audit, Export
+  5. ANALYTICS   — Portfolio, Monte Carlo VaR, Market Data
+  6. GATEWAY     — Auth, Public API, Dev Portal, Webhooks
+  7. NOTIFICATION — Email, SMS, Push, SSE
+  8. SCHEDULER   — Background jobs, DCA bot, Price alerts
 """
 
-import logging
-from motor.motor_asyncio import AsyncIOMotorDatabase
-
-logger = logging.getLogger(__name__)
-
-
-class ServiceRegistry:
-    """Central registry for all platform services."""
-
-    def __init__(self, db: AsyncIOMotorDatabase):
-        self.db = db
-        self._services = {}
-
-    def register(self, name: str, service):
-        self._services[name] = service
-
-    def get(self, name: str):
-        return self._services.get(name)
-
-    async def initialize_all(self):
-        """Initialize all registered services."""
-        for name, svc in self._services.items():
-            if hasattr(svc, 'initialize'):
-                try:
-                    await svc.initialize()
-                    logger.info(f"[Registry] {name} initialized")
-                except Exception as e:
-                    logger.warning(f"[Registry] {name} initialization failed: {e}")
-
-    def list_services(self) -> dict:
-        """List all registered services and their status."""
-        return {
-            name: {
-                "type": type(svc).__name__,
-                "initialized": getattr(svc, '_initialized', True),
-            }
-            for name, svc in self._services.items()
-        }
-
-
-# Domain groups for microservices planning
-DOMAIN_GROUPS = {
-    "core": {
-        "description": "Authentication, API Keys, Pricing",
-        "routes": ["auth", "dev_portal", "password"],
-        "services": ["AuthService", "PlatformApiKeyService", "PricingService"],
-    },
+DOMAIN_REGISTRY = {
     "exchange": {
-        "description": "Trading Engine, NENO Exchange, Advanced Orders, Market Data",
-        "routes": ["trading_engine", "neno_exchange", "advanced_orders", "market_data", "price_history"],
-        "services": ["ConnectorManager", "DEXService", "BatchExecutor"],
+        "description": "NENO Exchange, Trading Engine, Order Book, DCA Bot",
+        "routes": [
+            "neno_exchange_routes",
+            "exchange_routes",
+            "trading_engine_routes",
+            "advanced_orders_routes",
+            "dca_routes",
+            "dex_routes",
+        ],
+        "services": [
+            "neno_price_history",
+            "dex/dex_service",
+            "dex/batch_executor",
+            "exchanges/connector_manager",
+            "exchanges/binance_connector",
+            "exchanges/kraken_connector",
+            "exchanges/coinbase_connector",
+        ],
+        "db_collections": [
+            "neno_transactions", "trades", "orders", "order_book",
+            "custom_tokens", "dca_plans", "dca_executions",
+        ],
     },
     "wallet": {
-        "description": "Wallet, Multi-chain Sync, Banking Rails",
-        "routes": ["wallet", "multichain", "banking"],
-        "services": ["WalletService", "BlockchainListener", "NiumBankingService"],
+        "description": "Multi-chain Wallet, Balances, Token Discovery",
+        "routes": ["wallet_routes", "multichain_routes", "token_routes"],
+        "services": ["multichain_service", "blockchain_listener"],
+        "db_collections": ["wallets", "wallet_transactions", "tokens"],
+    },
+    "banking": {
+        "description": "IBAN/SEPA Banking, Card Issuing, NIUM Integration",
+        "routes": [
+            "banking_routes", "card_routes",
+            "nium_onboarding_routes", "stripe_payout_routes",
+            "ramp_api", "user_ramp", "transak_routes",
+        ],
+        "services": ["nium_service", "nium_banking_service"],
+        "db_collections": [
+            "banking_transactions", "cards", "ibans",
+            "nium_customers", "stripe_payouts",
+        ],
     },
     "compliance": {
-        "description": "KYC/AML, Audit, Monitoring",
-        "routes": ["kyc", "audit", "admin_audit", "monitoring"],
-        "services": ["TransactionAuditService", "AuditLogger"],
+        "description": "KYC/AML Tiers, PEP Screening, Sanctions, Audit, Export",
+        "routes": [
+            "kyc_routes", "pep_routes", "audit_routes",
+            "admin_audit_routes", "export_routes",
+        ],
+        "services": [
+            "kyc_verification_service", "pep_screening_service",
+            "audit_service", "audit_logger",
+        ],
+        "db_collections": [
+            "kyc_submissions", "kyc_tiers", "pep_screening_log",
+            "pep_watchlist", "audit_events", "compliance_reports",
+        ],
     },
-    "infrastructure": {
-        "description": "Cards, Notifications, Email, TOTP, Subscriptions, Tokens",
-        "routes": ["card", "notification", "totp", "subscription", "token"],
-        "services": ["EmailService", "NiumService"],
-    },
-    "liquidity": {
-        "description": "Treasury, Exposure, Routing, Hedging, Reconciliation",
-        "routes": ["liquidity", "por_api", "stripe_payout", "dex"],
-        "services": ["TreasuryService", "ExposureService", "HedgingService"],
+    "analytics": {
+        "description": "Portfolio Analytics, Monte Carlo VaR, Market Data, Price History",
+        "routes": [
+            "analytics_routes", "advanced_analytics_routes",
+            "montecarlo_routes", "market_data_routes",
+            "price_history_routes",
+        ],
+        "services": ["neno_price_history"],
+        "db_collections": ["price_history", "portfolio_snapshots"],
     },
     "gateway": {
-        "description": "API Gateway, Rate Limiting, WebSocket, Public API",
-        "routes": ["websocket", "public_api", "export", "nium_onboarding"],
-        "services": ["RateLimitMiddleware"],
+        "description": "Auth, Public API, Dev Portal, Webhooks, API Keys",
+        "routes": [
+            "auth", "password_routes", "totp_routes",
+            "dev_portal", "public_api_routes",
+            "webhook_routes", "webhooks",
+        ],
+        "services": ["auth_service", "api_key_service"],
+        "db_collections": ["users", "api_keys", "webhook_subscriptions", "webhook_events"],
+    },
+    "notification": {
+        "description": "Email, SMS, Push, SSE Notifications",
+        "routes": ["notification_routes", "alert_routes"],
+        "services": ["notification_service", "notification_dispatch", "email_service"],
+        "db_collections": ["notifications", "price_alerts"],
+    },
+    "scheduler": {
+        "description": "Background Jobs, DCA Execution, Price Monitoring",
+        "routes": [],
+        "services": ["background_scheduler"],
+        "db_collections": [],
+    },
+    "infrastructure": {
+        "description": "PoR, Liquidity, Monitoring, Migration, Subscriptions, Referrals",
+        "routes": [
+            "por_api", "liquidity_routes", "monitoring",
+            "migration_control", "subscription_routes",
+            "referral_routes", "websocket_routes",
+        ],
+        "services": ["por_engine", "liquidity/*"],
+        "db_collections": [
+            "referral_codes", "referral_links", "referral_bonus_log",
+            "subscriptions",
+        ],
     },
 }
 
 
-def get_microservice_plan() -> dict:
-    """Returns the microservices decomposition plan."""
-    return {
-        "current_state": "monolith",
-        "target_state": "microservices",
-        "domains": DOMAIN_GROUPS,
-        "migration_steps": [
-            "1. Extract Compliance domain (KYC/AML) - lowest coupling",
-            "2. Extract Infrastructure domain (Cards/Notifications) - independent services",
-            "3. Extract Wallet domain (Multi-chain/Banking) - needs Exchange events",
-            "4. Extract Exchange domain (Trading/Orders) - core business logic",
-            "5. Extract Core domain (Auth) - shared dependency, extract last",
-            "6. Add API Gateway for routing and rate limiting",
-        ],
-    }
+def get_domain_for_route(route_name: str) -> str:
+    """Find which domain a route belongs to."""
+    for domain, config in DOMAIN_REGISTRY.items():
+        if route_name in config["routes"]:
+            return domain
+    return "unknown"
+
+
+def get_all_collections() -> list:
+    """Get all MongoDB collections across all domains."""
+    collections = set()
+    for config in DOMAIN_REGISTRY.values():
+        collections.update(config["db_collections"])
+    return sorted(collections)

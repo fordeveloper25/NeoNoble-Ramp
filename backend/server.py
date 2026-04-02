@@ -200,6 +200,12 @@ from routes.referral_routes import router as referral_router
 # Import Advanced Analytics routes
 from routes.advanced_analytics_routes import router as advanced_analytics_router
 
+# Import Monte Carlo VaR routes
+from routes.montecarlo_routes import router as montecarlo_router
+
+# Import PEP Screening routes
+from routes.pep_routes import router as pep_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
@@ -714,6 +720,8 @@ api_router.include_router(alert_router)
 api_router.include_router(dca_router)
 api_router.include_router(referral_router)
 api_router.include_router(advanced_analytics_router)
+api_router.include_router(montecarlo_router)
+api_router.include_router(pep_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
