@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building, ArrowRight, Clock, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building, ArrowRight, Clock, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
@@ -14,6 +14,7 @@ export default function NenoExchange() {
   const [nenoAmount, setNenoAmount] = useState('1');
   const [quote, setQuote] = useState(null);
   const [marketInfo, setMarketInfo] = useState(null);
+  const [priceData, setPriceData] = useState(null);
   const [txs, setTxs] = useState([]);
   const [balances, setBalances] = useState({});
   const [cards, setCards] = useState([]);
@@ -29,15 +30,17 @@ export default function NenoExchange() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [mRes, tRes, bRes, cRes, iRes] = await Promise.all([
+      const [mRes, pRes, tRes, bRes, cRes, iRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/neno-exchange/market`),
+        fetch(`${BACKEND_URL}/api/neno-exchange/price`),
         fetch(`${BACKEND_URL}/api/neno-exchange/transactions`, { headers: headers() }),
         fetch(`${BACKEND_URL}/api/wallet/balances`, { headers: headers() }),
         fetch(`${BACKEND_URL}/api/cards/my-cards`, { headers: headers() }),
         fetch(`${BACKEND_URL}/api/banking/iban`, { headers: headers() }),
       ]);
-      const [mData, tData, bData, cData, iData] = await Promise.all([mRes.json(), tRes.json(), bRes.json(), cRes.json(), iRes.json()]);
+      const [mData, pData, tData, bData, cData, iData] = await Promise.all([mRes.json(), pRes.json(), tRes.json(), bRes.json(), cRes.json(), iRes.json()]);
       setMarketInfo(mData);
+      setPriceData(pData);
       setTxs(tData.transactions || []);
       const bMap = {};
       (bData.wallets || []).forEach(w => { bMap[w.asset] = w.balance; });
@@ -122,8 +125,14 @@ export default function NenoExchange() {
           <div className="text-right">
             <div className="text-gray-400 text-xs">Prezzo $NENO</div>
             <div className="text-white font-bold text-xl" data-testid="neno-price">
-              {(marketInfo?.neno_eur_price || 10000).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+              {(priceData?.neno_eur_price || marketInfo?.neno_eur_price || 10000).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
             </div>
+            {priceData && priceData.shift_pct !== 0 && (
+              <div className={`flex items-center justify-end gap-1 text-xs ${priceData.shift_pct > 0 ? 'text-emerald-400' : 'text-red-400'}`} data-testid="neno-shift">
+                {priceData.shift_pct > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                {priceData.shift_pct > 0 ? '+' : ''}{priceData.shift_pct}% vs base
+              </div>
+            )}
           </div>
         </div>
       </div>

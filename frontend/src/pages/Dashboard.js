@@ -400,6 +400,21 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </Link>
+                <Link
+                  to="/kyc"
+                  data-testid="kyc-link"
+                  className="p-4 bg-gradient-to-r from-teal-600/20 to-emerald-600/20 border border-teal-500/30 rounded-xl hover:border-teal-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-teal-500/20 rounded-lg flex items-center justify-center">
+                      <Shield className="h-5 w-5 text-teal-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-teal-400">KYC / AML</h3>
+                      <p className="text-gray-400 text-xs">Verifica identita e compliance</p>
+                    </div>
+                  </div>
+                </Link>
               </div>
 
               {/* Error/Success Messages */}

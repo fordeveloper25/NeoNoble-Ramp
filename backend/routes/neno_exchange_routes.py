@@ -13,7 +13,7 @@ Supports:
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 from database.mongodb import get_database
@@ -21,8 +21,10 @@ from routes.auth import get_current_user
 
 router = APIRouter(prefix="/neno-exchange", tags=["NENO Exchange"])
 
-# ── Fixed NENO price ──
-NENO_EUR_PRICE = 10_000.0
+# ── Base NENO price — now dynamically adjusted based on order book pressure ──
+NENO_BASE_PRICE = 10_000.0
+NENO_MAX_DEVIATION = 0.05  # Max 5% deviation from base
+PRICE_IMPACT_FACTOR = 0.0001  # Price impact per NENO traded
 
 # ── Market reference prices (EUR) — synced with settlement engine ──
 MARKET_PRICES_EUR = {
@@ -44,12 +46,60 @@ PLATFORM_FEE = 0.003  # 0.3%
 SUPPORTED_ASSETS = list(MARKET_PRICES_EUR.keys())
 
 
-def _neno_rate(asset: str) -> float:
-    """How many units of `asset` equal 1 NENO."""
+async def _get_dynamic_neno_price() -> dict:
+    """Calculate dynamic NENO price based on recent order book pressure."""
+    db = get_database()
+    now = datetime.now(timezone.utc)
+    window = now - timedelta(hours=24)
+
+    # Aggregate buy vs sell volume in last 24h
+    pipeline = [
+        {"$match": {"created_at": {"$gte": window}}},
+        {"$group": {
+            "_id": "$type",
+            "total_neno": {"$sum": "$neno_amount"},
+            "count": {"$sum": 1},
+        }},
+    ]
+    agg = await db.neno_transactions.aggregate(pipeline).to_list(10)
+    buy_vol = 0
+    sell_vol = 0
+    for row in agg:
+        if row["_id"] in ("buy_neno",):
+            buy_vol = row["total_neno"]
+        elif row["_id"] in ("sell_neno", "offramp_card", "offramp_bank"):
+            sell_vol += row["total_neno"]
+
+    # Net pressure: positive = more buying = price goes up
+    net_pressure = buy_vol - sell_vol
+    price_shift = net_pressure * PRICE_IMPACT_FACTOR
+    # Clamp deviation
+    max_shift = NENO_BASE_PRICE * NENO_MAX_DEVIATION
+    price_shift = max(-max_shift, min(max_shift, price_shift))
+
+    dynamic_price = round(NENO_BASE_PRICE + price_shift, 2)
+    return {
+        "price": dynamic_price,
+        "base_price": NENO_BASE_PRICE,
+        "shift": round(price_shift, 2),
+        "shift_pct": round((price_shift / NENO_BASE_PRICE) * 100, 3),
+        "buy_volume_24h": round(buy_vol, 4),
+        "sell_volume_24h": round(sell_vol, 4),
+        "net_pressure": round(net_pressure, 4),
+    }
+
+
+def _neno_rate_with_price(asset: str, neno_price: float) -> float:
+    """How many units of `asset` equal 1 NENO at given price."""
     price_eur = MARKET_PRICES_EUR.get(asset.upper())
     if price_eur is None or price_eur <= 0:
         raise ValueError(f"Asset non supportato: {asset}")
-    return NENO_EUR_PRICE / price_eur
+    return neno_price / price_eur
+
+
+def _neno_rate(asset: str) -> float:
+    """Legacy rate using base price (for sync compatibility)."""
+    return _neno_rate_with_price(asset, NENO_BASE_PRICE)
 
 
 class BuyNenoRequest(BaseModel):
@@ -96,6 +146,25 @@ async def _log_tx(db, tx: dict):
     await db.neno_transactions.insert_one({**tx, "_id": tx["id"]})
 
 
+# ── Dynamic Price endpoint ──
+
+@router.get("/price")
+async def get_neno_price():
+    """Get current dynamic NENO price with market pressure data."""
+    pricing = await _get_dynamic_neno_price()
+    return {
+        "neno_eur_price": pricing["price"],
+        "base_price": pricing["base_price"],
+        "price_shift": pricing["shift"],
+        "shift_pct": pricing["shift_pct"],
+        "buy_volume_24h": pricing["buy_volume_24h"],
+        "sell_volume_24h": pricing["sell_volume_24h"],
+        "net_pressure": pricing["net_pressure"],
+        "pricing_model": "dynamic_orderbook",
+        "max_deviation": f"{NENO_MAX_DEVIATION * 100}%",
+    }
+
+
 # ── Quote ──
 
 @router.get("/quote")
@@ -104,12 +173,14 @@ async def get_quote(
     asset: str = "EUR",
     neno_amount: float = 1.0,
 ):
-    """Get a live quote for buying or selling NENO."""
+    """Get a live quote for buying or selling NENO with dynamic pricing."""
     asset = asset.upper()
     if asset not in MARKET_PRICES_EUR:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
-    rate = _neno_rate(asset)
+    pricing = await _get_dynamic_neno_price()
+    neno_eur_price = pricing["price"]
+    rate = _neno_rate_with_price(asset, neno_eur_price)
     gross = round(neno_amount * rate, 8)
     fee = round(gross * PLATFORM_FEE, 8)
 
@@ -120,7 +191,9 @@ async def get_quote(
             "neno_amount": neno_amount,
             "pay_asset": asset,
             "rate": round(rate, 8),
-            "neno_eur_price": NENO_EUR_PRICE,
+            "neno_eur_price": neno_eur_price,
+            "base_price": NENO_BASE_PRICE,
+            "price_shift_pct": pricing["shift_pct"],
             "gross_cost": gross,
             "fee": fee,
             "fee_percent": PLATFORM_FEE * 100,
@@ -134,7 +207,9 @@ async def get_quote(
             "neno_amount": neno_amount,
             "receive_asset": asset,
             "rate": round(rate, 8),
-            "neno_eur_price": NENO_EUR_PRICE,
+            "neno_eur_price": neno_eur_price,
+            "base_price": NENO_BASE_PRICE,
+            "price_shift_pct": pricing["shift_pct"],
             "gross_value": gross,
             "fee": fee,
             "fee_percent": PLATFORM_FEE * 100,
@@ -155,7 +230,9 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
     if asset not in MARKET_PRICES_EUR:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
-    rate = _neno_rate(asset)
+    pricing = await _get_dynamic_neno_price()
+    neno_eur_price = pricing["price"]
+    rate = _neno_rate_with_price(asset, neno_eur_price)
     gross_cost = round(req.neno_amount * rate, 8)
     fee = round(gross_cost * PLATFORM_FEE, 8)
     total_cost = round(gross_cost + fee, 8)
@@ -179,7 +256,7 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
         "pay_asset": asset,
         "pay_amount": total_cost,
         "rate": rate,
-        "neno_eur_price": NENO_EUR_PRICE,
+        "neno_eur_price": neno_eur_price,
         "fee": fee,
         "fee_asset": asset,
         "status": "completed",
@@ -217,7 +294,9 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
             detail=f"Saldo NENO insufficiente: {neno_balance:.8g} disponibile",
         )
 
-    rate = _neno_rate(asset)
+    pricing = await _get_dynamic_neno_price()
+    neno_eur_price = pricing["price"]
+    rate = _neno_rate_with_price(asset, neno_eur_price)
     gross = round(req.neno_amount * rate, 8)
     fee = round(gross * PLATFORM_FEE, 8)
     net = round(gross - fee, 8)
@@ -234,7 +313,7 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         "receive_asset": asset,
         "receive_amount": net,
         "rate": rate,
-        "neno_eur_price": NENO_EUR_PRICE,
+        "neno_eur_price": neno_eur_price,
         "fee": fee,
         "fee_asset": asset,
         "status": "completed",
@@ -265,7 +344,9 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     if neno_balance < req.neno_amount:
         raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
 
-    eur_gross = round(req.neno_amount * NENO_EUR_PRICE, 2)
+    pricing = await _get_dynamic_neno_price()
+    neno_eur_price = pricing["price"]
+    eur_gross = round(req.neno_amount * neno_eur_price, 2)
     fee = round(eur_gross * PLATFORM_FEE, 2)
     eur_net = round(eur_gross - fee, 2)
 

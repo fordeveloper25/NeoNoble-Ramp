@@ -25,6 +25,7 @@ import TradingPage from "./pages/TradingPage";
 import WalletPage from "./pages/WalletPage";
 import NenoExchange from "./pages/NenoExchange";
 import MarginTrading from "./pages/MarginTrading";
+import KYCPage from "./pages/KYCPage";
 import ApiDocs from "./pages/ApiDocs";
 import { usePageTracking } from "./hooks/usePageTracking";
 
@@ -236,6 +237,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MarginTrading />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* KYC / AML */}
+      <Route
+        path="/kyc"
+        element={
+          <ProtectedRoute>
+            <KYCPage />
           </ProtectedRoute>
         }
       />
