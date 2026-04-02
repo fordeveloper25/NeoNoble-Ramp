@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { createChart } from 'lightweight-charts';
 import {
   ArrowLeft, Loader2, TrendingUp, TrendingDown, PieChart,
-  DollarSign, BarChart3, Calendar, ArrowUpRight, ArrowDownRight
+  DollarSign, BarChart3, Calendar, ArrowUpRight, ArrowDownRight,
+  Download
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -140,6 +141,20 @@ export default function PortfolioAnalytics() {
           </button>
           <PieChart className="w-5 h-5 text-purple-400" />
           <h1 className="text-white font-bold text-lg">Portfolio Analytics</h1>
+          <div className="ml-auto flex gap-2">
+            <button onClick={() => { fetch(`${BACKEND_URL}/api/export/trades/csv`, { headers: headers() }).then(r => r.blob()).then(b => { const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = 'trades.csv'; a.click(); }); }}
+              className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-xs" data-testid="export-trades-btn">
+              <Download className="w-3 h-3" /> Trade
+            </button>
+            <button onClick={() => { fetch(`${BACKEND_URL}/api/export/portfolio/csv`, { headers: headers() }).then(r => r.blob()).then(b => { const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = 'portfolio.csv'; a.click(); }); }}
+              className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-xs" data-testid="export-portfolio-btn">
+              <Download className="w-3 h-3" /> Portfolio
+            </button>
+            <button onClick={() => { fetch(`${BACKEND_URL}/api/export/margin/csv`, { headers: headers() }).then(r => r.blob()).then(b => { const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = 'margin.csv'; a.click(); }); }}
+              className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-xs" data-testid="export-margin-btn">
+              <Download className="w-3 h-3" /> Margin
+            </button>
+          </div>
         </div>
       </div>
 

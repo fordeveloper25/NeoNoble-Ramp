@@ -434,17 +434,19 @@ async def get_neno_transactions(current_user: dict = Depends(get_current_user)):
 @router.get("/market")
 async def neno_market_info():
     """Get $NENO market info and all conversion rates."""
+    pricing = await _get_dynamic_neno_price()
+    neno_price = pricing["price"]
     pairs = {}
     for asset, eur_price in MARKET_PRICES_EUR.items():
-        rate = NENO_EUR_PRICE / eur_price
+        rate = neno_price / eur_price
         pairs[f"NENO/{asset}"] = {
             "rate": round(rate, 8),
             "asset_eur_price": eur_price,
-            "neno_eur_price": NENO_EUR_PRICE,
+            "neno_eur_price": neno_price,
         }
     return {
-        "neno_eur_price": NENO_EUR_PRICE,
-        "neno_usd_price": NENO_EUR_PRICE * 1.087,
+        "neno_eur_price": neno_price,
+        "neno_usd_price": round(neno_price * 1.087, 2),
         "fee_percent": PLATFORM_FEE * 100,
         "supported_assets": SUPPORTED_ASSETS,
         "pairs": pairs,

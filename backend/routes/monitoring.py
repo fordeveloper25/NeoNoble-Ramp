@@ -205,3 +205,16 @@ async def get_system_config():
             "stripe_enabled": bool(os.environ.get("STRIPE_SECRET_KEY"))
         }
     }
+
+
+
+@router.get("/architecture")
+async def get_architecture_plan():
+    """Get the microservices architecture decomposition plan."""
+    from services.service_registry import get_microservice_plan, DOMAIN_GROUPS
+    return {
+        "plan": get_microservice_plan(),
+        "domains": DOMAIN_GROUPS,
+        "current": "monolith",
+        "ready_for_split": True,
+    }

@@ -340,3 +340,86 @@ async def websocket_status():
             for symbol in manager.get_subscribed_symbols()
         }
     }
+
+
+
+# ── NENO Real-time Order Book WebSocket ──
+
+@router.websocket("/orderbook/neno")
+async def websocket_neno_orderbook(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time NENO order book.
+
+    Streams simulated order book data based on dynamic pricing engine.
+    Updates every 500ms with bid/ask ladder.
+
+    Message format:
+    {
+        "type": "orderbook",
+        "symbol": "NENO/EUR",
+        "data": {
+            "bids": [[price, size], ...],
+            "asks": [[price, size], ...],
+            "spread": 0.05,
+            "mid_price": 10000.0,
+            "timestamp": "..."
+        }
+    }
+    """
+    await websocket.accept()
+    import random
+
+    try:
+        while True:
+            try:
+                # Check for client messages
+                try:
+                    msg = await asyncio.wait_for(websocket.receive_text(), timeout=0.5)
+                    data = json.loads(msg)
+                    if data.get("action") == "ping":
+                        await websocket.send_json({"type": "pong"})
+                        continue
+                except asyncio.TimeoutError:
+                    pass
+
+                # Generate order book from dynamic pricing
+                from routes.neno_exchange_routes import _get_dynamic_neno_price, NENO_BASE_PRICE
+                pricing = await _get_dynamic_neno_price()
+                mid_price = pricing["price"]
+
+                # Generate realistic bid/ask ladder
+                bids = []
+                asks = []
+                for i in range(15):
+                    bid_offset = (i + 1) * random.uniform(0.5, 2.5)
+                    ask_offset = (i + 1) * random.uniform(0.5, 2.5)
+                    bid_size = round(random.uniform(0.01, 0.5) * (15 - i) / 15, 4)
+                    ask_size = round(random.uniform(0.01, 0.5) * (15 - i) / 15, 4)
+                    bids.append([round(mid_price - bid_offset, 2), bid_size])
+                    asks.append([round(mid_price + ask_offset, 2), ask_size])
+
+                spread = round(asks[0][0] - bids[0][0], 2)
+
+                await websocket.send_json({
+                    "type": "orderbook",
+                    "symbol": "NENO/EUR",
+                    "data": {
+                        "bids": bids,
+                        "asks": asks,
+                        "spread": spread,
+                        "spread_pct": round(spread / mid_price * 100, 4),
+                        "mid_price": mid_price,
+                        "base_price": NENO_BASE_PRICE,
+                        "buy_volume_24h": pricing["buy_volume_24h"],
+                        "sell_volume_24h": pricing["sell_volume_24h"],
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                })
+
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"[WS] NENO orderbook error: {e}")
+                await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        pass

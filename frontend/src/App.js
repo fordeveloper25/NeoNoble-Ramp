@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Web3Provider } from "./context/Web3Context";
+import { I18nProvider } from "./i18n/I18nContext";
 import { Toaster } from "@/components/ui/sonner";
 import { NotificationToaster } from "./components/NotificationSystem";
 import { WalletModal } from "./components/WalletConnect";
@@ -29,6 +30,7 @@ import KYCPage from "./pages/KYCPage";
 import PortfolioAnalytics from "./pages/PortfolioAnalytics";
 import SettingsPage from "./pages/SettingsPage";
 import ApiDocs from "./pages/ApiDocs";
+import AuditLog from "./pages/AuditLog";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -279,6 +281,16 @@ function AppRoutes() {
         element={<ApiDocs />}
       />
 
+      {/* Audit Log (Admin) */}
+      <Route
+        path="/audit"
+        element={
+          <ProtectedRoute>
+            <AuditLog />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -291,10 +303,12 @@ function App() {
       <BrowserRouter>
         <Web3Provider>
           <AuthProvider>
-            <AppRoutes />
-            <Toaster />
-            <NotificationToaster />
-            <WalletModal />
+            <I18nProvider>
+              <AppRoutes />
+              <Toaster />
+              <NotificationToaster />
+              <WalletModal />
+            </I18nProvider>
           </AuthProvider>
         </Web3Provider>
       </BrowserRouter>
