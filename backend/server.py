@@ -364,6 +364,10 @@ async def lifespan(app: FastAPI):
     await db.subscription_invoices.create_index("subscription_id")
     
     logger.info("Token and Subscription infrastructure indexes created")
+
+    # Alert and push indexes
+    await db.price_alerts.create_index([("user_id", 1), ("triggered", 1)])
+    await db.browser_push_queue.create_index([("user_id", 1), ("delivered", 1)])
     
     # Initialize wallet service
     try:
@@ -527,10 +531,26 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Blockchain monitoring failed to start: {e}")
     
     logger.info("Database indexes created")
+    
+    # Start background scheduler (price alerts, NIUM auth, rate limiter cleanup)
+    try:
+        from services.background_scheduler import start_scheduler
+        await start_scheduler()
+        logger.info("Background scheduler started")
+    except Exception as e:
+        logger.warning(f"Background scheduler failed to start: {e}")
+    
     yield
     
     # Shutdown
     logger.info("NeoNoble Ramp API shutting down...")
+    
+    # Stop background scheduler
+    try:
+        from services.background_scheduler import stop_scheduler
+        await stop_scheduler()
+    except Exception:
+        pass
     
     # Stop webhook service worker
     if webhook_service:
