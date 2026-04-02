@@ -17,3 +17,6 @@
 - NIUM Client Hash: 24dba820-d8da-4ce6-b72f-d07f98ffa2fd
 - Auth Strategy: x-api-key@gateway.nium.com (auto-discovered)
 - Customer creation: Requires templateId in NIUM admin portal
+
+## Referral Codes
+- Admin referral code: C4YJT8H3
