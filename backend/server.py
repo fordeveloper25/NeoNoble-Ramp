@@ -173,6 +173,12 @@ from routes.neno_exchange_routes import router as neno_exchange_router
 # Import KYC/AML Compliance routes
 from routes.kyc_routes import router as kyc_router
 
+# Import Advanced Orders routes
+from routes.advanced_orders_routes import router as advanced_orders_router
+
+# Import 2FA TOTP routes
+from routes.totp_routes import router as totp_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
@@ -604,6 +610,8 @@ api_router.include_router(multichain_router)
 api_router.include_router(banking_router)
 api_router.include_router(neno_exchange_router)
 api_router.include_router(kyc_router)
+api_router.include_router(advanced_orders_router)
+api_router.include_router(totp_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)

@@ -1,234 +1,146 @@
 """
-Notification Routes - API endpoints for notifications and price alerts.
+Push Notifications Service.
 
-Provides:
-- Notification management
-- Price alerts CRUD
-- WebSocket notifications
+Server-side notification system with:
+- In-app notifications (stored in DB, fetched by frontend)
+- Notification types: trade, margin, kyc, security, system
+- Read/unread tracking
+- Real-time delivery via SSE (Server-Sent Events)
 """
 
-import logging
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime, timezone
+import uuid
+import asyncio
+import json
 
-from services.notification_service import (
-    get_notification_service,
-    NotificationType,
-    NotificationPriority
-)
+from database.mongodb import get_database
+from routes.auth import get_current_user
 
-logger = logging.getLogger(__name__)
-
-router = APIRouter(prefix="/notifications", tags=["notifications"])
-
-
-# Request models
-class CreateAlertRequest(BaseModel):
-    symbol: str = Field(..., description="Trading symbol (e.g., NENO-EUR)")
-    condition: str = Field(..., pattern="^(above|below|change_pct)$", description="Alert condition")
-    target_value: float = Field(..., gt=0, description="Target price or percentage")
+router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
-class MarkReadRequest(BaseModel):
-    notification_id: str = Field(..., description="Notification ID to mark as read")
+class NotificationCreate(BaseModel):
+    title: str
+    message: str
+    type: str = Field(default="system", description="trade, margin, kyc, security, system")
+    severity: str = Field(default="info", description="info, warning, critical")
+    action_url: Optional[str] = None
 
 
-# Dependency to get user_id (simplified - in production use proper auth)
-async def get_current_user_id():
-    return "system_user"  # Placeholder
+# ── SSE subscribers ──
+_sse_queues: dict = {}  # user_id -> asyncio.Queue
+
+
+async def push_notification(user_id: str, title: str, message: str, notif_type: str = "system", severity: str = "info", action_url: str = None):
+    """Create and push a notification to a user."""
+    db = get_database()
+    notif = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "title": title,
+        "message": message,
+        "type": notif_type,
+        "severity": severity,
+        "action_url": action_url,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.notifications.insert_one({**notif, "_id": notif["id"]})
+
+    # Push to SSE if connected
+    if user_id in _sse_queues:
+        try:
+            _sse_queues[user_id].put_nowait(notif)
+        except asyncio.QueueFull:
+            pass
+
+    return notif
 
 
 @router.get("/")
 async def get_notifications(
+    limit: int = Query(50, ge=1, le=200),
     unread_only: bool = False,
-    limit: int = 50,
-    user_id: str = Depends(get_current_user_id)
+    current_user: dict = Depends(get_current_user),
 ):
-    """
-    Get user notifications.
-    
-    Args:
-        unread_only: Return only unread notifications
-        limit: Maximum number of notifications to return
-    
-    Returns:
-        List of notifications
-    """
-    service = get_notification_service()
-    notifications = await service.get_user_notifications(
-        user_id=user_id,
-        unread_only=unread_only,
-        limit=limit
+    """Get notifications for current user."""
+    db = get_database()
+    query = {"user_id": current_user["user_id"]}
+    if unread_only:
+        query["read"] = False
+
+    notifs = await db.notifications.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    unread = await db.notifications.count_documents({"user_id": current_user["user_id"], "read": False})
+
+    return {"notifications": notifs, "unread_count": unread, "total": len(notifs)}
+
+
+@router.post("/read/{notification_id}")
+async def mark_as_read(notification_id: str, current_user: dict = Depends(get_current_user)):
+    """Mark a notification as read."""
+    db = get_database()
+    result = await db.notifications.update_one(
+        {"id": notification_id, "user_id": current_user["user_id"]},
+        {"$set": {"read": True}},
     )
-    
-    unread_count = await service.get_unread_count(user_id)
-    
-    return {
-        "notifications": notifications,
-        "count": len(notifications),
-        "unread_count": unread_count
-    }
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Notifica non trovata")
+    return {"message": "Notifica letta"}
+
+
+@router.post("/read-all")
+async def mark_all_as_read(current_user: dict = Depends(get_current_user)):
+    """Mark all notifications as read."""
+    db = get_database()
+    result = await db.notifications.update_many(
+        {"user_id": current_user["user_id"], "read": False},
+        {"$set": {"read": True}},
+    )
+    return {"message": f"{result.modified_count} notifiche lette"}
+
+
+@router.delete("/{notification_id}")
+async def delete_notification(notification_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a notification."""
+    db = get_database()
+    await db.notifications.delete_one({"id": notification_id, "user_id": current_user["user_id"]})
+    return {"message": "Notifica eliminata"}
+
+
+@router.get("/stream")
+async def notification_stream(request: Request, current_user: dict = Depends(get_current_user)):
+    """SSE endpoint for real-time notifications."""
+    user_id = current_user["user_id"]
+    queue = asyncio.Queue(maxsize=50)
+    _sse_queues[user_id] = queue
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    notif = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {json.dumps(notif)}\n\n"
+                except asyncio.TimeoutError:
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+        finally:
+            _sse_queues.pop(user_id, None)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 @router.get("/unread-count")
-async def get_unread_count(user_id: str = Depends(get_current_user_id)):
-    """Get count of unread notifications."""
-    service = get_notification_service()
-    count = await service.get_unread_count(user_id)
-    
+async def get_unread_count(current_user: dict = Depends(get_current_user)):
+    """Get unread notification count."""
+    db = get_database()
+    count = await db.notifications.count_documents({"user_id": current_user["user_id"], "read": False})
     return {"unread_count": count}
-
-
-@router.post("/mark-read")
-async def mark_notification_read(
-    request: MarkReadRequest,
-    user_id: str = Depends(get_current_user_id)
-):
-    """Mark a notification as read."""
-    service = get_notification_service()
-    success = await service.mark_notification_read(user_id, request.notification_id)
-    
-    if not success:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    
-    return {"success": True, "notification_id": request.notification_id}
-
-
-@router.post("/mark-all-read")
-async def mark_all_read(user_id: str = Depends(get_current_user_id)):
-    """Mark all notifications as read."""
-    service = get_notification_service()
-    count = await service.mark_all_read(user_id)
-    
-    return {"success": True, "marked_count": count}
-
-
-# Price Alerts endpoints
-@router.get("/alerts")
-async def get_alerts(
-    active_only: bool = True,
-    user_id: str = Depends(get_current_user_id)
-):
-    """
-    Get user's price alerts.
-    
-    Args:
-        active_only: Return only non-triggered alerts
-    
-    Returns:
-        List of price alerts
-    """
-    service = get_notification_service()
-    alerts = await service.get_user_alerts(user_id, active_only)
-    
-    return {
-        "alerts": alerts,
-        "count": len(alerts)
-    }
-
-
-@router.post("/alerts")
-async def create_alert(
-    request: CreateAlertRequest,
-    user_id: str = Depends(get_current_user_id)
-):
-    """
-    Create a new price alert.
-    
-    Args:
-        request: Alert configuration
-    
-    Returns:
-        Created alert details
-    """
-    service = get_notification_service()
-    alert = await service.create_price_alert(
-        user_id=user_id,
-        symbol=request.symbol,
-        condition=request.condition,
-        target_value=request.target_value
-    )
-    
-    condition_text = {
-        'above': 'supera',
-        'below': 'scende sotto',
-        'change_pct': 'varia di'
-    }.get(request.condition, '')
-    
-    return {
-        "alert": alert.to_dict(),
-        "message": f"Alert creato: riceverai una notifica quando {request.symbol} {condition_text} €{request.target_value:,.2f}"
-    }
-
-
-@router.delete("/alerts/{alert_id}")
-async def delete_alert(
-    alert_id: str,
-    user_id: str = Depends(get_current_user_id)
-):
-    """Delete a price alert."""
-    service = get_notification_service()
-    success = await service.delete_alert(user_id, alert_id)
-    
-    if not success:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    
-    return {"success": True, "alert_id": alert_id}
-
-
-# WebSocket endpoint for real-time notifications
-@router.websocket("/ws/{user_id}")
-async def websocket_notifications(websocket: WebSocket, user_id: str):
-    """
-    WebSocket endpoint for real-time notifications.
-    
-    Clients will receive notifications as they are created.
-    """
-    await websocket.accept()
-    service = get_notification_service()
-    service.register_websocket(user_id, websocket)
-    
-    try:
-        # Send initial unread count
-        unread_count = await service.get_unread_count(user_id)
-        await websocket.send_json({
-            "type": "init",
-            "unread_count": unread_count
-        })
-        
-        # Keep connection alive
-        while True:
-            try:
-                message = await websocket.receive_text()
-                # Handle ping/pong
-                if message == "ping":
-                    await websocket.send_json({"type": "pong"})
-            except WebSocketDisconnect:
-                break
-            
-    except WebSocketDisconnect:
-        pass
-    finally:
-        service.unregister_websocket(user_id, websocket)
-
-
-# Test endpoint to send a test notification
-@router.post("/test")
-async def send_test_notification(user_id: str = Depends(get_current_user_id)):
-    """Send a test notification (for development)."""
-    service = get_notification_service()
-    
-    notification = await service.create_notification(
-        user_id=user_id,
-        type=NotificationType.INFO,
-        title="Test Notification 🔔",
-        message="Questa è una notifica di test. Il sistema funziona correttamente!",
-        priority=NotificationPriority.MEDIUM,
-        data={"test": True}
-    )
-    
-    return {
-        "success": True,
-        "notification": notification.to_dict()
-    }

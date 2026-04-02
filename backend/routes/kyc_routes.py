@@ -74,6 +74,11 @@ class AMLAlertAction(BaseModel):
     notes: Optional[str] = None
 
 
+class DocumentVerifyRequest(BaseModel):
+    image_base64: str
+    mime_type: str = "image/jpeg"
+
+
 # ── Endpoints ──
 
 @router.get("/status")
@@ -162,6 +167,77 @@ async def submit_kyc(data: KYCSubmission, current_user: dict = Depends(get_curre
     )
 
     return {"message": "Richiesta KYC inviata con successo", "status": "pending"}
+
+
+@router.post("/verify-document")
+async def verify_document(data: DocumentVerifyRequest, current_user: dict = Depends(get_current_user)):
+    """AI-powered document verification using GPT Image OCR."""
+    from services.kyc_verification_service import verify_document_with_ai
+
+    db = get_database()
+    kyc = await db.kyc_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+
+    if not kyc:
+        raise HTTPException(status_code=400, detail="Invia prima i dati KYC, poi carica il documento")
+
+    submitted_data = {
+        "user_id": current_user["user_id"],
+        "first_name": kyc.get("first_name", ""),
+        "last_name": kyc.get("last_name", ""),
+        "date_of_birth": kyc.get("date_of_birth", ""),
+        "document_number": kyc.get("document", {}).get("number", ""),
+        "nationality": kyc.get("nationality", ""),
+        "document_type": kyc.get("document", {}).get("type", ""),
+    }
+
+    result = await verify_document_with_ai(
+        image_base64=data.image_base64,
+        submitted_data=submitted_data,
+        mime_type=data.mime_type,
+    )
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.kyc_profiles.update_one(
+        {"user_id": current_user["user_id"]},
+        {"$set": {
+            "ai_verification": result,
+            "ai_verified_at": now,
+            "status": "ai_verified" if result.get("verified") else "pending",
+        }},
+    )
+
+    # Auto-approve to Tier 1 if AI verification passes
+    if result.get("verified") and result.get("recommendation") == "approve":
+        current_tier = kyc.get("tier", 0)
+        if current_tier < 1:
+            new_tier = 1
+            await db.kyc_profiles.update_one(
+                {"user_id": current_user["user_id"]},
+                {"$set": {"tier": new_tier, "status": "approved", "reviewed_at": now}},
+            )
+            await db.users.update_one({"id": current_user["user_id"]}, {"$set": {"kyc_tier": new_tier}})
+            result["auto_approved"] = True
+            result["new_tier"] = new_tier
+
+    return {
+        "message": "Verifica documento completata" if result.get("verified") else "Documento richiede revisione manuale",
+        "verification": result,
+    }
+
+
+@router.post("/ocr-extract")
+async def ocr_extract_document(data: DocumentVerifyRequest, current_user: dict = Depends(get_current_user)):
+    """Extract data from an ID document using AI OCR (pre-fill helper)."""
+    from services.kyc_verification_service import extract_document_data
+
+    result = await extract_document_data(
+        image_base64=data.image_base64,
+        mime_type=data.mime_type,
+    )
+
+    return result
+
+
 
 
 @router.get("/admin/pending")

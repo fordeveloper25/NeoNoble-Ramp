@@ -443,15 +443,23 @@ export default function MarginTrading() {
   // Tab state
   const [bottomTab, setBottomTab] = useState('positions');
 
+  // Advanced orders state
+  const [advOrders, setAdvOrders] = useState([]);
+  const [showLimitOrder, setShowLimitOrder] = useState(false);
+  const [limitPrice, setLimitPrice] = useState('');
+  const [orderType, setOrderType] = useState('limit');
+
   const fetchData = useCallback(async () => {
     try {
-      const [aRes, pRes] = await Promise.all([
+      const [aRes, pRes, oRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/trading/margin/account`, { headers: headers() }),
         fetch(`${BACKEND_URL}/api/trading/margin/positions`, { headers: headers() }),
+        fetch(`${BACKEND_URL}/api/trading/orders/active`, { headers: headers() }),
       ]);
-      const [aData, pData] = await Promise.all([aRes.json(), pRes.json()]);
+      const [aData, pData, oData] = await Promise.all([aRes.json(), pRes.json(), oRes.json()]);
       setAccount(aData.account);
       setPositions(pData.positions || []);
+      setAdvOrders(oData.orders || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
@@ -517,6 +525,38 @@ export default function MarginTrading() {
     setResult(null);
     try {
       const res = await fetch(`${BACKEND_URL}/api/trading/margin/close`, { method: 'POST', headers: headers(), body: JSON.stringify({ position_id: posId }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      setResult({ ok: true, msg: data.message }); fetchData();
+    } catch (e) { setResult({ ok: false, msg: e.message }); }
+  };
+
+  const handlePlaceAdvancedOrder = async () => {
+    setOpening(true); setResult(null);
+    try {
+      let url, body;
+      if (orderType === 'limit') {
+        url = `${BACKEND_URL}/api/trading/orders/limit`;
+        body = { pair_id: pair, side, quantity: parseFloat(qty), limit_price: parseFloat(limitPrice), time_in_force: 'GTC' };
+      } else if (orderType === 'stop') {
+        url = `${BACKEND_URL}/api/trading/orders/stop`;
+        body = { pair_id: pair, side, quantity: parseFloat(qty), stop_price: parseFloat(limitPrice) };
+      } else if (orderType === 'trailing') {
+        url = `${BACKEND_URL}/api/trading/orders/trailing-stop`;
+        body = { pair_id: pair, side, quantity: parseFloat(qty), trail_percent: parseFloat(limitPrice) };
+      }
+      const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      setResult({ ok: true, msg: data.message }); setShowLimitOrder(false); setLimitPrice(''); setQty(''); fetchData();
+    } catch (e) { setResult({ ok: false, msg: e.message }); }
+    finally { setOpening(false); }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    setResult(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/trading/orders/cancel`, { method: 'POST', headers: headers(), body: JSON.stringify({ order_id: orderId }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
       setResult({ ok: true, msg: data.message }); fetchData();
@@ -689,6 +729,7 @@ export default function MarginTrading() {
                 <div className="flex border-b border-zinc-800">
                   {[
                     { id: 'positions', label: `Posizioni (${openPositions.length})` },
+                    { id: 'orders', label: `Ordini (${advOrders.length})` },
                     { id: 'history', label: `Storico (${closedPositions.length})` },
                   ].map(t => (
                     <button key={t.id} onClick={() => setBottomTab(t.id)} data-testid={`tab-${t.id}`}
@@ -741,6 +782,51 @@ export default function MarginTrading() {
                                   className="px-2 py-1 bg-red-500/10 text-red-400 rounded text-[10px] font-bold hover:bg-red-500/20 transition-colors">
                                   CHIUDI
                                 </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+
+                {bottomTab === 'orders' && (
+                  advOrders.length === 0 ? (
+                    <div className="py-8 text-center text-zinc-600 text-xs">Nessun ordine attivo</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-zinc-800/50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-zinc-500 font-medium">Tipo</th>
+                            <th className="px-3 py-2 text-left text-zinc-500 font-medium">Coppia</th>
+                            <th className="px-3 py-2 text-left text-zinc-500 font-medium">Lato</th>
+                            <th className="px-3 py-2 text-right text-zinc-500 font-medium">Qty</th>
+                            <th className="px-3 py-2 text-right text-zinc-500 font-medium">Prezzo</th>
+                            <th className="px-3 py-2 text-right text-zinc-500 font-medium">Stato</th>
+                            <th className="px-3 py-2 text-right text-zinc-500 font-medium"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800/50">
+                          {advOrders.map(o => (
+                            <tr key={o.id} className="hover:bg-zinc-800/30">
+                              <td className="px-3 py-2">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 uppercase">{o.type}</span>
+                              </td>
+                              <td className="px-3 py-2 text-zinc-200">{o.pair_id}</td>
+                              <td className="px-3 py-2">
+                                <span className={o.side === 'buy' ? 'text-emerald-400' : 'text-red-400'}>{o.side?.toUpperCase()}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right text-zinc-300 font-mono">{o.quantity}</td>
+                              <td className="px-3 py-2 text-right text-zinc-300 font-mono">{o.limit_price || o.stop_price || o.current_stop || '-'}</td>
+                              <td className="px-3 py-2 text-right">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${o.status === 'open' ? 'bg-emerald-500/20 text-emerald-400' : o.status === 'tracking' ? 'bg-blue-500/20 text-blue-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                  {o.status?.toUpperCase()}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <button onClick={() => handleCancelOrder(o.id)} className="px-2 py-1 bg-red-500/10 text-red-400 rounded text-[10px] font-bold hover:bg-red-500/20">ANNULLA</button>
                               </td>
                             </tr>
                           ))}
@@ -896,7 +982,36 @@ export default function MarginTrading() {
                     className={`w-full py-2.5 rounded-lg font-bold text-sm transition-all ${side === 'buy' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20' : 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'} text-white disabled:opacity-50 disabled:shadow-none`}>
                     {opening ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `${side === 'buy' ? 'Long' : 'Short'} ${pair} ${leverage}x`}
                   </button>
+
+                  {/* Advanced Order Toggle */}
+                  <button onClick={() => setShowLimitOrder(!showLimitOrder)} data-testid="toggle-advanced-btn"
+                    className="w-full py-1.5 text-purple-400 text-[10px] font-medium hover:text-purple-300 transition-colors">
+                    {showLimitOrder ? 'Nascondi' : 'Ordini Avanzati (Limit / Stop / Trailing)'}
+                  </button>
                 </div>
+
+                {showLimitOrder && (
+                  <div className="p-3 border-t border-zinc-800 space-y-2" data-testid="advanced-order-form">
+                    <div className="flex gap-1">
+                      {[{id:'limit',label:'Limit'},{id:'stop',label:'Stop'},{id:'trailing',label:'Trail'}].map(t => (
+                        <button key={t.id} onClick={() => setOrderType(t.id)} data-testid={`otype-${t.id}`}
+                          className={`flex-1 py-1 rounded text-[10px] font-bold ${orderType === t.id ? 'bg-purple-500/20 text-purple-400' : 'bg-zinc-800 text-zinc-500'}`}>{t.label}</button>
+                      ))}
+                    </div>
+                    <div>
+                      <label className="text-zinc-500 text-[10px] block mb-1">
+                        {orderType === 'limit' ? 'Prezzo Limite' : orderType === 'stop' ? 'Prezzo Stop' : 'Trail %'}
+                      </label>
+                      <input type="number" step="any" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
+                        placeholder={orderType === 'trailing' ? '2.0' : '0.00'}
+                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm font-mono" />
+                    </div>
+                    <button onClick={handlePlaceAdvancedOrder} disabled={opening || !qty || !limitPrice} data-testid="place-advanced-btn"
+                      className="w-full py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-bold text-xs disabled:opacity-50">
+                      {opening ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : `Piazza ${orderType.toUpperCase()} ${side.toUpperCase()}`}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

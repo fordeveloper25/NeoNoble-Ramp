@@ -6,10 +6,12 @@ import TransakWidget from '../components/TransakWidget';
 import NenoTradingWidget from '../components/NenoTradingWidget';
 import { WalletConnectButton, ChainSelector } from '../components/WalletConnect';
 import { useWeb3 } from '../context/Web3Context';
+import NotificationBell from '../components/NotificationBell';
 import {
   Coins, ArrowUpRight, ArrowDownRight, RefreshCw, History,
   Wallet, Building, LogOut, ChevronRight, Loader2, CheckCircle,
-  AlertCircle, TrendingUp, CreditCard, BarChart3, Shield, ArrowRightLeft
+  AlertCircle, TrendingUp, CreditCard, BarChart3, Shield, ArrowRightLeft,
+  PieChart, Settings
 } from 'lucide-react';
 
 const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
@@ -183,6 +185,10 @@ export default function Dashboard() {
                 Admin
               </Link>
               <span className="text-gray-400 text-sm">{user?.email}</span>
+              <NotificationBell />
+              <Link to="/settings" className="text-gray-400 hover:text-white p-2" data-testid="settings-link">
+                <Settings className="h-5 w-5" />
+              </Link>
               <button
                 onClick={handleLogout}
                 className="text-gray-400 hover:text-white p-2"
@@ -412,6 +418,21 @@ export default function Dashboard() {
                     <div>
                       <h3 className="text-white font-medium group-hover:text-teal-400">KYC / AML</h3>
                       <p className="text-gray-400 text-xs">Verifica identita e compliance</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
+                  to="/portfolio"
+                  data-testid="portfolio-link"
+                  className="p-4 bg-gradient-to-r from-fuchsia-600/20 to-pink-600/20 border border-fuchsia-500/30 rounded-xl hover:border-fuchsia-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-fuchsia-500/20 rounded-lg flex items-center justify-center">
+                      <PieChart className="h-5 w-5 text-fuchsia-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-fuchsia-400">Portfolio Analytics</h3>
+                      <p className="text-gray-400 text-xs">Performance, PnL, Allocazione</p>
                     </div>
                   </div>
                 </Link>
