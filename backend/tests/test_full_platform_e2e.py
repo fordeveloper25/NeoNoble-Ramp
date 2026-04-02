@@ -20,7 +20,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://trading-settle.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://neon-margin-trade.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 REGULAR_USER = {"email": "testchart@example.com", "password": "Test1234!"}

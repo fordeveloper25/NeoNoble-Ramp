@@ -1,180 +1,149 @@
 <analysis>**original_problem_statement:**
-The user's goal is to build NeoNoble Ramp, a global, enterprise-grade fintech infrastructure platform comparable to Stripe or Coinbase. The project has evolved through several phases, with the most recent user directives focusing on completing the core financial and trading infrastructure.
+The user's goal is to build NeoNoble Ramp, a global, enterprise-grade fintech infrastructure platform. After completing the core trading and settlement features, the focus has shifted to full Financial Infrastructure Activation (Phase 5). This includes real card issuing, multi-chain synchronization (Ethereum, BSC, Polygon), real crypto on/off-ramps, and IBAN/SEPA banking rails. Most recently, the user requested a custom internal NENO Exchange (bypassing 3rd party providers like Transak) with a fixed €10,000 NENO price, as well as Full Margin Trading, Multi-chain Token Discovery, and a Unified Wallet that perfectly syncs internal and external on-chain balances.
 
-The strategic implementation plan, approved by the user, includes:
-1.  **NIUM Card Issuing Integration:** To enable real, spendable virtual/physical Visa/Mastercard cards funded by crypto balances.
-2.  **Crypto-to-Fiat Settlement Engine:** An automated pipeline to convert crypto to fiat at the point of sale for card transactions.
-3.  **Exchange Engine Verification:** Full validation of the trading engine across all pairs (including the native NENO token), supporting market and limit orders.
-4.  **Conversion & Settlement Pipeline:** A complete financial execution flow (Trade → Convert → Settle → Wallet Credit) for all asset types.
-5.  **NeoNoble Token (NENO) Liquidity:** Ensuring the native token is a first-class, tradable, and convertible asset.
-6.  **Full Token Compatibility:** Ensuring all tokens (native, user-created, major cryptos) are compatible with all financial services (trading, conversion, card funding).
-7.  **Advanced Trading Orders:** Implementation of Stop-Loss and Take-Profit orders.
-8.  **Margin Trading Preparation:** Building the architectural layer for future leveraged trading.
-9.  **Real-Time Infrastructure:** A WebSocket-based notification system for trades, settlements, and alerts.
-10. **Paper Trading Environment:** A simulated trading mode for user onboarding and strategy testing.
-11. **Microservices Architecture Evolution:** A long-term goal to refactor the monolith into scalable microservices.
+**User's preferred language**: Italian (The next agent MUST respond in Italian ONLY).
 
-**User's preferred language**: Italian. The next agent MUST respond in Italian.
-
-**what currently exists?**
-The application is a full-stack monolith with a FastAPI/MongoDB backend and a React/ frontend.
-
-The following has been implemented in this session, but remains untested:
--   **Backend:**
-    -   **NIUM Integration:** A  has been created to interact with the NIUM API for card issuing. The API key is available.
-    -   **Settlement Engine:** A  handles the crypto-to-fiat conversion logic.
-    -   **Advanced Trading:** The  and  were updated to support Stop-Loss, Take-Profit, and placeholder logic for Margin Trading.
-    -   **Wallet & Settlement Routes:** New  for managing balances and settlements.
-    -   **Paper Trading Mode:** Logic has been added to the trading engine to handle simulated trades.
-    -   **WebSocket Manager:** The existing WebSocket system was prepared to push real-time notifications for trades, settlements, and order status changes.
-    -   All new routes (, updated  and  routes) have been registered in .
+**what currently exists?** 
+A robust monolithic FastAPI/React application featuring a Trading Engine, a fully functional NENO Custom Exchange (supporting 12 assets with direct fiat-to-card/bank off-ramps), Multi-Chain Wallet synchronization (ETH, BSC, Polygon), Simulated Banking Rails (IBAN/SEPA), and Real Card Issuing via NIUM (using the user's production key).
 
 **Last working item**:
--   **Last item agent was working:** The agent had just finished a massive parallel implementation of all 10 points from the user's latest directive (NIUM integration, settlement engine, advanced trading orders, real-time notifications, etc.). The agent restarted the backend and was about to begin manually testing the very first API endpoint ().
--   **Status:** IN PROGRESS
--   **Agent Testing Done:** N
--   **Which testing method agent to use?** . A manual  approach is insufficient for the complexity of the 10 interconnected financial features just implemented. A comprehensive E2E test is required to validate the entire financial pipeline.
--   **User Testing Done:** N
+- **Last item agent was working**: Implementing Full Margin Trading, Multi-chain Token Discovery, and a Unified Wallet (syncing internal DB balances with external on-chain balances). The agent updated the backend ( and ) and just created the blank frontend file .
+- **Status**: IN PROGRESS
+- **Agent Testing Done**: N
+- **Which testing method agent to use?** testing_agent_v3_fork (Frontend + Backend validation needed once UI is built).
+- **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Complete Verification of Final Execution Phase Implementation (P0 - BLOCKER)**
-    -   **Attempted fixes:** None. The implementation was just completed.
-    -   **Next debug checklist:**
-        1.  Invoke the  with a comprehensive test plan covering all 10 points from the user's directive (message #242).
-        2.  **NIUM:** Verify virtual card creation using the provided test API key.
-        3.  **Settlement Pipeline:** Test the full flow: Place a trade -> Trigger a card payment -> Verify the settlement service converts the asset -> Confirm the card is funded.
-        4.  **Advanced Trading:** Create and verify the execution of Stop-Loss and Take-Profit orders.
-        5.  **Trading & Liquidity:** Verify trading across multiple pairs, especially  and . Confirm the order book and trade history update correctly.
-        6.  **Paper Trading:** Test enabling paper trading mode and executing simulated trades without affecting real balances.
-        7.  **Real-Time Notifications:** Connect to the WebSocket and verify that notifications for order execution and settlement are received.
-    -   **Why fix this issue and what will be achieved with the fix?** This validates the entire strategic milestone, ensuring the platform's core financial infrastructure is robust, functional, and ready for the next phase of development.
-    -   **Status:** TESTING PENDING
-    -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** Both.
-    -   **Blocked on other issue:** None. This is the main task.
+- Issue 1: Complete Margin Trading UI and Integration (P0)
+   - Attempted fixes: Backend endpoints created via python script replacements, frontend file created but empty.
+   - Next debug checklist: Implement React component in , register it in , and link it in the  navigation.
+   - Why fix this issue and what will be achieved with the fix? Fulfills user's explicit request for Full Margin Trading.
+   - Status: IN PROGRESS
+   - Is recurring issue? N
+   - Should Test frontend/backend/both after fix? Both
+   - Blocked on other issue: None
+- Issue 2: Unified Wallet UI & Multi-chain Token Discovery Verification (P0)
+   - Attempted fixes: Added  endpoint in .
+   - Next debug checklist: Ensure the frontend correctly calls the unified wallet API and displays identical crypto/fiat values for internal and external (on-chain) holdings as explicitly requested by the user. 
+   - Why fix this issue and what will be achieved with the fix? Ensures seamless user experience showing real-world mirrored balances.
+   - Status: NOT STARTED
+   - Is recurring issue? N
+   - Should Test frontend/backend/both after fix? Both
+   - Blocked on other issue: None
 
 **In progress Task List**:
--   **Task 1: Test and Verify the Consolidated Final Execution Phase (P0)**
-    -   **Where to resume:** The backend code for all 10 features is complete. The next step is to initiate a full test suite via .
-    -   **What will be achieved with this?** Completion and validation of the entire user-approved roadmap for this cycle, including card issuing, settlement, advanced trading, and real-time systems.
-    -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** Both.
-    -   **Blocked on something:** None.
+- Task 1: Complete  implementation
+   - Where to resume: 
+   - What will be achieved with this? Frontend interface for leveraged trading.
+   - Status: IN PROGRESS
+   - Should Test frontend/backend/both after fix? Frontend
+   - Blocked on something: None
+- Task 2: Token Discovery Implementation
+   - Where to resume:  and 
+   - What will be achieved with this? Automatic discovery of tokens in connected Web3 wallets.
+   - Status: NOT STARTED
+   - Should Test frontend/backend/both after fix? Both
+   - Blocked on something: None
 
 **Upcoming and Future Tasks**
--   **Upcoming Tasks:**
-    -   **P0: Microservices Architecture Refactor:** Begin the strategic refactoring of the monolith into distinct services (trading engine, wallet infrastructure, settlement layer, card issuing, API gateway) as per the user's directive.
-    -   **P1: Full Margin Trading Implementation:** Move beyond the architectural preparation and build the complete functionality for leveraged trading.
--   **Future Tasks:**
-    -   Expand the Developer API Ecosystem with more endpoints and documentation.
-    -   Enhance the real-time notification system.
-    -   Fix the outdated  script.
+- Microservices Architecture Refactoring (P1) - Splitting the FastAPI monolith into distinct services (Exchange, Wallet, Settlement, Cards, Gateway).
+- KYC/AML Compliance Layer implementation.
+- Dynamic NENO pricing based on order book (currently fixed at €10,000).
 
 **Completed work in this session**
--   **Deployment Blocker Resolution:** Fixed frontend build failures by correctly managing wagmi/web3modal peer dependencies and ESLint warnings.
--   **Core Economic Engine Implementation:** Built and tested the full UI and backend for Token Creation, Token Listing Marketplace, and Subscription Plans.
--   **Phase 2 Platform Infrastructure:** Implemented and tested Market Data Integration (CoinGecko), Admin Analytics Dashboard, and a foundational Crypto-Enabled Card UI.
--   **Phase 3 Trading & Developer Ecosystem:** Implemented and tested a full Exchange Engine (matching engine, order book), integrated professional charts (), and a Developer API documentation portal.
--   **Final Execution Phase (Implemented, Not Tested):**
-    -   NIUM Card Issuing integration.
-    -   Crypto-to-Fiat Settlement Engine.
-    -   Stop-Loss / Take-Profit order types.
-    -   Architectural preparation for Margin Trading.
-    -   Real-time WebSocket notification system for financial events.
-    -   Paper Trading environment logic.
-    -   Wallet and settlement management APIs.
+- Phase 4 E2E Verification (33/33 tests passed) (DONE)
+- Promoted specific user accounts to ADMIN (DONE)
+- Multi-Chain Wallet Sync (ETH, BSC, Polygon) (DONE)
+- Banking Rails (Virtual IBAN / SEPA deposits and withdrawals) (DONE)
+- Physical Card shipping tracking and NIUM live key integration (DONE)
+- Internal NeoNoble NENO Exchange (bypasses Transak, €10k fixed price, direct off-ramp to card/bank) (DONE)
 
 **Earlier issues found/mentioned but not fixed**
--   The load testing script  is outdated and requires updating to reflect the current API endpoints.
+- None.
 
 **Known issue recurrence from previous fork**
--   None.
+- Recurrence count: 0
+- Status: RESOLVED
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, MongoDB (Motor), WebSockets.
--   **Frontend:** React, .
--   **Financial:** Order Book, Matching Engine, Market/Limit/Stop-Loss/Take-Profit Orders, Crypto-to-Fiat Settlement.
--   **3rd Party APIs:** NIUM (Card Issuing), CoinGecko (Market Data).
+- Backend: FastAPI, MongoDB (Motor)
+- Frontend: React.js
+- Blockchain: Web3.py / ethers.js for reading on-chain Ethereum/BSC/Polygon data.
+- Architecture: Monolith (pending microservices refactor).
 
 **key DB schema**
--   **orders:** Extended with .
--   **wallets:** Extended to track different balances more granularly.
--   **settlements:** A new collection to log  settlement transactions.
+- : {user_id, pair_id, side, leverage, entry_price, margin_amount, status}
+- : {user_id, asset, balance, linked_addresses: [{chain, address}]}
+- : {id, user_id, card_type, status, tracking_number}
 
 **changes in tech stack**
--    was installed in the backend for making synchronous/asynchronous HTTP requests to the NIUM API.
+- Transak SDK was briefly added but removed in favor of a completely custom internal exchange () per user request.
 
 **All files of reference**
--   **User Directive:** Message #239 and #242 contains the full 10-point implementation plan.
--   : NIUM API integration logic.
--   : Core logic for crypto-fiat conversion.
--   : Updated with advanced order types and paper trading.
--   : New endpoints for settlement and balance management.
--   : Updated endpoints for new order types.
--   : Updated to use the NIUM service.
+-  (Updated with margin endpoints)
+-  (Updated with )
+-  (Created, needs code)
+-  (Custom exchange backend)
+-  (Custom exchange frontend)
 
 **Areas that need refactoring**:
--   The user has explicitly approved moving towards a **microservices architecture**. The current monolithic structure, while logically separated into services and routes, is the primary candidate for architectural refactoring in the next major phase.
+-  and  are becoming bloated. The user has green-lit a transition to Microservices in the near future.
 
 **key api endpoints**
--   : Issues a virtual card via NIUM.
--   : Triggers the crypto-to-fiat settlement pipeline.
--   : Places a stop-loss order.
--   : Places a take-profit order.
--   : Enables/disables paper trading mode for a user.
+-  (Create margin account)
+-  (List margin positions)
+-  (Fetches combined internal and external synced balances)
+-  (Internal On/Off ramp execution)
 
 **Critical Info for New Agent**
--   **LANGUAGE:** You **MUST** communicate with the user in **Italian**.
--   **TOP PRIORITY:** Do not implement new features. Your immediate and only task is to conduct a thorough E2E test of the 10 features implemented in the last step. Use the  for this.
--   **NIUM API KEY:** The test key is in the user message #239: . This is required for testing the card issuing functionality.
--   **USER APPROVAL:** The user has given a clear go-ahead (message #242) for the full implementation, which is now complete. The next step is verification, not further planning or clarification.
+- **Language Constraint:** You MUST communicate with the user in **Italian**.
+- **Internal Exchange Priority:** The user explicitly requested to **stop depending on providers like Transak, MoonPay, etc.** The platform now uses its own internal  engine with NENO fixed at €10,000. Maintain this logic.
+- **Unified Wallet Rule:** The user stressed that internal crypto/fiat balances MUST mirror the external on-chain wallet values exactly. Ensure the  endpoint works flawlessly across the frontend and backend.
+- **NIUM API:** The user provided a live NIUM API key (). It is already configured in .
 
 **documents and test reports created in this job**
--   : Updated with all completed phases.
--   : Report from testing Phase 3 (Trading Engine).
--   : Report from testing Phase 2 (Market Data, Analytics, Cards).
--   : Report from testing Phase 1 (Core Economic Engine).
+-  (Updated with Phase 5 completion)
+- 
+- 
+-  (Phase 4 E2E tests)
+-  (Phase 5 Banking/Multichain)
+-  (Full Platform Production Test)
+-  (NENO Internal Exchange Test)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (LATEST):** Gave final confirmation to proceed with the entire 10-point implementation plan (P0, P1, P2) in one consolidated session, providing specific guidelines for each point. **Status: IN PROGRESS**
-2.  **Agent:** Presented a detailed, phased plan (P0, P1, P2) to tackle all 10 points from the user's directive and asked for confirmation. **Status: COMPLETED**
-3.  **User:** Provided a comprehensive 10-point Production Deployment Directive including NIUM integration (with API key), settlement engine, advanced trading orders, and a request for a Paper Trading environment. **Status: COMPLETED**
-4.  **Agent:** Finished the Trading & Developer Ecosystem (Phase 3) and presented the results and next steps. **Status: COMPLETED**
-5.  **User:** Confirmed to proceed with implementing Exchange Engine, TradingView, and Developer API, and also to research real card issuers like Marqeta/Stripe. **Status: COMPLETED**
-6.  **Agent:** Presented findings on card issuer partners (Marqeta, Stripe) and a plan to build the Exchange Engine, TradingView charts, and Developer API. **Status: COMPLETED**
-7.  **User:** Confirmed the roadmap and gave the green light to proceed with the Exchange Engine, TradingView, and Developer API, while also prioritizing real Visa/Mastercard integration. **Status: COMPLETED**
-8.  **Agent:** Finished implementing Phase 2 (Market Data, Admin Analytics, Crypto Cards) and presented the results and next steps. **Status: COMPLETED**
-9.  **User:** Approved the plan to implement Market Data, Multi-Chain support (deferred), Crypto Cards, and Admin analytics. **Status: COMPLETED**
-10. **Agent:** Analyzed the user's updated roadmap and proposed a plan to implement the next 4 items. **Status: COMPLETED**
+1. User: Requests Full Margin Trading, Multi-chain Token Discovery, and a Unified Wallet that mirrors internal/external balances. (Agent started working on this) -> IN PROGRESS
+2. User: Confirms building the internal NENO conversion engine bypassing Transak/MoonPay. -> COMPLETED
+3. User: Asks to build an internal On/Off-Ramp for NENO at €10,000 without 3rd party widgets. -> COMPLETED
+4. User: Reports Transak widget error (X-Frame-Options block). -> COMPLETED (Fixed via popup, later deprecated for internal exchange)
+5. User: Asks to test the whole platform in production with the new NIUM key. -> COMPLETED
+6. User: Provides live NIUM API key (). -> COMPLETED
+7. User: Requests integration of the official Transak widget for . -> COMPLETED (Initially done, then superseded)
+8. User: Re-confirms Phase 5 activation. -> COMPLETED
+9. User: Outlines Phase 5 Financial Infrastructure Activation (Real Cards, Crypto Payment Layer, Real Wallet sync, Banking Rails). -> COMPLETED
+10. User: Asks to promote  and  to Admin roles. -> COMPLETED
 
 **Project Health Check:**
--   **Working (Locally):** The application code is fully implemented and compiles. All services start without error.
--   **Broken / Untested:** The entire Final Execution Phase which includes critical financial pipelines like card issuing (NIUM), crypto-to-fiat settlement, and advanced trading orders, is **completely untested**. Its functionality is unknown and it should be considered non-operational until verified.
+- Broken:  UI is empty. Token Discovery is partially implemented on backend.
+- Mocked: IBAN / SEPA transfers (simulated banking rails).
 
 **3rd Party Integrations**
--   **NIUM:** (NEW, Untested) For virtual and physical card issuing.
--   **CoinGecko:** For crypto market data.
--   **Web3Modal / Wagmi:** For multi-wallet support.
--   **Resend:** For transactional emails.
--   **Stripe, Binance, Kraken, Coinbase, Transak:** Previously integrated.
--   **MongoDB:** Sole database.
+- NIUM (Card Issuing) — requires User API Key (Already configured)
+- Web3 RPCs (Blockchain sync) — No key required (public RPCs)
 
 **Testing status**
--   **Testing agent used after significant changes:** YES (for all phases prior to the last one).
--   **Troubleshoot agent used after agent stuck in loop:** NO
--   **Test files created:** None in this session.
--   **Known regressions:** The functionality of the 10 most recently added features is unknown.
+- Testing agent used after significant changes: YES ( generated for NENO Exchange).
+- Troubleshoot agent used after agent stuck in loop: NO
+- Test files created: None manually.
+- Known regressions: None.
 
 **Credentials to test flow:**
--   Admin User:
-    -   Email: 
-    -   Password: 
--   Regular User:
-    -   Email: 
-    -   Password: 
+- Admin:  (Admin1234!)
+- Admin 2:  (NeoAdmin@Mf93!)
+- Admin 3:  (NeoAdmin@Max22!)
+- Regular User:  (Test1234!)
 
 **What agent forgot to execute**
--   The agent did not get to run any tests on the massive set of 10 critical features it just implemented. The immediate next action should have been to call the , not to start manual  tests.</analysis>
+The agent modified the backend to support Margin Trading and Unified Wallets but exhausted its context window right after running . The agent forgot to actually write the React code for , forgot to implement Token Discovery logic in the blockchain listener, and forgot to integrate the new  endpoint into the existing frontend .</analysis>

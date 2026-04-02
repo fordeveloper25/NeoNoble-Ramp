@@ -27,7 +27,7 @@ def get_app_url():
                 if line.startswith('APP_URL='):
                     return line.split('=', 1)[1].strip().strip('"\'')
     # Fallback to environment variable then default
-    return os.environ.get('APP_URL', 'https://trading-settle.preview.emergentagent.com')
+    return os.environ.get('APP_URL', 'https://neon-margin-trade.preview.emergentagent.com')
 
 
 def get_sender_email():

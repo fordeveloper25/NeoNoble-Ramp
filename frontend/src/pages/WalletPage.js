@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   Wallet, ArrowLeft, RefreshCw, Loader2, ArrowRightLeft,
   CreditCard, Building, Link2, Unlink, Globe, ChevronDown,
-  ArrowUpRight, ArrowDownRight, Copy, Check
+  ArrowUpRight, ArrowDownRight, Copy, Check, Layers, Search, Sparkles
 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -36,6 +36,16 @@ export default function WalletPage() {
   const [bankingTxs, setBankingTxs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+
+  // Unified wallet state
+  const [unifiedAssets, setUnifiedAssets] = useState([]);
+  const [unifiedTotal, setUnifiedTotal] = useState(0);
+  const [unifiedLoading, setUnifiedLoading] = useState(false);
+
+  // Token discovery state
+  const [discoveredTokens, setDiscoveredTokens] = useState([]);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverChain, setDiscoverChain] = useState('ethereum');
 
   // Convert form
   const [showConvert, setShowConvert] = useState(false);
@@ -84,6 +94,31 @@ export default function WalletPage() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const fetchUnifiedWallet = useCallback(async () => {
+    setUnifiedLoading(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/multichain/unified-wallet`, { headers: headers() });
+      const data = await res.json();
+      setUnifiedAssets(data.assets || []);
+      setUnifiedTotal(data.total_eur_value || 0);
+    } catch (e) { console.error(e); }
+    finally { setUnifiedLoading(false); }
+  }, []);
+
+  useEffect(() => { if (tab === 'unified') fetchUnifiedWallet(); }, [tab, fetchUnifiedWallet]);
+
+  const handleDiscoverTokens = async (chain) => {
+    setDiscovering(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/multichain/discover-tokens`, {
+        method: 'POST', headers: headers(), body: JSON.stringify({ chain })
+      });
+      const data = await res.json();
+      setDiscoveredTokens(data.discovered_tokens || []);
+    } catch (e) { console.error(e); }
+    finally { setDiscovering(false); }
+  };
 
   const handleConvert = async (e) => {
     e.preventDefault();
@@ -160,6 +195,7 @@ export default function WalletPage() {
 
   const TABS = [
     { id: 'platform', label: 'Wallet', icon: Wallet },
+    { id: 'unified', label: 'Unificato', icon: Layers },
     { id: 'onchain', label: 'On-Chain', icon: Globe },
     { id: 'banking', label: 'Banking', icon: Building },
   ];
@@ -272,14 +308,99 @@ export default function WalletPage() {
           </div>
         )}
 
+        {/* UNIFIED WALLET TAB */}
+        {tab === 'unified' && (
+          <div className="space-y-4" data-testid="unified-wallet-tab">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h2 className="text-white font-bold text-lg">Wallet Unificato</h2>
+                <p className="text-gray-500 text-xs">Bilanci interni + on-chain sincronizzati</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <div className="text-gray-400 text-[10px] uppercase tracking-wider">Totale EUR</div>
+                  <div className="text-white font-bold text-xl font-mono" data-testid="unified-total">
+                    {unifiedLoading ? '...' : unifiedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                  </div>
+                </div>
+                <button onClick={fetchUnifiedWallet} disabled={unifiedLoading}
+                  className="p-2 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-colors">
+                  <RefreshCw className={`w-4 h-4 ${unifiedLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {unifiedLoading ? (
+              <div className="py-12 text-center"><Loader2 className="w-6 h-6 text-purple-500 animate-spin mx-auto" /></div>
+            ) : unifiedAssets.length === 0 ? (
+              <div className="py-12 text-center text-gray-500 text-sm">Nessun asset trovato. Deposita fondi o collega un wallet on-chain.</div>
+            ) : (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-800/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-gray-400 font-medium text-xs">Asset</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium text-xs">Interno</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium text-xs">Esterno (On-Chain)</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium text-xs">Totale</th>
+                        <th className="px-4 py-3 text-right text-gray-400 font-medium text-xs">Valore EUR</th>
+                        <th className="px-4 py-3 text-center text-gray-400 font-medium text-xs">Fonte</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800/50">
+                      {unifiedAssets.map(a => (
+                        <tr key={a.asset} className="hover:bg-gray-800/30" data-testid={`unified-asset-${a.asset}`}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500/30 to-violet-600/30 flex items-center justify-center text-white font-bold text-[10px]">
+                                {a.asset.slice(0, 2)}
+                              </div>
+                              <span className="text-white font-medium">{a.asset}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-300 font-mono text-xs">{a.internal_balance > 0 ? a.internal_balance.toFixed(6) : '-'}</td>
+                          <td className="px-4 py-3 text-right text-cyan-400 font-mono text-xs">{a.external_balance > 0 ? a.external_balance.toFixed(6) : '-'}</td>
+                          <td className="px-4 py-3 text-right text-white font-mono font-bold text-xs">{a.total_balance?.toFixed(6)}</td>
+                          <td className="px-4 py-3 text-right text-green-400 font-mono text-xs">{a.eur_value?.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                              a.source === 'both' ? 'bg-purple-500/20 text-purple-400' :
+                              a.source === 'external' ? 'bg-cyan-500/20 text-cyan-400' :
+                              'bg-gray-500/20 text-gray-400'
+                            }`}>
+                              {a.source === 'both' ? 'Sync' : a.source === 'external' ? 'On-Chain' : 'Piattaforma'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ON-CHAIN TAB */}
         {tab === 'onchain' && (
           <div className="space-y-4">
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4 flex-wrap">
               <button onClick={() => setShowLink(!showLink)} data-testid="link-wallet-btn"
                 className="flex items-center gap-2 bg-green-500/10 text-green-400 border border-green-500/30 px-4 py-2 rounded-lg text-sm hover:bg-green-500/20">
                 <Link2 className="w-4 h-4" />Collega Wallet
               </button>
+              <div className="flex items-center gap-2">
+                <select value={discoverChain} onChange={e => setDiscoverChain(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                  {chains.map(c => <option key={c.key} value={c.key}>{c.name}</option>)}
+                </select>
+                <button onClick={() => handleDiscoverTokens(discoverChain)} disabled={discovering} data-testid="discover-tokens-btn"
+                  className="flex items-center gap-2 bg-violet-500/10 text-violet-400 border border-violet-500/30 px-4 py-2 rounded-lg text-sm hover:bg-violet-500/20 disabled:opacity-50">
+                  {discovering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Scopri Token
+                </button>
+              </div>
             </div>
 
             {showLink && (
@@ -303,6 +424,35 @@ export default function WalletPage() {
                   {linkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Collega e Sincronizza'}
                 </button>
               </form>
+            )}
+
+            {/* Discovered Tokens */}
+            {discoveredTokens.length > 0 && (
+              <div className="bg-gray-900 border border-violet-500/20 rounded-xl overflow-hidden" data-testid="discovered-tokens">
+                <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-violet-400" />
+                  <span className="text-white font-medium text-sm">Token Scoperti ({discoveredTokens.length})</span>
+                </div>
+                <div className="divide-y divide-gray-800/50">
+                  {discoveredTokens.map((t, i) => (
+                    <div key={i} className="px-4 py-2.5 flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-full bg-violet-500/20 flex items-center justify-center text-violet-400 text-[10px] font-bold">
+                          {t.symbol?.slice(0, 2)}
+                        </div>
+                        <div>
+                          <div className="text-white font-medium text-xs">{t.symbol}</div>
+                          <div className="text-gray-500 text-[10px] font-mono truncate max-w-[200px]">{t.token_address}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-white font-mono text-xs">{t.balance > 0 ? t.balance.toFixed(6) : '0'}</div>
+                        {t.custom && <span className="text-[10px] text-violet-400">Custom</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Chain Status */}

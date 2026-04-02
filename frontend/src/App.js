@@ -24,6 +24,7 @@ import CardManagement from "./pages/CardManagement";
 import TradingPage from "./pages/TradingPage";
 import WalletPage from "./pages/WalletPage";
 import NenoExchange from "./pages/NenoExchange";
+import MarginTrading from "./pages/MarginTrading";
 import ApiDocs from "./pages/ApiDocs";
 import { usePageTracking } from "./hooks/usePageTracking";
 
@@ -225,6 +226,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <NenoExchange />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Margin Trading */}
+      <Route
+        path="/margin"
+        element={
+          <ProtectedRoute>
+            <MarginTrading />
           </ProtectedRoute>
         }
       />

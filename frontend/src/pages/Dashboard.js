@@ -356,6 +356,21 @@ export default function Dashboard() {
                   </div>
                 </Link>
                 <Link
+                  to="/margin"
+                  data-testid="margin-trading-link"
+                  className="p-4 bg-gradient-to-r from-red-600/20 to-orange-600/20 border border-red-500/30 rounded-xl hover:border-red-400/50 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center">
+                      <BarChart3 className="h-5 w-5 text-red-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium group-hover:text-red-400">Margin Trading</h3>
+                      <p className="text-gray-400 text-xs">Leva fino a 20x, Grafici PRO</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link
                   to="/wallet"
                   data-testid="wallet-banking-link"
                   className="p-4 bg-gradient-to-r from-teal-600/20 to-emerald-600/20 border border-teal-500/30 rounded-xl hover:border-teal-400/50 transition-all group"

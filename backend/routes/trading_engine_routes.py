@@ -488,10 +488,31 @@ async def get_trading_stats(current_user: dict = Depends(get_current_user)):
 
 
 
-# === MARGIN TRADING INFRASTRUCTURE ===
+# === FULL MARGIN TRADING ===
 
 class MarginAccountRequest(BaseModel):
     leverage: float = Field(default=2.0, ge=1, le=100)
+    collateral_asset: str = Field(default="EUR")
+    collateral_amount: float = Field(default=0, ge=0)
+
+
+class OpenPositionRequest(BaseModel):
+    pair_id: str
+    side: OrderSide
+    quantity: float = Field(gt=0)
+    leverage: float = Field(ge=1, le=100)
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+
+
+class ClosePositionRequest(BaseModel):
+    position_id: str
+
+
+class DepositMarginRequest(BaseModel):
+    asset: str = Field(default="EUR")
+    amount: float = Field(gt=0)
+
 
 @router.post("/margin/account")
 async def create_margin_account(request: MarginAccountRequest, current_user: dict = Depends(get_current_user)):
@@ -509,37 +530,169 @@ async def create_margin_account(request: MarginAccountRequest, current_user: dic
         "id": str(uuid.uuid4()),
         "user_id": current_user["user_id"],
         "max_leverage": request.leverage,
+        "collateral_asset": request.collateral_asset,
         "margin_balance": 0.0,
         "borrowed_amount": 0.0,
+        "unrealized_pnl": 0.0,
         "maintenance_margin_pct": 0.05,
-        "liquidation_price": None,
+        "margin_level": 0.0,
         "status": "active",
-        "positions": [],
+        "total_positions": 0,
+        "total_realized_pnl": 0.0,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.margin_accounts.insert_one({**account, "_id": account["id"]})
     return {"message": "Margin account created", "account": account}
 
 
+@router.post("/margin/deposit")
+async def deposit_margin(request: DepositMarginRequest, current_user: dict = Depends(get_current_user)):
+    """Deposit collateral into margin account from wallet."""
+    db = get_database()
+    uid = current_user["user_id"]
+    account = await db.margin_accounts.find_one({"user_id": uid})
+    if not account:
+        raise HTTPException(status_code=404, detail="Margin account not found. Create one first.")
+    wallet = await db.wallets.find_one({"user_id": uid, "asset": request.asset.upper()})
+    balance = wallet.get("balance", 0) if wallet else 0
+    if balance < request.amount:
+        raise HTTPException(status_code=400, detail=f"Saldo {request.asset} insufficiente: {balance}")
+    await db.wallets.update_one({"user_id": uid, "asset": request.asset.upper()}, {"$inc": {"balance": -request.amount}})
+    await db.margin_accounts.update_one({"user_id": uid}, {"$inc": {"margin_balance": request.amount}})
+    return {"message": f"Depositati {request.amount} {request.asset} nel margin account", "new_margin_balance": (account.get("margin_balance", 0) + request.amount)}
+
+
+@router.post("/margin/withdraw")
+async def withdraw_margin(request: DepositMarginRequest, current_user: dict = Depends(get_current_user)):
+    """Withdraw collateral from margin account to wallet."""
+    db = get_database()
+    uid = current_user["user_id"]
+    account = await db.margin_accounts.find_one({"user_id": uid})
+    if not account:
+        raise HTTPException(status_code=404, detail="Margin account not found")
+    available = account.get("margin_balance", 0) - account.get("borrowed_amount", 0)
+    if available < request.amount:
+        raise HTTPException(status_code=400, detail=f"Margine disponibile insufficiente: {available:.2f}")
+    await db.margin_accounts.update_one({"user_id": uid}, {"$inc": {"margin_balance": -request.amount}})
+    await db.wallets.update_one(
+        {"user_id": uid, "asset": request.asset.upper()},
+        {"$inc": {"balance": request.amount}, "$setOnInsert": {"user_id": uid, "asset": request.asset.upper()}},
+        upsert=True,
+    )
+    return {"message": f"Prelevati {request.amount} {request.asset} dal margin account"}
+
+
+@router.post("/margin/open")
+async def open_margin_position(request: OpenPositionRequest, current_user: dict = Depends(get_current_user)):
+    """Open a leveraged margin position."""
+    db = get_database()
+    uid = current_user["user_id"]
+    account = await db.margin_accounts.find_one({"user_id": uid})
+    if not account or account.get("status") != "active":
+        raise HTTPException(status_code=400, detail="Margin account non attivo")
+    if request.leverage > account.get("max_leverage", 10):
+        raise HTTPException(status_code=400, detail=f"Leverage massimo: {account['max_leverage']}x")
+    ref_price = REF_PRICES.get(request.pair_id)
+    if not ref_price:
+        raise HTTPException(status_code=404, detail="Trading pair not found")
+    notional = ref_price * request.quantity
+    required_margin = notional / request.leverage
+    margin_balance = account.get("margin_balance", 0)
+    if margin_balance < required_margin:
+        raise HTTPException(status_code=400, detail=f"Margine insufficiente: serve {required_margin:.2f}, disponibile {margin_balance:.2f}")
+    liq_price = ref_price * (1 - 1 / request.leverage * 0.9) if request.side == OrderSide.BUY else ref_price * (1 + 1 / request.leverage * 0.9)
+    position = {
+        "id": str(uuid.uuid4()),
+        "user_id": uid,
+        "pair_id": request.pair_id,
+        "side": request.side.value,
+        "quantity": request.quantity,
+        "entry_price": ref_price,
+        "current_price": ref_price,
+        "leverage": request.leverage,
+        "notional_value": round(notional, 2),
+        "margin_used": round(required_margin, 2),
+        "unrealized_pnl": 0.0,
+        "unrealized_pnl_pct": 0.0,
+        "liquidation_price": round(liq_price, 2),
+        "stop_loss": request.stop_loss,
+        "take_profit": request.take_profit,
+        "status": "open",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.margin_positions.insert_one({**position, "_id": position["id"]})
+    await db.margin_accounts.update_one(
+        {"user_id": uid},
+        {"$inc": {"margin_balance": -required_margin, "borrowed_amount": notional - required_margin, "total_positions": 1}},
+    )
+    return {"message": f"Posizione {request.side.value} {request.quantity} {request.pair_id} @ {ref_price} aperta con leva {request.leverage}x", "position": position}
+
+
+@router.post("/margin/close")
+async def close_margin_position(request: ClosePositionRequest, current_user: dict = Depends(get_current_user)):
+    """Close a margin position and realize PnL."""
+    db = get_database()
+    uid = current_user["user_id"]
+    position = await db.margin_positions.find_one({"id": request.position_id, "user_id": uid, "status": "open"})
+    if not position:
+        raise HTTPException(status_code=404, detail="Posizione non trovata o gia chiusa")
+    current_price = REF_PRICES.get(position["pair_id"], position["entry_price"])
+    qty = position["quantity"]
+    entry = position["entry_price"]
+    if position["side"] == "buy":
+        pnl = (current_price - entry) * qty
+    else:
+        pnl = (entry - current_price) * qty
+    pnl_pct = (pnl / position["margin_used"]) * 100 if position.get("margin_used", 0) > 0 else 0
+    margin_return = position["margin_used"] + pnl
+    await db.margin_positions.update_one(
+        {"id": request.position_id},
+        {"$set": {"status": "closed", "exit_price": current_price, "realized_pnl": round(pnl, 2), "realized_pnl_pct": round(pnl_pct, 2), "closed_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    borrowed_return = position.get("notional_value", 0) - position["margin_used"]
+    await db.margin_accounts.update_one(
+        {"user_id": uid},
+        {"$inc": {"margin_balance": max(margin_return, 0), "borrowed_amount": -borrowed_return, "total_realized_pnl": pnl}},
+    )
+    return {"message": f"Posizione chiusa @ {current_price}. PnL: {pnl:+.2f} EUR ({pnl_pct:+.1f}%)", "realized_pnl": round(pnl, 2), "margin_returned": round(max(margin_return, 0), 2)}
+
+
 @router.get("/margin/account")
 async def get_margin_account(current_user: dict = Depends(get_current_user)):
-    """Get margin account details."""
+    """Get margin account with live PnL calculation."""
     db = get_database()
-    account = await db.margin_accounts.find_one(
-        {"user_id": current_user["user_id"]}, {"_id": 0}
-    )
+    account = await db.margin_accounts.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
     if not account:
         return {"message": "No margin account", "account": None}
+    positions = await db.margin_positions.find({"user_id": current_user["user_id"], "status": "open"}, {"_id": 0}).to_list(100)
+    total_unrealized = 0
+    for p in positions:
+        cp = REF_PRICES.get(p["pair_id"], p["entry_price"])
+        pnl = (cp - p["entry_price"]) * p["quantity"] if p["side"] == "buy" else (p["entry_price"] - cp) * p["quantity"]
+        p["current_price"] = cp
+        p["unrealized_pnl"] = round(pnl, 2)
+        p["unrealized_pnl_pct"] = round((pnl / p["margin_used"]) * 100, 2) if p.get("margin_used", 0) > 0 else 0
+        total_unrealized += pnl
+    account["unrealized_pnl"] = round(total_unrealized, 2)
+    equity = account.get("margin_balance", 0) + total_unrealized
+    borrowed = account.get("borrowed_amount", 0)
+    account["equity"] = round(equity, 2)
+    account["margin_level"] = round((equity / borrowed * 100), 2) if borrowed > 0 else 999.99
+    account["open_positions"] = positions
     return {"account": account}
 
 
 @router.get("/margin/positions")
 async def get_margin_positions(current_user: dict = Depends(get_current_user)):
-    """Get open margin positions."""
+    """Get all margin positions (open + closed)."""
     db = get_database()
-    positions = await db.margin_positions.find(
-        {"user_id": current_user["user_id"], "status": "open"}, {"_id": 0}
-    ).to_list(100)
+    positions = await db.margin_positions.find({"user_id": current_user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for p in positions:
+        if p.get("status") == "open":
+            cp = REF_PRICES.get(p["pair_id"], p["entry_price"])
+            pnl = (cp - p["entry_price"]) * p["quantity"] if p["side"] == "buy" else (p["entry_price"] - cp) * p["quantity"]
+            p["current_price"] = cp
+            p["unrealized_pnl"] = round(pnl, 2)
     return {"positions": positions}
 
 
