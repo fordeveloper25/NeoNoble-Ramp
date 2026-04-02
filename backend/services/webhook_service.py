@@ -61,6 +61,28 @@ class WebhookEventType(str, Enum):
     # General Events
     QUOTE_EXPIRED = "quote.expired"
     QUOTE_CANCELLED = "quote.cancelled"
+    
+    # KYC / Compliance Events
+    KYC_SUBMITTED = "kyc.submitted"
+    KYC_APPROVED = "kyc.approved"
+    KYC_REJECTED = "kyc.rejected"
+    KYC_TIER_UPGRADED = "kyc.tier.upgraded"
+    AML_ALERT_CREATED = "aml.alert.created"
+    AML_ALERT_ESCALATED = "aml.alert.escalated"
+    
+    # Referral Events
+    REFERRAL_CODE_APPLIED = "referral.code.applied"
+    REFERRAL_BONUS_PAID = "referral.bonus.paid"
+    
+    # Trading Events
+    TRADE_EXECUTED = "trade.executed"
+    MARGIN_POSITION_OPENED = "margin.position.opened"
+    MARGIN_POSITION_CLOSED = "margin.position.closed"
+    MARGIN_LIQUIDATION = "margin.liquidation"
+    
+    # DCA Events
+    DCA_PLAN_CREATED = "dca.plan.created"
+    DCA_EXECUTION = "dca.execution"
 
 
 class WebhookDeliveryStatus(str, Enum):

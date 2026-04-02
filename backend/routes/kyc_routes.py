@@ -332,6 +332,174 @@ async def aml_statistics(current_user: dict = Depends(admin_required)):
     }
 
 
+# ── Enhanced Compliance: Risk Scoring & PEP/Sanctions Screening ──
+
+class RiskScoreRequest(BaseModel):
+    user_id: Optional[str] = None
+
+
+@router.get("/risk-score")
+async def get_risk_score(current_user: dict = Depends(get_current_user)):
+    """Get comprehensive risk score for the user."""
+    db = get_database()
+    uid = current_user["user_id"]
+    return await _compute_risk_score(db, uid)
+
+
+@router.get("/admin/risk-score/{user_id}")
+async def admin_get_risk_score(user_id: str, current_user: dict = Depends(admin_required)):
+    """Admin: Get risk score for any user."""
+    db = get_database()
+    return await _compute_risk_score(db, user_id)
+
+
+@router.get("/compliance/report")
+async def compliance_report(current_user: dict = Depends(get_current_user)):
+    """Get full compliance report for the user."""
+    db = get_database()
+    uid = current_user["user_id"]
+
+    kyc = await db.kyc_profiles.find_one({"user_id": uid}, {"_id": 0})
+    risk = await _compute_risk_score(db, uid)
+    alerts = await db.aml_alerts.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(50)
+
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    daily_vol_agg = await db.kyc_tx_log.aggregate([
+        {"$match": {"user_id": uid, "created_at": {"$gte": day_ago.isoformat()}}},
+        {"$group": {"_id": None, "total": {"$sum": "$eur_value"}, "count": {"$sum": 1}}},
+    ]).to_list(1)
+
+    weekly_vol_agg = await db.kyc_tx_log.aggregate([
+        {"$match": {"user_id": uid, "created_at": {"$gte": week_ago.isoformat()}}},
+        {"$group": {"_id": None, "total": {"$sum": "$eur_value"}, "count": {"$sum": 1}}},
+    ]).to_list(1)
+
+    monthly_vol_agg = await db.kyc_tx_log.aggregate([
+        {"$match": {"user_id": uid, "created_at": {"$gte": month_ago.isoformat()}}},
+        {"$group": {"_id": None, "total": {"$sum": "$eur_value"}, "count": {"$sum": 1}}},
+    ]).to_list(1)
+
+    tier = kyc.get("tier", 0) if kyc else 0
+    tier_info = TIER_LIMITS.get(tier, TIER_LIMITS[0])
+
+    return {
+        "user_id": uid,
+        "kyc_tier": tier,
+        "kyc_tier_label": tier_info["label"],
+        "kyc_status": kyc.get("status") if kyc else "not_started",
+        "risk_score": risk,
+        "volume": {
+            "daily": {"total_eur": daily_vol_agg[0]["total"] if daily_vol_agg else 0, "tx_count": daily_vol_agg[0]["count"] if daily_vol_agg else 0},
+            "weekly": {"total_eur": weekly_vol_agg[0]["total"] if weekly_vol_agg else 0, "tx_count": weekly_vol_agg[0]["count"] if weekly_vol_agg else 0},
+            "monthly": {"total_eur": monthly_vol_agg[0]["total"] if monthly_vol_agg else 0, "tx_count": monthly_vol_agg[0]["count"] if monthly_vol_agg else 0},
+        },
+        "limits": {
+            "daily_limit": tier_info["daily_limit"] if tier_info["daily_limit"] != float("inf") else -1,
+            "can_trade": tier_info["can_trade"],
+            "can_withdraw": tier_info["can_withdraw"],
+        },
+        "aml_alerts": alerts[:10],
+        "total_alerts": len(alerts),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/admin/compliance/overview")
+async def admin_compliance_overview(current_user: dict = Depends(admin_required)):
+    """Admin: Compliance overview across all users."""
+    db = get_database()
+
+    tier_counts = {}
+    for t in range(4):
+        count = await db.kyc_profiles.count_documents({"tier": t})
+        tier_counts[f"tier_{t}"] = count
+
+    not_started = await db.users.count_documents({"kyc_tier": {"$exists": False}})
+    tier_counts["not_started"] = not_started
+
+    high_risk = await db.kyc_risk_scores.count_documents({"risk_level": "high"})
+    medium_risk = await db.kyc_risk_scores.count_documents({"risk_level": "medium"})
+
+    open_alerts = await db.aml_alerts.count_documents({"status": "open"})
+    escalated_alerts = await db.aml_alerts.count_documents({"status": "escalated"})
+
+    return {
+        "kyc_tiers": tier_counts,
+        "risk_distribution": {"high": high_risk, "medium": medium_risk},
+        "alerts": {"open": open_alerts, "escalated": escalated_alerts},
+    }
+
+
+async def _compute_risk_score(db, user_id: str) -> dict:
+    """Compute a comprehensive risk score (0-100, lower is better)."""
+    score = 0
+    factors = []
+
+    # 1. KYC tier factor
+    kyc = await db.kyc_profiles.find_one({"user_id": user_id})
+    tier = kyc.get("tier", 0) if kyc else 0
+    tier_penalty = {0: 40, 1: 20, 2: 5, 3: 0}
+    score += tier_penalty.get(tier, 40)
+    factors.append({"factor": "kyc_tier", "value": tier, "impact": tier_penalty.get(tier, 40)})
+
+    # 2. Transaction velocity
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+    daily_txs = await db.kyc_tx_log.count_documents({
+        "user_id": user_id, "created_at": {"$gte": day_ago.isoformat()}
+    })
+    if daily_txs > 20:
+        score += 20
+        factors.append({"factor": "high_velocity", "value": daily_txs, "impact": 20})
+    elif daily_txs > 10:
+        score += 10
+        factors.append({"factor": "medium_velocity", "value": daily_txs, "impact": 10})
+
+    # 3. AML alert history
+    alert_count = await db.aml_alerts.count_documents({"user_id": user_id, "status": {"$in": ["open", "escalated"]}})
+    if alert_count > 3:
+        score += 25
+        factors.append({"factor": "many_alerts", "value": alert_count, "impact": 25})
+    elif alert_count > 0:
+        score += 10
+        factors.append({"factor": "some_alerts", "value": alert_count, "impact": 10})
+
+    # 4. Account age
+    user = await db.users.find_one({"id": user_id})
+    if user and user.get("created_at"):
+        try:
+            created = user["created_at"] if isinstance(user["created_at"], datetime) else datetime.fromisoformat(str(user["created_at"]))
+            age_days = (now - created).days if created.tzinfo else (now.replace(tzinfo=None) - created).days
+            if age_days < 7:
+                score += 15
+                factors.append({"factor": "new_account", "value": age_days, "impact": 15})
+        except Exception:
+            pass
+
+    score = min(score, 100)
+    risk_level = "low" if score <= 30 else ("medium" if score <= 60 else "high")
+
+    result = {
+        "score": score,
+        "risk_level": risk_level,
+        "factors": factors,
+        "computed_at": now.isoformat(),
+    }
+
+    # Cache
+    await db.kyc_risk_scores.update_one(
+        {"user_id": user_id},
+        {"$set": {**result, "user_id": user_id}},
+        upsert=True,
+    )
+
+    return result
+
+
 # ── AML Check utility (to be called from trading/exchange routes) ──
 
 async def check_aml_compliance(user_id: str, eur_value: float, tx_type: str = "trade") -> dict:

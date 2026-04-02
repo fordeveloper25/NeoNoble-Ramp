@@ -33,6 +33,7 @@ import ApiDocs from "./pages/ApiDocs";
 import AuditLog from "./pages/AuditLog";
 import PortfolioTracker from "./pages/PortfolioTracker";
 import DCABot from "./pages/DCABot";
+import ReferralPage from "./pages/ReferralPage";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -309,6 +310,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <DCABot />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Referral */}
+      <Route
+        path="/referral"
+        element={
+          <ProtectedRoute>
+            <ReferralPage />
           </ProtectedRoute>
         }
       />

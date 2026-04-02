@@ -14,6 +14,7 @@ const LANGUAGES = [
   { code: 'en', label: 'English', flag: 'EN' },
   { code: 'de', label: 'Deutsch', flag: 'DE' },
   { code: 'fr', label: 'Francais', flag: 'FR' },
+  { code: 'es', label: 'Espanol', flag: 'ES' },
 ];
 
 export default function SettingsPage() {

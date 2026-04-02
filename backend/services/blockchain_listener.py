@@ -201,16 +201,37 @@ class BlockchainListener:
             # Pad address to 32 bytes for topic filter
             padded_address = "0x" + address[2:].lower().zfill(64)
             
-            logs = web3.eth.get_logs({
-                'fromBlock': from_block,
-                'toBlock': to_block,
-                'address': Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
-                'topics': [
-                    transfer_topic,
-                    None,  # from (any)
-                    padded_address  # to (our address)
-                ]
-            })
+            try:
+                logs = web3.eth.get_logs({
+                    'fromBlock': hex(from_block),
+                    'toBlock': hex(to_block),
+                    'address': Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
+                    'topics': [
+                        transfer_topic,
+                        None,  # from (any)
+                        padded_address  # to (our address)
+                    ]
+                })
+            except Exception as rpc_err:
+                err_str = str(rpc_err)
+                if "-32602" in err_str or "invalid argument" in err_str.lower():
+                    logger.debug(f"RPC parameter format issue for {address[:10]}..., retrying with int blocks")
+                    try:
+                        logs = web3.eth.get_logs({
+                            'fromBlock': from_block,
+                            'toBlock': to_block,
+                            'address': Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
+                            'topics': [
+                                transfer_topic,
+                                None,
+                                padded_address
+                            ]
+                        })
+                    except Exception:
+                        logger.debug(f"RPC get_logs fallback also failed for {address[:10]}...")
+                        return transfers
+                else:
+                    raise
             
             for log in logs:
                 tx_hash = log['transactionHash'].hex()

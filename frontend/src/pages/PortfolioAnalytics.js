@@ -90,19 +90,26 @@ export default function PortfolioAnalytics() {
   const [marginPositions, setMarginPositions] = useState([]);
   const [pnlData, setPnlData] = useState([]);
   const [period, setPeriod] = useState('7d');
+  const [riskMetrics, setRiskMetrics] = useState(null);
+  const [diversification, setDiversification] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [wRes, tRes, mRes] = await Promise.all([
+      const [wRes, tRes, mRes, riskRes, divRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/wallet/balances`, { headers: headers() }),
         fetch(`${BACKEND_URL}/api/trading/trades?limit=100`, { headers: headers() }),
         fetch(`${BACKEND_URL}/api/trading/margin/positions`, { headers: headers() }),
+        fetch(`${BACKEND_URL}/api/analytics/advanced/portfolio-risk?days=30`, { headers: headers() }).catch(() => null),
+        fetch(`${BACKEND_URL}/api/analytics/advanced/correlation?days=30`, { headers: headers() }).catch(() => null),
       ]);
       const [wData, tData, mData] = await Promise.all([wRes.json(), tRes.json(), mRes.json()]);
       setWallets(wData.wallets || []);
       setTotalEur(wData.total_eur_value || 0);
       setTrades(tData.trades || []);
       setMarginPositions(mData.positions || []);
+
+      if (riskRes && riskRes.ok) setRiskMetrics(await riskRes.json());
+      if (divRes && divRes.ok) setDiversification(await divRes.json());
 
       // Generate PnL curve from trades
       const sorted = (tData.trades || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -176,6 +183,62 @@ export default function PortfolioAnalytics() {
             </div>
           ))}
         </div>
+
+        {/* Advanced Risk Metrics */}
+        {riskMetrics && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4" data-testid="risk-metrics-section">
+            <h3 className="text-white font-medium text-sm mb-3 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-purple-400" /> Metriche di Rischio Avanzate
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'Sharpe Ratio', value: riskMetrics.sharpe_ratio != null ? riskMetrics.sharpe_ratio.toFixed(3) : 'N/A', color: riskMetrics.sharpe_ratio > 1 ? 'text-emerald-400' : riskMetrics.sharpe_ratio > 0 ? 'text-amber-400' : 'text-red-400' },
+                { label: 'Sortino Ratio', value: riskMetrics.sortino_ratio != null ? riskMetrics.sortino_ratio.toFixed(3) : 'N/A', color: riskMetrics.sortino_ratio > 1 ? 'text-emerald-400' : 'text-amber-400' },
+                { label: 'Max Drawdown', value: riskMetrics.max_drawdown ? `-${riskMetrics.max_drawdown.toFixed(2)} EUR` : '0', color: 'text-red-400' },
+                { label: 'Volatilita Ann.', value: riskMetrics.volatility_annual ? riskMetrics.volatility_annual.toFixed(4) : '0', color: 'text-blue-400' },
+                { label: 'Miglior Giorno', value: riskMetrics.best_day ? `+${riskMetrics.best_day.toFixed(2)}` : '0', color: 'text-emerald-400' },
+                { label: 'Peggior Giorno', value: riskMetrics.worst_day ? `${riskMetrics.worst_day.toFixed(2)}` : '0', color: 'text-red-400' },
+                { label: 'Giorni Positivi', value: riskMetrics.win_days || 0, color: 'text-emerald-400' },
+                { label: 'Giorni Negativi', value: riskMetrics.loss_days || 0, color: 'text-red-400' },
+              ].map(m => (
+                <div key={m.label} className="bg-zinc-800/50 rounded-lg p-3" data-testid={`risk-${m.label.toLowerCase().replace(/ /g, '-')}`}>
+                  <div className="text-zinc-500 text-[10px] mb-1">{m.label}</div>
+                  <div className={`text-sm font-mono font-bold ${m.color}`}>{m.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Diversification Score */}
+        {diversification && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4" data-testid="diversification-section">
+            <h3 className="text-white font-medium text-sm mb-3">Score Diversificazione</h3>
+            <div className="flex items-center gap-4">
+              <div className="relative w-20 h-20">
+                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="#27272a" strokeWidth="8" />
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="#a78bfa" strokeWidth="8"
+                    strokeDasharray={`${diversification.diversification_score * 2.51} 251`} strokeLinecap="round" />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">{diversification.diversification_score}%</div>
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="text-zinc-400 text-xs">{diversification.asset_count} asset in portfolio</div>
+                <div className="text-zinc-400 text-xs">HHI Index: {diversification.hhi_index}</div>
+                {diversification.breakdown?.slice(0, 5).map(b => (
+                  <div key={b.asset} className="flex items-center gap-2 text-xs">
+                    <span className="text-zinc-300 w-12">{b.asset}</span>
+                    <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
+                      <div className="h-full bg-purple-500 rounded-full" style={{ width: `${Math.min(b.weight, 100)}%` }} />
+                    </div>
+                    <span className="text-zinc-500 w-12 text-right">{b.weight}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* PnL Chart */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">

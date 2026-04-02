@@ -194,6 +194,12 @@ from routes.alert_routes import router as alert_router
 # Import DCA Bot routes
 from routes.dca_routes import router as dca_router
 
+# Import Referral System routes
+from routes.referral_routes import router as referral_router
+
+# Import Advanced Analytics routes
+from routes.advanced_analytics_routes import router as advanced_analytics_router
+
 # Initialize services
 auth_service = AuthService(db)
 api_key_service = PlatformApiKeyService(db)
@@ -378,6 +384,16 @@ async def lifespan(app: FastAPI):
     await db.dca_executions.create_index([("plan_id", 1), ("executed_at", -1)])
     await db.dca_executions.create_index("id", unique=True)
     await db.sms_log.create_index([("user_id", 1), ("sent_at", -1)])
+    
+    # Referral indexes
+    await db.referral_codes.create_index("code", unique=True)
+    await db.referral_codes.create_index("user_id", unique=True)
+    await db.referral_links.create_index("referred_user_id", unique=True)
+    await db.referral_links.create_index("referrer_user_id")
+    await db.referral_bonus_log.create_index([("user_id", 1), ("created_at", -1)])
+    
+    # KYC risk score indexes
+    await db.kyc_risk_scores.create_index("user_id", unique=True)
     
     # Initialize wallet service
     try:
@@ -668,6 +684,8 @@ api_router.include_router(export_router)
 api_router.include_router(nium_onboarding_router)
 api_router.include_router(alert_router)
 api_router.include_router(dca_router)
+api_router.include_router(referral_router)
+api_router.include_router(advanced_analytics_router)
 
 # Set monitoring services
 set_monitoring_services(audit_logger, por_engine, settlement_service)
