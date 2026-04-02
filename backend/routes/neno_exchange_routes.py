@@ -8,6 +8,8 @@ Supports:
 - Buy NENO with: BNB, ETH, USDT, BTC, USDC, MATIC, EUR, USD
 - Sell NENO for:  BNB, ETH, USDT, BTC, USDC, MATIC, EUR, USD
 - Off-ramp to card (NIUM) or bank account (SEPA)
+- Create custom tokens with specified price
+- Swap any token pair through NENO as bridge
 """
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -22,10 +24,10 @@ from routes.auth import get_current_user
 
 router = APIRouter(prefix="/neno-exchange", tags=["NENO Exchange"])
 
-# ── Base NENO price — now dynamically adjusted based on order book pressure ──
+# ── Base NENO price — dynamically adjusted based on order book pressure ──
 NENO_BASE_PRICE = 10_000.0
-NENO_MAX_DEVIATION = 0.05  # Max 5% deviation from base
-PRICE_IMPACT_FACTOR = 0.0001  # Price impact per NENO traded
+NENO_MAX_DEVIATION = 0.05
+PRICE_IMPACT_FACTOR = 0.0001
 
 # ── Market reference prices (EUR) — synced with settlement engine ──
 MARKET_PRICES_EUR = {
@@ -53,7 +55,6 @@ async def _get_dynamic_neno_price() -> dict:
     now = datetime.now(timezone.utc)
     window = now - timedelta(hours=24)
 
-    # Aggregate buy vs sell volume in last 24h
     pipeline = [
         {"$match": {"created_at": {"$gte": window}}},
         {"$group": {
@@ -71,10 +72,8 @@ async def _get_dynamic_neno_price() -> dict:
         elif row["_id"] in ("sell_neno", "offramp_card", "offramp_bank"):
             sell_vol += row["total_neno"]
 
-    # Net pressure: positive = more buying = price goes up
     net_pressure = buy_vol - sell_vol
     price_shift = net_pressure * PRICE_IMPACT_FACTOR
-    # Clamp deviation
     max_shift = NENO_BASE_PRICE * NENO_MAX_DEVIATION
     price_shift = max(-max_shift, min(max_shift, price_shift))
 
@@ -98,9 +97,20 @@ def _neno_rate_with_price(asset: str, neno_price: float) -> float:
     return neno_price / price_eur
 
 
-def _neno_rate(asset: str) -> float:
-    """Legacy rate using base price (for sync compatibility)."""
-    return _neno_rate_with_price(asset, NENO_BASE_PRICE)
+async def _get_custom_token_price(db, symbol: str) -> Optional[float]:
+    """Get price in EUR for a custom token from DB."""
+    token = await db.custom_tokens.find_one({"symbol": symbol.upper()}, {"_id": 0})
+    if token:
+        return token.get("price_eur", 0)
+    return None
+
+
+async def _get_any_price_eur(db, asset: str) -> Optional[float]:
+    """Get EUR price for built-in OR custom token."""
+    asset = asset.upper()
+    if asset in MARKET_PRICES_EUR:
+        return MARKET_PRICES_EUR[asset]
+    return await _get_custom_token_price(db, asset)
 
 
 class BuyNenoRequest(BaseModel):
@@ -119,6 +129,20 @@ class OfframpRequest(BaseModel):
     card_id: Optional[str] = None
     destination_iban: Optional[str] = None
     beneficiary_name: Optional[str] = None
+
+
+class CreateTokenRequest(BaseModel):
+    symbol: str = Field(min_length=2, max_length=10, description="Token ticker (e.g. MYTOKEN)")
+    name: str = Field(min_length=1, max_length=50, description="Token display name")
+    price_eur: float = Field(gt=0, description="Price in EUR per token")
+    total_supply: float = Field(gt=0, default=1_000_000, description="Total supply to mint")
+    description: Optional[str] = None
+
+
+class SwapRequest(BaseModel):
+    from_asset: str = Field(description="Asset to sell")
+    to_asset: str = Field(description="Asset to receive")
+    amount: float = Field(gt=0, description="Amount of from_asset to swap")
 
 
 # ── helpers ──
@@ -144,14 +168,15 @@ async def _debit(db, user_id: str, asset: str, amount: float):
 
 
 async def _log_tx(db, tx: dict):
-    await db.neno_transactions.insert_one({**tx, "_id": tx["id"]})
+    doc = {**tx}
+    doc["_id"] = doc["id"]
+    await db.neno_transactions.insert_one(doc)
 
 
 # ── Dynamic Price endpoint ──
 
 @router.get("/price")
 async def get_neno_price():
-    """Get current dynamic NENO price with market pressure data."""
     pricing = await _get_dynamic_neno_price()
     return {
         "neno_eur_price": pricing["price"],
@@ -169,51 +194,36 @@ async def get_neno_price():
 # ── Quote ──
 
 @router.get("/quote")
-async def get_quote(
-    direction: str = "buy",
-    asset: str = "EUR",
-    neno_amount: float = 1.0,
-):
-    """Get a live quote for buying or selling NENO with dynamic pricing."""
+async def get_quote(direction: str = "buy", asset: str = "EUR", neno_amount: float = 1.0):
     asset = asset.upper()
-    if asset not in MARKET_PRICES_EUR:
+    db = get_database()
+    price_eur = await _get_any_price_eur(db, asset)
+    if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
     pricing = await _get_dynamic_neno_price()
     neno_eur_price = pricing["price"]
-    rate = _neno_rate_with_price(asset, neno_eur_price)
+    rate = neno_eur_price / price_eur
     gross = round(neno_amount * rate, 8)
     fee = round(gross * PLATFORM_FEE, 8)
 
     if direction == "buy":
         total_cost = round(gross + fee, 8)
         return {
-            "direction": "buy",
-            "neno_amount": neno_amount,
-            "pay_asset": asset,
-            "rate": round(rate, 8),
-            "neno_eur_price": neno_eur_price,
-            "base_price": NENO_BASE_PRICE,
-            "price_shift_pct": pricing["shift_pct"],
-            "gross_cost": gross,
-            "fee": fee,
-            "fee_percent": PLATFORM_FEE * 100,
+            "direction": "buy", "neno_amount": neno_amount, "pay_asset": asset,
+            "rate": round(rate, 8), "neno_eur_price": neno_eur_price,
+            "base_price": NENO_BASE_PRICE, "price_shift_pct": pricing["shift_pct"],
+            "gross_cost": gross, "fee": fee, "fee_percent": PLATFORM_FEE * 100,
             "total_cost": total_cost,
             "summary": f"Per acquistare {neno_amount} NENO servono {total_cost} {asset} (fee {PLATFORM_FEE*100}%)",
         }
     else:
         net_receive = round(gross - fee, 8)
         return {
-            "direction": "sell",
-            "neno_amount": neno_amount,
-            "receive_asset": asset,
-            "rate": round(rate, 8),
-            "neno_eur_price": neno_eur_price,
-            "base_price": NENO_BASE_PRICE,
-            "price_shift_pct": pricing["shift_pct"],
-            "gross_value": gross,
-            "fee": fee,
-            "fee_percent": PLATFORM_FEE * 100,
+            "direction": "sell", "neno_amount": neno_amount, "receive_asset": asset,
+            "rate": round(rate, 8), "neno_eur_price": neno_eur_price,
+            "base_price": NENO_BASE_PRICE, "price_shift_pct": pricing["shift_pct"],
+            "gross_value": gross, "fee": fee, "fee_percent": PLATFORM_FEE * 100,
             "net_receive": net_receive,
             "summary": f"Vendendo {neno_amount} NENO ricevi {net_receive} {asset} (fee {PLATFORM_FEE*100}%)",
         }
@@ -223,17 +233,17 @@ async def get_quote(
 
 @router.post("/buy")
 async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current_user)):
-    """Buy NENO paying with any supported asset. Credits NENO to wallet."""
     db = get_database()
     uid = current_user["user_id"]
     asset = req.pay_asset.upper()
 
-    if asset not in MARKET_PRICES_EUR:
+    price_eur = await _get_any_price_eur(db, asset)
+    if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
     pricing = await _get_dynamic_neno_price()
     neno_eur_price = pricing["price"]
-    rate = _neno_rate_with_price(asset, neno_eur_price)
+    rate = neno_eur_price / price_eur
     gross_cost = round(req.neno_amount * rate, 8)
     fee = round(gross_cost * PLATFORM_FEE, 8)
     total_cost = round(gross_cost + fee, 8)
@@ -245,38 +255,28 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
             detail=f"Saldo {asset} insufficiente: {balance:.8g} disponibile, {total_cost:.8g} necessario",
         )
 
-    # Execute
     await _debit(db, uid, asset, total_cost)
     await _credit(db, uid, "NENO", req.neno_amount)
 
     tx = {
-        "id": str(uuid.uuid4()),
-        "user_id": uid,
-        "type": "buy_neno",
-        "neno_amount": req.neno_amount,
-        "pay_asset": asset,
-        "pay_amount": total_cost,
-        "rate": rate,
-        "neno_eur_price": neno_eur_price,
-        "fee": fee,
-        "fee_asset": asset,
-        "status": "completed",
+        "id": str(uuid.uuid4()), "user_id": uid, "type": "buy_neno",
+        "neno_amount": req.neno_amount, "pay_asset": asset,
+        "pay_amount": total_cost, "rate": rate, "neno_eur_price": neno_eur_price,
+        "fee": fee, "fee_asset": asset, "status": "completed",
         "created_at": datetime.now(timezone.utc),
     }
     await _log_tx(db, tx)
-
-    new_neno = await _get_balance(db, uid, "NENO")
-    new_pay = await _get_balance(db, uid, asset)
-
     tx["created_at"] = tx["created_at"].isoformat()
 
-    # Multi-channel notification dispatch
     try:
         from services.notification_dispatch import notify_trade_executed
         eur_value = round(req.neno_amount * neno_eur_price, 2)
         asyncio.ensure_future(notify_trade_executed(uid, "NENO", "buy", req.neno_amount, neno_eur_price, eur_value))
     except Exception:
         pass
+
+    new_neno = await _get_balance(db, uid, "NENO")
+    new_pay = await _get_balance(db, uid, asset)
 
     return {
         "message": f"Acquistati {req.neno_amount} NENO per {total_cost} {asset}",
@@ -289,12 +289,12 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
 
 @router.post("/sell")
 async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_current_user)):
-    """Sell NENO and receive any supported asset in wallet."""
     db = get_database()
     uid = current_user["user_id"]
     asset = req.receive_asset.upper()
 
-    if asset not in MARKET_PRICES_EUR:
+    price_eur = await _get_any_price_eur(db, asset)
+    if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
     neno_balance = await _get_balance(db, uid, "NENO")
@@ -306,37 +306,24 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
 
     pricing = await _get_dynamic_neno_price()
     neno_eur_price = pricing["price"]
-    rate = _neno_rate_with_price(asset, neno_eur_price)
+    rate = neno_eur_price / price_eur
     gross = round(req.neno_amount * rate, 8)
     fee = round(gross * PLATFORM_FEE, 8)
     net = round(gross - fee, 8)
 
-    # Execute
     await _debit(db, uid, "NENO", req.neno_amount)
     await _credit(db, uid, asset, net)
 
     tx = {
-        "id": str(uuid.uuid4()),
-        "user_id": uid,
-        "type": "sell_neno",
-        "neno_amount": req.neno_amount,
-        "receive_asset": asset,
-        "receive_amount": net,
-        "rate": rate,
-        "neno_eur_price": neno_eur_price,
-        "fee": fee,
-        "fee_asset": asset,
-        "status": "completed",
+        "id": str(uuid.uuid4()), "user_id": uid, "type": "sell_neno",
+        "neno_amount": req.neno_amount, "receive_asset": asset,
+        "receive_amount": net, "rate": rate, "neno_eur_price": neno_eur_price,
+        "fee": fee, "fee_asset": asset, "status": "completed",
         "created_at": datetime.now(timezone.utc),
     }
     await _log_tx(db, tx)
-
-    new_neno = await _get_balance(db, uid, "NENO")
-    new_asset = await _get_balance(db, uid, asset)
-
     tx["created_at"] = tx["created_at"].isoformat()
 
-    # Multi-channel notification dispatch
     try:
         from services.notification_dispatch import notify_trade_executed
         eur_value = round(req.neno_amount * neno_eur_price, 2)
@@ -344,6 +331,8 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     except Exception:
         pass
 
+    new_neno = await _get_balance(db, uid, "NENO")
+    new_asset = await _get_balance(db, uid, asset)
     return {
         "message": f"Venduti {req.neno_amount} NENO per {net} {asset}",
         "transaction": tx,
@@ -351,11 +340,160 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     }
 
 
-# ── Off-Ramp: NENO → EUR → Card or Bank ──
+# ── Swap: Any Token ↔ Any Token (via NENO bridge) ──
+
+@router.post("/swap")
+async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current_user)):
+    """Swap any token for any other token. Uses NENO as the bridge asset."""
+    db = get_database()
+    uid = current_user["user_id"]
+    from_asset = req.from_asset.upper()
+    to_asset = req.to_asset.upper()
+
+    if from_asset == to_asset:
+        raise HTTPException(status_code=400, detail="Non puoi swappare lo stesso asset")
+
+    from_price = await _get_any_price_eur(db, from_asset)
+    to_price = await _get_any_price_eur(db, to_asset)
+    if from_price is None:
+        raise HTTPException(status_code=400, detail=f"Asset non supportato: {from_asset}")
+    if to_price is None:
+        raise HTTPException(status_code=400, detail=f"Asset non supportato: {to_asset}")
+
+    balance = await _get_balance(db, uid, from_asset)
+    if balance < req.amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Saldo {from_asset} insufficiente: {balance:.8g} disponibile, {req.amount:.8g} necessario",
+        )
+
+    eur_value = req.amount * from_price
+    fee_eur = round(eur_value * PLATFORM_FEE, 8)
+    net_eur = eur_value - fee_eur
+    receive_amount = round(net_eur / to_price, 8)
+    fee_in_to = round(fee_eur / to_price, 8)
+
+    await _debit(db, uid, from_asset, req.amount)
+    await _credit(db, uid, to_asset, receive_amount)
+
+    tx = {
+        "id": str(uuid.uuid4()), "user_id": uid, "type": "swap",
+        "from_asset": from_asset, "from_amount": req.amount,
+        "to_asset": to_asset, "to_amount": receive_amount,
+        "eur_value": round(eur_value, 2), "fee_eur": round(fee_eur, 4),
+        "fee_in_to_asset": fee_in_to,
+        "rate": round(from_price / to_price, 8),
+        "status": "completed",
+        "created_at": datetime.now(timezone.utc),
+    }
+    await _log_tx(db, tx)
+    tx["created_at"] = tx["created_at"].isoformat()
+
+    return {
+        "message": f"Swappati {req.amount} {from_asset} per {receive_amount} {to_asset}",
+        "transaction": tx,
+        "balances": {
+            from_asset: round(await _get_balance(db, uid, from_asset), 8),
+            to_asset: round(await _get_balance(db, uid, to_asset), 8),
+        },
+    }
+
+
+# ── Swap Quote ──
+
+@router.get("/swap-quote")
+async def swap_quote(from_asset: str = "NENO", to_asset: str = "ETH", amount: float = 1.0):
+    db = get_database()
+    from_asset = from_asset.upper()
+    to_asset = to_asset.upper()
+
+    from_price = await _get_any_price_eur(db, from_asset)
+    to_price = await _get_any_price_eur(db, to_asset)
+    if from_price is None or to_price is None:
+        raise HTTPException(status_code=400, detail="Asset non supportato")
+
+    eur_value = amount * from_price
+    fee_eur = round(eur_value * PLATFORM_FEE, 8)
+    net_eur = eur_value - fee_eur
+    receive = round(net_eur / to_price, 8)
+
+    return {
+        "from_asset": from_asset, "to_asset": to_asset, "amount": amount,
+        "receive_amount": receive, "rate": round(from_price / to_price, 8),
+        "eur_value": round(eur_value, 2), "fee_eur": round(fee_eur, 4),
+        "fee_pct": PLATFORM_FEE * 100,
+    }
+
+
+# ── Create Custom Token ──
+
+@router.post("/create-token")
+async def create_custom_token(req: CreateTokenRequest, current_user: dict = Depends(get_current_user)):
+    """Create a new custom token with a specified EUR price and mint supply to creator."""
+    db = get_database()
+    uid = current_user["user_id"]
+    symbol = req.symbol.upper().strip()
+
+    if symbol in MARKET_PRICES_EUR or symbol == "NENO":
+        raise HTTPException(status_code=400, detail=f"{symbol} e' un asset di sistema, scegli un altro nome")
+
+    existing = await db.custom_tokens.find_one({"symbol": symbol})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Il token {symbol} esiste gia'")
+
+    token = {
+        "id": str(uuid.uuid4()),
+        "symbol": symbol,
+        "name": req.name,
+        "price_eur": req.price_eur,
+        "total_supply": req.total_supply,
+        "circulating_supply": req.total_supply,
+        "creator_id": uid,
+        "description": req.description or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.custom_tokens.insert_one({**token, "_id": token["id"]})
+
+    await _credit(db, uid, symbol, req.total_supply)
+
+    return {
+        "message": f"Token {symbol} creato! {req.total_supply} {symbol} @ EUR {req.price_eur} accreditati al wallet",
+        "token": token,
+        "balance": req.total_supply,
+    }
+
+
+# ── List Custom Tokens ──
+
+@router.get("/custom-tokens")
+async def list_custom_tokens():
+    db = get_database()
+    tokens = await db.custom_tokens.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return {"tokens": tokens}
+
+
+# ── Update Token Price ──
+
+@router.put("/custom-tokens/{symbol}/price")
+async def update_token_price(symbol: str, price_eur: float, current_user: dict = Depends(get_current_user)):
+    db = get_database()
+    symbol = symbol.upper()
+    token = await db.custom_tokens.find_one({"symbol": symbol})
+    if not token:
+        raise HTTPException(status_code=404, detail="Token non trovato")
+    if token["creator_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Solo il creatore puo' modificare il prezzo")
+    if price_eur <= 0:
+        raise HTTPException(status_code=400, detail="Il prezzo deve essere > 0")
+
+    await db.custom_tokens.update_one({"symbol": symbol}, {"$set": {"price_eur": price_eur}})
+    return {"message": f"Prezzo di {symbol} aggiornato a EUR {price_eur}", "symbol": symbol, "price_eur": price_eur}
+
+
+# ── Off-Ramp: NENO -> EUR -> Card or Bank ──
 
 @router.post("/offramp")
 async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_current_user)):
-    """Sell NENO and send EUR directly to card or bank account."""
     db = get_database()
     uid = current_user["user_id"]
 
@@ -369,7 +507,6 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     fee = round(eur_gross * PLATFORM_FEE, 2)
     eur_net = round(eur_gross - fee, 2)
 
-    # Debit NENO
     await _debit(db, uid, "NENO", req.neno_amount)
 
     if req.destination == "card":
@@ -378,30 +515,20 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         card = await db.cards.find_one({"id": req.card_id, "user_id": uid})
         if not card:
             raise HTTPException(status_code=404, detail="Carta non trovata")
-
         await db.cards.update_one({"id": req.card_id}, {"$inc": {"balance": eur_net}})
         dest_info = f"Carta {card.get('card_number_masked', '****')}"
-
     elif req.destination == "bank":
         if not req.destination_iban:
             raise HTTPException(status_code=400, detail="IBAN richiesto per off-ramp su conto")
-
         withdrawal_fee = max(round(eur_net * 0.001, 2), 0.50)
         eur_after_bank = round(eur_net - withdrawal_fee, 2)
-
         bank_tx = {
-            "id": str(uuid.uuid4()),
-            "user_id": uid,
-            "type": "sepa_withdrawal",
-            "amount": eur_net,
-            "fee": withdrawal_fee,
-            "net_amount": eur_after_bank,
-            "currency": "EUR",
-            "destination_iban": req.destination_iban,
+            "id": str(uuid.uuid4()), "user_id": uid, "type": "sepa_withdrawal",
+            "amount": eur_net, "fee": withdrawal_fee, "net_amount": eur_after_bank,
+            "currency": "EUR", "destination_iban": req.destination_iban,
             "beneficiary_name": req.beneficiary_name or "NeoNoble User",
             "reference": f"NENO-OFFRAMP-{uuid.uuid4().hex[:8].upper()}",
-            "status": "processing",
-            "estimated_arrival": "1-2 giorni lavorativi",
+            "status": "processing", "estimated_arrival": "1-2 giorni lavorativi",
             "created_at": datetime.now(timezone.utc),
         }
         await db.banking_transactions.insert_one({**bank_tx, "_id": bank_tx["id"]})
@@ -411,14 +538,9 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=400, detail="destination deve essere 'card' o 'bank'")
 
     tx = {
-        "id": str(uuid.uuid4()),
-        "user_id": uid,
-        "type": "neno_offramp",
-        "neno_amount": req.neno_amount,
-        "eur_gross": eur_gross,
-        "fee": fee,
-        "eur_net": eur_net,
-        "destination": req.destination,
+        "id": str(uuid.uuid4()), "user_id": uid, "type": "neno_offramp",
+        "neno_amount": req.neno_amount, "eur_gross": eur_gross, "fee": fee,
+        "eur_net": eur_net, "destination": req.destination,
         "destination_info": dest_info,
         "status": "completed" if req.destination == "card" else "processing",
         "created_at": datetime.now(timezone.utc),
@@ -427,7 +549,7 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     tx["created_at"] = tx["created_at"].isoformat()
 
     return {
-        "message": f"{req.neno_amount} NENO → EUR {eur_net:.2f} → {dest_info}",
+        "message": f"{req.neno_amount} NENO -> EUR {eur_net:.2f} -> {dest_info}",
         "transaction": tx,
         "neno_balance": round(await _get_balance(db, uid, "NENO"), 8),
     }
@@ -437,7 +559,6 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
 
 @router.get("/transactions")
 async def get_neno_transactions(current_user: dict = Depends(get_current_user)):
-    """Get NENO exchange transaction history."""
     db = get_database()
     txs = await db.neno_transactions.find(
         {"user_id": current_user["user_id"]}, {"_id": 0}
@@ -452,21 +573,26 @@ async def get_neno_transactions(current_user: dict = Depends(get_current_user)):
 
 @router.get("/market")
 async def neno_market_info():
-    """Get $NENO market info and all conversion rates."""
+    db = get_database()
     pricing = await _get_dynamic_neno_price()
     neno_price = pricing["price"]
     pairs = {}
     for asset, eur_price in MARKET_PRICES_EUR.items():
         rate = neno_price / eur_price
-        pairs[f"NENO/{asset}"] = {
-            "rate": round(rate, 8),
-            "asset_eur_price": eur_price,
-            "neno_eur_price": neno_price,
-        }
+        pairs[f"NENO/{asset}"] = {"rate": round(rate, 8), "asset_eur_price": eur_price, "neno_eur_price": neno_price}
+
+    # Add custom tokens to pairs
+    custom_tokens = await db.custom_tokens.find({}, {"_id": 0}).to_list(100)
+    for t in custom_tokens:
+        rate = neno_price / t["price_eur"] if t["price_eur"] > 0 else 0
+        pairs[f"NENO/{t['symbol']}"] = {"rate": round(rate, 8), "asset_eur_price": t["price_eur"], "neno_eur_price": neno_price}
+
+    all_assets = SUPPORTED_ASSETS + [t["symbol"] for t in custom_tokens]
     return {
         "neno_eur_price": neno_price,
         "neno_usd_price": round(neno_price * 1.087, 2),
         "fee_percent": PLATFORM_FEE * 100,
-        "supported_assets": SUPPORTED_ASSETS,
+        "supported_assets": all_assets,
         "pairs": pairs,
+        "custom_tokens": custom_tokens,
     }

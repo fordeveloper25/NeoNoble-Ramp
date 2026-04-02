@@ -1,11 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building, ArrowRight, Clock, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react';
+import {
+  ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building, ArrowRight,
+  Clock, ChevronDown, TrendingUp, TrendingDown, Plus, Repeat
+} from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
 
-const ASSETS = ['EUR', 'BNB', 'ETH', 'USDT', 'BTC', 'USDC', 'MATIC', 'USD'];
+async function safeJson(res) {
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { detail: text }; }
+}
+
+const BUILTIN_ASSETS = ['EUR', 'BNB', 'ETH', 'USDT', 'BTC', 'USDC', 'MATIC', 'USD'];
 
 export default function NenoExchange() {
   const navigate = useNavigate();
@@ -21,24 +29,42 @@ export default function NenoExchange() {
   const [ibans, setIbans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [customTokens, setCustomTokens] = useState([]);
+  const [allAssets, setAllAssets] = useState(BUILTIN_ASSETS);
 
-  // Off-ramp state
+  // Off-ramp
   const [offrampDest, setOfframpDest] = useState('card');
   const [selectedCard, setSelectedCard] = useState('');
   const [offrampIban, setOfframpIban] = useState('');
   const [offrampName, setOfframpName] = useState('');
+
+  // Swap
+  const [swapFrom, setSwapFrom] = useState('NENO');
+  const [swapTo, setSwapTo] = useState('ETH');
+  const [swapAmt, setSwapAmt] = useState('1');
+  const [swapQuote, setSwapQuote] = useState(null);
+
+  // Create Token
+  const [newSym, setNewSym] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newPrice, setNewPrice] = useState('');
+  const [newSupply, setNewSupply] = useState('1000000');
+
+  const abortRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     try {
       const [mRes, pRes, tRes, bRes, cRes, iRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/neno-exchange/market`),
         fetch(`${BACKEND_URL}/api/neno-exchange/price`),
-        fetch(`${BACKEND_URL}/api/neno-exchange/transactions`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/wallet/balances`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/cards/my-cards`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/banking/iban`, { headers: headers() }),
+        fetch(`${BACKEND_URL}/api/neno-exchange/transactions`, { headers: hdrs() }),
+        fetch(`${BACKEND_URL}/api/wallet/balances`, { headers: hdrs() }),
+        fetch(`${BACKEND_URL}/api/cards/my-cards`, { headers: hdrs() }),
+        fetch(`${BACKEND_URL}/api/banking/iban`, { headers: hdrs() }),
       ]);
-      const [mData, pData, tData, bData, cData, iData] = await Promise.all([mRes.json(), pRes.json(), tRes.json(), bRes.json(), cRes.json(), iRes.json()]);
+      const [mData, pData, tData, bData, cData, iData] = await Promise.all([
+        safeJson(mRes), safeJson(pRes), safeJson(tRes), safeJson(bRes), safeJson(cRes), safeJson(iRes),
+      ]);
       setMarketInfo(mData);
       setPriceData(pData);
       setTxs(tData.transactions || []);
@@ -48,336 +74,299 @@ export default function NenoExchange() {
       setCards((cData.cards || []).filter(c => c.status === 'active'));
       setIbans(iData.ibans || []);
       if (cData.cards?.length > 0) setSelectedCard(cData.cards[0].id);
+      setCustomTokens(mData.custom_tokens || []);
+      setAllAssets([...BUILTIN_ASSETS, ...(mData.custom_tokens || []).map(t => t.symbol)]);
     } catch (e) { console.error(e); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Live quote
+  // Live NENO quote with AbortController
   useEffect(() => {
-    if (!nenoAmount || parseFloat(nenoAmount) <= 0) { setQuote(null); return; }
+    if (!nenoAmount || parseFloat(nenoAmount) <= 0 || tab === 'swap' || tab === 'create') { setQuote(null); return; }
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     const dir = tab === 'offramp' ? 'sell' : tab;
-    fetch(`${BACKEND_URL}/api/neno-exchange/quote?direction=${dir}&asset=${tab === 'offramp' ? 'EUR' : asset}&neno_amount=${nenoAmount}`)
-      .then(r => r.json()).then(setQuote).catch(() => setQuote(null));
+    fetch(`${BACKEND_URL}/api/neno-exchange/quote?direction=${dir}&asset=${tab === 'offramp' ? 'EUR' : asset}&neno_amount=${nenoAmount}`, { signal: ctrl.signal })
+      .then(r => r.text())
+      .then(t => { try { setQuote(JSON.parse(t)); } catch { setQuote(null); } })
+      .catch(() => {});
+    return () => ctrl.abort();
   }, [tab, asset, nenoAmount]);
 
-  const handleBuy = async () => {
+  // Live swap quote
+  useEffect(() => {
+    if (tab !== 'swap' || !swapAmt || parseFloat(swapAmt) <= 0) { setSwapQuote(null); return; }
+    const ctrl = new AbortController();
+    fetch(`${BACKEND_URL}/api/neno-exchange/swap-quote?from_asset=${swapFrom}&to_asset=${swapTo}&amount=${swapAmt}`, { signal: ctrl.signal })
+      .then(r => r.text())
+      .then(t => { try { setSwapQuote(JSON.parse(t)); } catch { setSwapQuote(null); } })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [tab, swapFrom, swapTo, swapAmt]);
+
+  const exec = async (url, body) => {
     setLoading(true); setResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/neno-exchange/buy`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ pay_asset: asset, neno_amount: parseFloat(nenoAmount) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
+      const res = await fetch(`${BACKEND_URL}${url}`, { method: 'POST', headers: hdrs(), body: JSON.stringify(body) });
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.detail || 'Errore');
       setResult({ ok: true, msg: data.message, balances: data.balances });
       fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
     finally { setLoading(false); }
   };
 
-  const handleSell = async () => {
-    setLoading(true); setResult(null);
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/neno-exchange/sell`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ receive_asset: asset, neno_amount: parseFloat(nenoAmount) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      setResult({ ok: true, msg: data.message, balances: data.balances });
-      fetchData();
-    } catch (e) { setResult({ ok: false, msg: e.message }); }
-    finally { setLoading(false); }
+  const handleBuy = () => exec('/api/neno-exchange/buy', { pay_asset: asset, neno_amount: parseFloat(nenoAmount) });
+  const handleSell = () => exec('/api/neno-exchange/sell', { receive_asset: asset, neno_amount: parseFloat(nenoAmount) });
+  const handleSwap = () => exec('/api/neno-exchange/swap', { from_asset: swapFrom, to_asset: swapTo, amount: parseFloat(swapAmt) });
+  const handleOfframp = () => {
+    const body = { neno_amount: parseFloat(nenoAmount), destination: offrampDest };
+    if (offrampDest === 'card') body.card_id = selectedCard;
+    if (offrampDest === 'bank') { body.destination_iban = offrampIban; body.beneficiary_name = offrampName; }
+    exec('/api/neno-exchange/offramp', body);
   };
+  const handleCreateToken = () => exec('/api/neno-exchange/create-token', {
+    symbol: newSym, name: newName, price_eur: parseFloat(newPrice), total_supply: parseFloat(newSupply) || 1000000,
+  });
 
-  const handleOfframp = async () => {
-    setLoading(true); setResult(null);
-    try {
-      const body = { neno_amount: parseFloat(nenoAmount), destination: offrampDest };
-      if (offrampDest === 'card') body.card_id = selectedCard;
-      if (offrampDest === 'bank') { body.destination_iban = offrampIban; body.beneficiary_name = offrampName; }
-      const res = await fetch(`${BACKEND_URL}/api/neno-exchange/offramp`, {
-        method: 'POST', headers: headers(), body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      setResult({ ok: true, msg: data.message });
-      fetchData();
-    } catch (e) { setResult({ ok: false, msg: e.message }); }
-    finally { setLoading(false); }
-  };
+  const TABS = [
+    { id: 'buy', label: 'Compra', icon: TrendingUp },
+    { id: 'sell', label: 'Vendi', icon: TrendingDown },
+    { id: 'swap', label: 'Swap', icon: Repeat },
+    { id: 'offramp', label: 'Off-Ramp', icon: Building },
+    { id: 'create', label: 'Crea Token', icon: Plus },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-950" data-testid="neno-exchange-page">
+    <div className="min-h-screen bg-zinc-950" data-testid="neno-exchange-page">
       {/* Header */}
-      <div className="border-b border-gray-800 bg-gray-900/50">
+      <div className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/dashboard')} className="p-1.5 hover:bg-gray-800 rounded-lg">
-              <ArrowLeft className="w-4 h-4 text-gray-400" />
+            <button onClick={() => navigate('/dashboard')} className="p-1.5 hover:bg-zinc-800 rounded-lg" data-testid="exchange-back-btn">
+              <ArrowLeft className="w-4 h-4 text-zinc-400" />
             </button>
             <div>
-              <h1 className="text-white font-bold text-lg">NeoNoble Exchange</h1>
-              <p className="text-gray-500 text-xs">Acquista, vendi e converti $NENO — On/Off-Ramp interno</p>
+              <h1 className="text-white font-bold text-lg">$NENO Exchange</h1>
+              <span className="text-zinc-500 text-xs">
+                {priceData ? `EUR ${priceData.neno_eur_price?.toLocaleString()} ${priceData.shift_pct > 0 ? '+' : ''}${priceData.shift_pct}%` : '...'}
+              </span>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-gray-400 text-xs">Prezzo $NENO</div>
-            <div className="text-white font-bold text-xl" data-testid="neno-price">
-              {(priceData?.neno_eur_price || marketInfo?.neno_eur_price || 10000).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-            </div>
-            {priceData && priceData.shift_pct !== 0 && (
-              <div className={`flex items-center justify-end gap-1 text-xs ${priceData.shift_pct > 0 ? 'text-emerald-400' : 'text-red-400'}`} data-testid="neno-shift">
-                {priceData.shift_pct > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {priceData.shift_pct > 0 ? '+' : ''}{priceData.shift_pct}% vs base
-              </div>
-            )}
+            <div className="text-zinc-500 text-[10px]">NENO Balance</div>
+            <div className="text-white font-mono font-bold" data-testid="neno-balance">{(balances.NENO || 0).toFixed(4)}</div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 pt-6">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Left — Exchange Panel */}
-          <div className="lg:col-span-3 space-y-4">
-            {/* Tabs */}
-            <div className="flex gap-1 bg-gray-900 rounded-xl p-1 w-fit">
-              {[
-                { id: 'buy', label: 'Acquista', color: 'green' },
-                { id: 'sell', label: 'Vendi', color: 'orange' },
-                { id: 'offramp', label: 'Off-Ramp', color: 'blue' },
-              ].map(t => (
-                <button key={t.id} onClick={() => { setTab(t.id); setResult(null); }} data-testid={`tab-${t.id}`}
-                  className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    tab === t.id
-                      ? t.color === 'green' ? 'bg-green-500/20 text-green-400'
-                        : t.color === 'orange' ? 'bg-orange-500/20 text-orange-400'
-                        : 'bg-blue-500/20 text-blue-400'
-                      : 'text-gray-400 hover:text-white'
-                  }`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
+      <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+        {/* Tabs */}
+        <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 overflow-x-auto">
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} data-testid={`tab-${t.id}`}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${tab === t.id ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}>
+              <t.icon className="w-3.5 h-3.5" /> {t.label}
+            </button>
+          ))}
+        </div>
 
-            {/* Exchange Form */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
-              {/* NENO Amount */}
-              <div>
-                <label className="text-gray-400 text-xs mb-1.5 block">Quantita' $NENO</label>
-                <div className="flex items-center gap-3">
-                  <input type="number" step="any" min="0.001" value={nenoAmount}
-                    onChange={e => setNenoAmount(e.target.value)} data-testid="neno-amount-input"
-                    className="flex-1 px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white text-lg font-mono focus:border-purple-500 focus:outline-none" />
-                  <div className="px-4 py-3 bg-purple-500/20 border border-purple-500/30 rounded-xl text-purple-400 font-bold text-sm">
-                    $NENO
-                  </div>
-                </div>
-              </div>
-
-              {/* Asset Selection (buy/sell only) */}
-              {tab !== 'offramp' && (
-                <div>
-                  <label className="text-gray-400 text-xs mb-1.5 block">
-                    {tab === 'buy' ? 'Paga con' : 'Ricevi in'}
-                  </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {ASSETS.map(a => (
-                      <button key={a} onClick={() => setAsset(a)} data-testid={`asset-${a}`}
-                        className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
-                          asset === a
-                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
-                            : 'bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-600'
-                        }`}>
-                        {a}
-                        {balances[a] !== undefined && (
-                          <div className="text-[10px] text-gray-500 mt-0.5">{balances[a]?.toFixed(a === 'EUR' || a === 'USD' ? 2 : 4)}</div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Off-Ramp Destination */}
-              {tab === 'offramp' && (
-                <div className="space-y-3">
-                  <label className="text-gray-400 text-xs block">Destinazione</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setOfframpDest('card')} data-testid="offramp-card"
-                      className={`p-3 rounded-xl border flex items-center gap-2 ${
-                        offrampDest === 'card' ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700 bg-gray-800'
-                      }`}>
-                      <CreditCard className="w-5 h-5 text-blue-400" />
-                      <div className="text-left">
-                        <div className="text-white text-sm font-medium">Carta</div>
-                        <div className="text-gray-400 text-xs">Visa/Mastercard</div>
-                      </div>
-                    </button>
-                    <button onClick={() => setOfframpDest('bank')} data-testid="offramp-bank"
-                      className={`p-3 rounded-xl border flex items-center gap-2 ${
-                        offrampDest === 'bank' ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700 bg-gray-800'
-                      }`}>
-                      <Building className="w-5 h-5 text-teal-400" />
-                      <div className="text-left">
-                        <div className="text-white text-sm font-medium">Conto Bancario</div>
-                        <div className="text-gray-400 text-xs">Bonifico SEPA</div>
-                      </div>
-                    </button>
-                  </div>
-
-                  {offrampDest === 'card' && cards.length > 0 && (
-                    <select value={selectedCard} onChange={e => setSelectedCard(e.target.value)} data-testid="offramp-card-select"
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
-                      {cards.map(c => (
-                        <option key={c.id} value={c.id}>{c.card_network?.toUpperCase()} {c.card_number_masked} — EUR {c.balance?.toFixed(2)}</option>
-                      ))}
-                    </select>
-                  )}
-                  {offrampDest === 'card' && cards.length === 0 && (
-                    <div className="text-yellow-400 text-xs p-2 bg-yellow-500/10 rounded-lg">Nessuna carta attiva. Crea una carta dalla sezione Carte.</div>
-                  )}
-
-                  {offrampDest === 'bank' && (
-                    <div className="space-y-2">
-                      <input type="text" value={offrampIban} onChange={e => setOfframpIban(e.target.value)}
-                        placeholder="IBAN destinazione" data-testid="offramp-iban"
-                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm font-mono" />
-                      <input type="text" value={offrampName} onChange={e => setOfframpName(e.target.value)}
-                        placeholder="Nome beneficiario" data-testid="offramp-name"
-                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Quote Preview */}
-              {quote && nenoAmount && parseFloat(nenoAmount) > 0 && (
-                <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 space-y-2" data-testid="quote-preview">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Prezzo NENO</span>
-                    <span className="text-white font-mono">{ASSETS.includes(quote.pay_asset || quote.receive_asset || 'EUR') ? '' : ''}{(marketInfo?.neno_eur_price || 10000).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Tasso</span>
-                    <span className="text-white font-mono">1 NENO = {quote.rate?.toFixed(6)} {quote.pay_asset || quote.receive_asset || 'EUR'}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Fee ({quote.fee_percent}%)</span>
-                    <span className="text-yellow-400 font-mono">{quote.fee?.toFixed(6)} {quote.pay_asset || quote.receive_asset || 'EUR'}</span>
-                  </div>
-                  <div className="border-t border-gray-700 pt-2 flex justify-between text-sm font-medium">
-                    <span className="text-gray-300">{tab === 'buy' ? 'Costo totale' : 'Riceverai'}</span>
-                    <span className={`font-mono ${tab === 'buy' ? 'text-orange-400' : 'text-green-400'}`}>
-                      {(tab === 'buy' ? quote.total_cost : (quote.net_receive || quote.eur_net))?.toFixed(6)} {quote.pay_asset || quote.receive_asset || 'EUR'}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Button */}
-              <button
-                onClick={tab === 'buy' ? handleBuy : tab === 'sell' ? handleSell : handleOfframp}
-                disabled={loading || !nenoAmount || parseFloat(nenoAmount) <= 0}
-                data-testid="exchange-submit"
-                className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
-                  tab === 'buy' ? 'bg-green-500 hover:bg-green-600 text-white' :
-                  tab === 'sell' ? 'bg-orange-500 hover:bg-orange-600 text-white' :
-                  'bg-blue-500 hover:bg-blue-600 text-white'
-                }`}>
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> :
-                  tab === 'buy' ? `Acquista ${nenoAmount || 0} NENO` :
-                  tab === 'sell' ? `Vendi ${nenoAmount || 0} NENO` :
-                  `Off-Ramp ${nenoAmount || 0} NENO → ${offrampDest === 'card' ? 'Carta' : 'Conto'}`
-                }
-              </button>
-
-              {/* Result */}
-              {result && (
-                <div className={`p-3 rounded-xl text-sm ${result.ok ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}
-                  data-testid="exchange-result">
-                  {result.msg}
-                  {result.balances && (
-                    <div className="mt-1 text-xs text-gray-400">
-                      {Object.entries(result.balances).map(([k, v]) => (
-                        <span key={k} className="mr-3">{k}: {typeof v === 'number' ? v.toFixed(k === 'EUR' ? 2 : 6) : v}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+        {/* Result banner */}
+        {result && (
+          <div className={`rounded-lg px-4 py-3 text-sm ${result.ok ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`} data-testid="result-banner">
+            {result.msg}
           </div>
+        )}
 
-          {/* Right — Info & History */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Balances */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-white font-medium text-sm mb-3">I tuoi saldi</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center p-2 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                  <span className="text-purple-400 font-bold text-sm">$NENO</span>
-                  <span className="text-white font-mono text-sm" data-testid="neno-balance">{(balances['NENO'] || 0).toFixed(4)}</span>
-                </div>
-                {ASSETS.filter(a => balances[a] > 0).map(a => (
-                  <div key={a} className="flex justify-between items-center px-2 py-1.5 text-xs">
-                    <span className="text-gray-400">{a}</span>
-                    <span className="text-gray-300 font-mono">{balances[a]?.toFixed(a === 'EUR' || a === 'USD' ? 2 : 6)}</span>
-                  </div>
-                ))}
+        {/* Buy / Sell */}
+        {(tab === 'buy' || tab === 'sell') && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">{tab === 'buy' ? 'Paga con' : 'Ricevi in'}</label>
+                <select value={asset} onChange={e => setAsset(e.target.value)} data-testid="asset-select"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm">
+                  {allAssets.map(a => <option key={a} value={a}>{a}{balances[a] ? ` (${balances[a].toFixed(4)})` : ''}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">Quantita NENO</label>
+                <input type="number" value={nenoAmount} onChange={e => setNenoAmount(e.target.value)} min="0" step="any" data-testid="neno-amount-input"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" placeholder="0.001" />
               </div>
             </div>
-
-            {/* Conversion Rates */}
-            {marketInfo && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <h3 className="text-white font-medium text-sm mb-3">Tassi di conversione</h3>
-                <div className="space-y-1.5">
-                  {Object.entries(marketInfo.pairs || {}).slice(0, 8).map(([pair, info]) => (
-                    <div key={pair} className="flex justify-between text-xs">
-                      <span className="text-gray-400">{pair}</span>
-                      <span className="text-gray-300 font-mono">{info.rate?.toFixed(4)}</span>
-                    </div>
-                  ))}
+            {quote && (
+              <div className="bg-zinc-800/50 rounded-lg p-3 text-xs space-y-1" data-testid="quote-info">
+                <div className="flex justify-between"><span className="text-zinc-500">Prezzo NENO</span><span className="text-white">EUR {quote.neno_eur_price?.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Rate</span><span className="text-white">1 NENO = {quote.rate?.toFixed(6)} {asset}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Fee ({quote.fee_percent}%)</span><span className="text-amber-400">{quote.fee?.toFixed(8)} {asset}</span></div>
+                <div className="flex justify-between font-bold"><span className="text-zinc-300">{tab === 'buy' ? 'Costo Totale' : 'Ricevi Netto'}</span>
+                  <span className="text-emerald-400">{(tab === 'buy' ? quote.total_cost : quote.net_receive)?.toFixed(8)} {asset}</span>
                 </div>
               </div>
             )}
+            <button onClick={tab === 'buy' ? handleBuy : handleSell} disabled={loading || !nenoAmount || parseFloat(nenoAmount) <= 0} data-testid={`${tab}-btn`}
+              className={`w-full py-3 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 ${tab === 'buy' ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : tab === 'buy' ? `Compra ${nenoAmount} NENO` : `Vendi ${nenoAmount} NENO`}
+            </button>
+          </div>
+        )}
 
-            {/* Transaction History */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-gray-400" />
-                <span className="text-white font-medium text-sm">Storico Transazioni</span>
+        {/* Swap */}
+        {tab === 'swap' && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+            <div className="grid grid-cols-5 gap-2 items-end">
+              <div className="col-span-2">
+                <label className="text-zinc-500 text-xs mb-1 block">Da</label>
+                <select value={swapFrom} onChange={e => setSwapFrom(e.target.value)} data-testid="swap-from-select"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm">
+                  {['NENO', ...allAssets].filter((v,i,a) => a.indexOf(v)===i).map(a => <option key={a} value={a}>{a}{balances[a] ? ` (${balances[a].toFixed(4)})` : ''}</option>)}
+                </select>
               </div>
-              <div className="divide-y divide-gray-800/50 max-h-80 overflow-y-auto">
-                {txs.length === 0 && (
-                  <div className="px-4 py-6 text-center text-gray-500 text-xs">Nessuna transazione</div>
-                )}
-                {txs.map(t => (
-                  <div key={t.id} className="px-4 py-2.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          t.type === 'buy_neno' ? 'bg-green-500/20 text-green-400' :
-                          t.type === 'sell_neno' ? 'bg-orange-500/20 text-orange-400' :
-                          'bg-blue-500/20 text-blue-400'
-                        }`}>
-                          {t.type === 'buy_neno' ? 'BUY' : t.type === 'sell_neno' ? 'SELL' : 'OFF-RAMP'}
-                        </span>
-                        <span className="text-gray-300">{t.neno_amount} NENO</span>
-                      </div>
-                      <span className={`${t.status === 'completed' ? 'text-green-400' : 'text-yellow-400'}`}>{t.status}</span>
-                    </div>
-                    <div className="text-gray-500 mt-0.5">
-                      {t.type === 'buy_neno' && `Pagato ${t.pay_amount?.toFixed(4)} ${t.pay_asset}`}
-                      {t.type === 'sell_neno' && `Ricevuto ${t.receive_amount?.toFixed(4)} ${t.receive_asset}`}
-                      {t.type === 'neno_offramp' && `EUR ${t.eur_net?.toFixed(2)} → ${t.destination_info}`}
-                    </div>
-                  </div>
-                ))}
+              <div className="flex justify-center">
+                <button onClick={() => { setSwapFrom(swapTo); setSwapTo(swapFrom); }} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700">
+                  <ArrowRightLeft className="w-4 h-4 text-purple-400" />
+                </button>
+              </div>
+              <div className="col-span-2">
+                <label className="text-zinc-500 text-xs mb-1 block">A</label>
+                <select value={swapTo} onChange={e => setSwapTo(e.target.value)} data-testid="swap-to-select"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm">
+                  {['NENO', ...allAssets].filter((v,i,a) => a.indexOf(v)===i).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
               </div>
             </div>
+            <div>
+              <label className="text-zinc-500 text-xs mb-1 block">Quantita {swapFrom}</label>
+              <input type="number" value={swapAmt} onChange={e => setSwapAmt(e.target.value)} min="0" step="any" data-testid="swap-amount-input"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
+            </div>
+            {swapQuote && (
+              <div className="bg-zinc-800/50 rounded-lg p-3 text-xs space-y-1" data-testid="swap-quote">
+                <div className="flex justify-between"><span className="text-zinc-500">Rate</span><span className="text-white">1 {swapFrom} = {swapQuote.rate?.toFixed(8)} {swapTo}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Fee ({swapQuote.fee_pct}%)</span><span className="text-amber-400">EUR {swapQuote.fee_eur}</span></div>
+                <div className="flex justify-between font-bold"><span className="text-zinc-300">Ricevi</span><span className="text-emerald-400">{swapQuote.receive_amount?.toFixed(8)} {swapTo}</span></div>
+              </div>
+            )}
+            <button onClick={handleSwap} disabled={loading || !swapAmt || parseFloat(swapAmt) <= 0 || swapFrom === swapTo} data-testid="swap-btn"
+              className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold text-sm text-white transition-colors disabled:opacity-50">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Swap ${swapAmt} ${swapFrom} → ${swapTo}`}
+            </button>
+          </div>
+        )}
+
+        {/* Off-Ramp */}
+        {tab === 'offramp' && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+            <div>
+              <label className="text-zinc-500 text-xs mb-1 block">Quantita NENO da convertire</label>
+              <input type="number" value={nenoAmount} onChange={e => setNenoAmount(e.target.value)} min="0" step="any" data-testid="offramp-amount-input"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
+            </div>
+            <div className="flex gap-2">
+              {[{ id: 'card', label: 'Carta', icon: CreditCard }, { id: 'bank', label: 'Banca SEPA', icon: Building }].map(d => (
+                <button key={d.id} onClick={() => setOfframpDest(d.id)} data-testid={`offramp-dest-${d.id}`}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-medium border transition-colors ${offrampDest === d.id ? 'bg-purple-600/20 border-purple-500 text-purple-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400'}`}>
+                  <d.icon className="w-3.5 h-3.5" /> {d.label}
+                </button>
+              ))}
+            </div>
+            {offrampDest === 'card' && cards.length > 0 && (
+              <select value={selectedCard} onChange={e => setSelectedCard(e.target.value)} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm">
+                {cards.map(c => <option key={c.id} value={c.id}>{c.card_number_masked} ({c.card_type})</option>)}
+              </select>
+            )}
+            {offrampDest === 'bank' && (
+              <div className="space-y-2">
+                <input value={offrampIban} onChange={e => setOfframpIban(e.target.value)} placeholder="IBAN destinazione" data-testid="offramp-iban-input"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm" />
+                <input value={offrampName} onChange={e => setOfframpName(e.target.value)} placeholder="Nome beneficiario" data-testid="offramp-name-input"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm" />
+              </div>
+            )}
+            {quote && (
+              <div className="bg-zinc-800/50 rounded-lg p-3 text-xs space-y-1">
+                <div className="flex justify-between"><span className="text-zinc-500">Valore lordo</span><span className="text-white">EUR {quote.gross_value?.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Fee</span><span className="text-amber-400">EUR {quote.fee?.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold"><span className="text-zinc-300">Ricevi</span><span className="text-emerald-400">EUR {quote.net_receive?.toFixed(2)}</span></div>
+              </div>
+            )}
+            <button onClick={handleOfframp} disabled={loading || !nenoAmount || parseFloat(nenoAmount) <= 0} data-testid="offramp-btn"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-sm text-white transition-colors disabled:opacity-50">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Off-Ramp ${nenoAmount} NENO → ${offrampDest === 'card' ? 'Carta' : 'Banca'}`}
+            </button>
+          </div>
+        )}
+
+        {/* Create Token */}
+        {tab === 'create' && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+            <h3 className="text-white font-medium text-sm">Crea il tuo Token</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">Simbolo (ticker)</label>
+                <input value={newSym} onChange={e => setNewSym(e.target.value.toUpperCase())} placeholder="MYTOKEN" maxLength={10} data-testid="create-symbol-input"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
+              </div>
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">Nome</label>
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="My Token" maxLength={50} data-testid="create-name-input"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm" />
+              </div>
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">Prezzo (EUR)</label>
+                <input type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="0.01" min="0" step="any" data-testid="create-price-input"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
+              </div>
+              <div>
+                <label className="text-zinc-500 text-xs mb-1 block">Supply totale</label>
+                <input type="number" value={newSupply} onChange={e => setNewSupply(e.target.value)} placeholder="1000000" min="1" data-testid="create-supply-input"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
+              </div>
+            </div>
+            <button onClick={handleCreateToken} disabled={loading || !newSym || !newName || !newPrice} data-testid="create-token-btn"
+              className="w-full py-3 bg-amber-600 hover:bg-amber-500 rounded-lg font-bold text-sm text-white transition-colors disabled:opacity-50">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Crea ${newSym || 'Token'} @ EUR ${newPrice || '?'}`}
+            </button>
+          </div>
+        )}
+
+        {/* Custom Tokens List */}
+        {customTokens.length > 0 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="px-4 py-2 border-b border-zinc-800"><span className="text-white font-medium text-xs">Token Custom ({customTokens.length})</span></div>
+            <div className="divide-y divide-zinc-800/50">
+              {customTokens.map(t => (
+                <div key={t.symbol} className="px-4 py-2 flex items-center justify-between text-xs">
+                  <div><span className="text-white font-mono font-bold">{t.symbol}</span> <span className="text-zinc-500">{t.name}</span></div>
+                  <div className="text-right"><span className="text-emerald-400 font-mono">EUR {t.price_eur}</span> <span className="text-zinc-600 ml-2">Supply: {t.total_supply?.toLocaleString()}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Transaction History */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="px-4 py-2 border-b border-zinc-800 flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-zinc-500" />
+            <span className="text-white font-medium text-xs">Transazioni Recenti</span>
+          </div>
+          <div className="divide-y divide-zinc-800/50 max-h-60 overflow-y-auto">
+            {txs.length === 0 && <div className="py-6 text-center text-zinc-500 text-xs">Nessuna transazione</div>}
+            {txs.map(t => (
+              <div key={t.id} className="px-4 py-2 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${t.type === 'buy_neno' ? 'bg-emerald-500/20 text-emerald-400' : t.type === 'swap' ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {t.type === 'buy_neno' ? 'BUY' : t.type === 'sell_neno' ? 'SELL' : t.type === 'swap' ? 'SWAP' : 'OFFRAMP'}
+                  </span>
+                  <span className="text-zinc-300">{t.neno_amount ? `${t.neno_amount} NENO` : t.from_amount ? `${t.from_amount} ${t.from_asset}` : ''}</span>
+                </div>
+                <div className="text-zinc-500">{t.created_at?.slice(0, 16).replace('T', ' ')}</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
