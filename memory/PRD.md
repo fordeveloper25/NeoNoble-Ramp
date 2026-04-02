@@ -1,78 +1,48 @@
 # NeoNoble Ramp — Product Requirements Document
 
 ## Original Problem Statement
-Build "NeoNoble Ramp", a global enterprise-grade fintech infrastructure platform with full financial infrastructure including real banking rails, card issuing, crypto exchange, margin trading, KYC/AML compliance, and multi-chain wallet management.
-
-## User Personas
-- **Retail Traders**: Trade crypto with leveraged margin, professional charting tools, advanced order types
-- **NENO Holders**: Buy/sell/off-ramp NENO token through internal exchange with dynamic pricing
-- **Platform Admins**: Manage KYC applications, monitor AML alerts, oversee platform operations via audit logs
-- **API Developers**: Integrate via developer portal with HMAC-secured API keys
+Build "NeoNoble Ramp", a global enterprise-grade fintech infrastructure platform with full financial infrastructure including real banking rails, card issuing, crypto exchange, margin trading, KYC/AML compliance, multi-chain wallet management, and multi-channel notifications.
 
 ## Core Architecture
 - Backend: FastAPI + MongoDB (Motor) + Python 3.11
 - Frontend: React.js + Tailwind CSS + Shadcn UI + lightweight-charts
 - Blockchain: Web3 RPCs (Ethereum, BSC, Polygon)
-- Banking: NIUM API (live production key) for IBAN/SEPA
-- KYC: NIUM verification + AI OCR via GPT-4o (Emergent LLM key)
-- Auth: JWT + TOTP 2FA (pyotp)
-- Notifications: SSE (Server-Sent Events) + MongoDB persistence
-- Card Issuing: NIUM API (live production key)
-- i18n: 4 languages (IT, EN, DE, FR) via React Context
-- Rate Limiting: In-memory sliding window middleware
-- Microservices: Domain-based modular architecture (7 domains ready for split)
-- Real-time: WebSocket portfolio tracker with live price feeds
+- Banking: NIUM API (real Client Hash: 24dba820-d8da-4ce6-b72f-d07f98ffa2fd)
+- KYC: NIUM + AI OCR via GPT-4o (Emergent LLM key)
+- Auth: JWT + TOTP 2FA
+- Notifications: Multi-channel (Email/Resend + In-app/SSE + Browser Push + WebSocket)
+- Rate Limiting: Sliding window middleware
+- i18n: IT, EN, DE, FR
 
-## Completed Features — ALL ROADMAP ITEMS DONE
+## ALL Features Complete
 
-### Phase 1-4: Core Platform
-- User Auth, Trading Engine, Settlement, Blockchain Monitoring
+### Core Platform (Phase 1-4)
+User Auth, Trading Engine, Settlement, Blockchain Monitoring
 
-### Phase 5: Financial Infrastructure
-- Multi-chain Wallet Sync (ETH, BSC, Polygon)
-- Virtual IBAN / SEPA Banking Rails (NIUM real + simulated fallback)
-- Physical Card Issuing & Tracking (NIUM live)
-- Internal NENO Exchange (dynamic pricing)
+### Financial Infrastructure (Phase 5)
+Multi-chain Wallet, IBAN/SEPA Banking, Card Issuing, NENO Exchange
 
-### Phase 6: Advanced Trading & Compliance
-- Full Margin Trading PRO with candlestick charts + 10 indicators
-- Unified Wallet (internal + on-chain)
-- Multi-chain Token Discovery
-- KYC/AML Compliance (4-tier + AI verification)
-- Dynamic NENO Pricing (order book pressure)
-- Advanced Orders (Limit, Stop, Trailing Stop)
-- 2FA TOTP Authentication
-- Push Notifications (SSE)
-- Portfolio Analytics (PnL chart, allocation pie)
-- Settings page (Security, Language, Notifications)
-- Multi-language support (IT, EN, DE, FR)
-- Real NIUM IBAN/SEPA integration with fallback
-- AI-powered KYC document verification (GPT-4o OCR)
+### Advanced Trading & Compliance (Phase 6)
+Margin Trading PRO, Unified Wallet, Token Discovery, KYC/AML, Dynamic Pricing, Advanced Orders, 2FA, Notifications, Portfolio Analytics, Settings, i18n, Real NIUM IBAN/SEPA, AI KYC OCR
 
-### Phase 7: Infrastructure & Tooling
-- Real-time WebSocket NENO Order Book
-- API Rate Limiting & Throttling
-- Admin Audit Log Viewer
-- Automated NIUM Customer Onboarding
-- Export Portfolio/Trade/Margin data as CSV
-- Full i18n context with translations
-- Mobile-responsive CSS
-- Microservices Architecture Plan
+### Infrastructure & Tooling (Phase 7)
+WebSocket NENO Order Book, Rate Limiting, Admin Audit Log, NIUM Onboarding, Export CSV, Mobile Responsive, Microservices Plan
 
-### Phase 8: Portfolio Tracker + Real NIUM (Current)
-- Real-time Portfolio Tracker with WebSocket live price feeds
-- NIUM Onboarding rewritten: ALL 4 KYC modes (E_KYC, MANUAL_KYC, E_DOC_VERIFY, SCREENING_KYC)
-- Zero simulation: real NIUM API errors with troubleshooting
-- Full NIUM compliance flow: create, status, upload documents, respond RFI, update
+### Real-time & Multi-channel (Phase 8)
+- Real-time Portfolio Tracker (WebSocket live prices, session sparkline, margin PnL)
+- NIUM Onboarding (4 KYC modes, zero simulation, real API only)
+- Multi-channel Notification Dispatch (Email + In-app + Browser Push)
+- Price Alerts (create, trigger, delete, multi-channel notification on trigger)
+- Browser Push Notifications (Web Notification API polling)
+- Trade event notifications (NENO buy/sell → email + in-app + push)
 
-## Key API Endpoints
-- `WS /api/ws/portfolio/{token}` — Real-time portfolio with live prices
-- `WS /api/ws/orderbook/neno` — NENO order book streaming
-- `GET /api/nium-onboarding/available-methods` — All NIUM KYC modes
-- `POST /api/nium-onboarding/create-customer` — Real NIUM customer creation
-- `GET /api/nium-onboarding/compliance-status` — Real-time compliance check
-- `POST /api/nium-onboarding/upload-document` — KYC document upload to NIUM
-- `GET /api/export/trades/csv` — Trade history CSV export
+## Key New Endpoints (Phase 8)
+- `WS /api/ws/portfolio/{token}` — Real-time portfolio
+- `POST /api/alerts/create` — Price alert
+- `GET /api/alerts` — List alerts
+- `POST /api/alerts/check` — Check & trigger alerts
+- `GET /api/browser-push/pending` — Browser push polling
+- `POST /api/browser-push/delivered` — Mark push delivered
 
 ## Key Collections
-users, wallets, orders, trades, trading_engine_pairs, margin_accounts, margin_positions, neno_transactions, cards, user_wallets, onchain_wallets, virtual_ibans, banking_transactions, kyc_profiles, kyc_tx_log, aml_alerts, advanced_orders, totp_secrets, notifications, nium_api_logs, nium_customers
+users, wallets, orders, trades, margin_positions, neno_transactions, cards, banking_transactions, kyc_profiles, advanced_orders, totp_secrets, notifications, price_alerts, browser_push_queue, nium_api_logs
