@@ -1,25 +1,29 @@
-# NeoNoble Ramp - Roadmap
+# NeoNoble Ramp — Roadmap
 
-## P0 - Completed
-- [x] Core Economic Engine (Tokens, Subscriptions, Auth)
-- [x] Platform Infrastructure (Market Data, Analytics, Cards UI)
-- [x] Trading & Developer Ecosystem (Exchange Engine, Charts, API Portal)
-- [x] Final Execution Phase (Card Issuing, Settlement, Advanced Trading, Paper Trading, WebSocket)
-- [x] Financial Infrastructure Activation (Multi-Chain Wallet, Banking Rails, Enhanced Cards, Wallet UI)
+## Completed
+- [x] Phase 1-4: Core Trading, Auth, Settlement, Blockchain Monitoring
+- [x] Phase 5: Multi-chain, Banking Rails, Cards, Internal NENO Exchange
+- [x] Phase 6: Margin Trading PRO, Unified Wallet, Token Discovery, KYC/AML, Dynamic NENO Pricing
 
-## P1 - Next Phase
-- [ ] **Production Key Activation**
-  - NIUM: Test → Production API key for real card issuing
-  - Banking Partner: Real IBAN/SEPA integration (NIUM Banking, Modulr, or Railsr)
-  - Exchange: Real order routing via Binance/Kraken connectors
-- [ ] **Microservices Architecture Refactoring**
-  - Separate: Exchange Engine, Wallet, Settlement, Card Issuing, API Gateway
-- [ ] **Full Margin Trading Implementation**
-  - Leveraged positions, liquidation, PnL tracking
+## P0 — All Done
+No remaining P0 items.
 
-## P2 - Future
-- [ ] Real On/Off-Ramp (Transak production)
-- [ ] KYC/AML compliance layer
-- [ ] Multi-chain token discovery (auto-detect new tokens)
-- [ ] Advanced analytics and reporting
-- [ ] Load testing script update
+## P1 — Microservices Refactoring
+- [ ] Split FastAPI monolith into distinct services:
+  - Exchange Service (trading_engine, neno_exchange)
+  - Wallet Service (wallet, multichain, settlement)
+  - Compliance Service (kyc, aml)
+  - Cards & Banking Service (card_routes, banking_routes)
+  - Gateway Service (auth, API routing)
+- [ ] Implement service-to-service communication (gRPC or HTTP)
+- [ ] Shared MongoDB → service-specific databases
+
+## P2 — Future Enhancements
+- [ ] Automated KYC document verification (OCR + ID matching)
+- [ ] Real-time order book for NENO (WebSocket)
+- [ ] Advanced order types: Limit orders, Stop orders, Trailing stops
+- [ ] Portfolio analytics dashboard with P&L charts
+- [ ] Mobile-responsive optimization
+- [ ] Multi-language support (EN, DE, FR besides IT)
+- [ ] 2FA authentication (TOTP)
+- [ ] Push notifications for trade execution and alerts

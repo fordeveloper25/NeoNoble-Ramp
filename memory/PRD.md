@@ -1,112 +1,61 @@
-# NeoNoble Ramp - Product Requirements Document
+# NeoNoble Ramp — Product Requirements Document
 
-## Overview
-NeoNoble Ramp is a global, enterprise-grade fintech infrastructure platform comparable to Stripe or Coinbase. Built with FastAPI/MongoDB backend and React/lightweight-charts frontend.
+## Original Problem Statement
+Build "NeoNoble Ramp", a global enterprise-grade fintech infrastructure platform with: Trading Engine, Internal NENO Exchange (bypassing Transak), Multi-chain Wallet sync, Banking Rails, Card Issuing (NIUM), Full Margin Trading with professional charts, Unified Wallet, Token Discovery, KYC/AML Compliance, and Dynamic NENO Pricing.
+
+## User Personas
+- **Retail Traders**: Trade crypto with leveraged margin, professional charting tools
+- **NENO Holders**: Buy/sell/off-ramp NENO token through internal exchange
+- **Platform Admins**: Manage KYC applications, monitor AML alerts, oversee platform operations
+- **API Developers**: Integrate via developer portal with HMAC-secured API keys
 
 ## Core Requirements
-- Crypto on/off-ramp platform with HMAC-secured API access
-- BSC blockchain integration with real-time monitoring
-- Professional trading engine with order book matching
-- Card issuing infrastructure (NIUM integration) - virtual & physical with shipping
-- Multi-asset wallet with conversion pipeline
-- Multi-chain wallet sync (ETH/BSC/Polygon)
-- Banking Rails (IBAN/SEPA)
-- Developer API ecosystem
+
+### Phase 1-4 (COMPLETED)
+- User Auth (registration, login, password reset)
+- Trading Engine with Order Book
+- Internal PoR Settlement
+- Blockchain monitoring (BSC)
+- Wallet management with multi-asset balances
+- Admin promotion & user management
+
+### Phase 5 (COMPLETED)
+- Multi-chain Wallet Sync (ETH, BSC, Polygon)
+- Virtual IBAN / SEPA Banking Rails (simulated)
+- Physical Card Issuing & Tracking (NIUM live key)
+- Internal NENO Exchange (€10,000 base, 12 assets, card/bank off-ramp)
+
+### Phase 6 (COMPLETED — Current Session)
+- **Full Margin Trading** — Professional candlestick charts (lightweight-charts), 4 chart types (Candlestick, Line, Area, Bar), 10 technical indicators (SMA 20/50/200, EMA 12/26/50, RSI 14, MACD, Bollinger Bands, Volume), leveraged LONG/SHORT positions up to 20x
+- **Unified Wallet** — Tab showing internal + on-chain balances synced across all chains
+- **Multi-chain Token Discovery** — Auto-discover ERC-20/BEP-20 tokens in connected wallets
+- **KYC/AML Compliance Layer** — 4-tier KYC system (Non Verificato → Base → Verificato → Premium), admin review workflow, AML monitoring (large tx alerts, velocity alerts, structuring detection)
+- **Dynamic NENO Pricing** — Order book pressure-based pricing with max 5% deviation from €10,000 base
+
+## Tech Stack
+- Backend: FastAPI + MongoDB (Motor) + Python 3.11
+- Frontend: React.js + Tailwind CSS + Shadcn UI + lightweight-charts
+- Blockchain: Web3 RPCs (Ethereum, BSC, Polygon)
+- Card Issuing: NIUM API (live production key)
+- Auth: JWT-based custom authentication
 
 ## Architecture
-- **Backend**: FastAPI + MongoDB (Motor) + WebSockets
-- **Frontend**: React + lightweight-charts + TailwindCSS + Shadcn UI
-- **3rd Party**: NIUM (Cards), CoinGecko (Market Data), Stripe, Resend (Email), Exchange Connectors
+Monolithic FastAPI application with router-based separation:
+```
+/app/backend/
+├── server.py (main app, lifespan, router mounting)
+├── routes/ (23+ routers)
+│   ├── auth.py, trading_engine_routes.py, multichain_routes.py
+│   ├── neno_exchange_routes.py, banking_routes.py, card_routes.py
+│   ├── kyc_routes.py, wallet_routes.py, ...
+├── services/ (15+ services)
+├── database/ (MongoDB + dual manager)
+└── middleware/ (auth, HMAC)
+```
 
-## Completed Features
-
-### Phase 1: Core Economic Engine
-- Token Creation & Management
-- Token Listing Marketplace
-- Subscription Plans
-- Auth system (JWT)
-
-### Phase 2: Platform Infrastructure
-- Market Data Integration (CoinGecko)
-- Admin Analytics Dashboard
-- Crypto-Enabled Card UI
-- Password Reset (Resend email)
-
-### Phase 3: Trading & Developer Ecosystem
-- Exchange Engine (matching engine, order book)
-- Professional candlestick charts (lightweight-charts)
-- Developer API documentation portal + API Key management
-- Exchange connectors (Binance, Kraken, Coinbase)
-
-### Phase 4: Final Execution Phase (Validated March 2026)
-1. Card Issuing (NIUM) - Virtual + Physical with shipping & tracking
-2. Settlement Engine - Crypto↔Fiat↔Crypto conversions (0.3% fee)
-3. Trading Engine - 15 pairs, Market/Limit/SL/TP orders
-4. Conversion & Settlement Pipeline (Trade→Convert→Settle→Wallet)
-5. NENO Token Liquidity (NENO-EUR, NENO-USDT)
-6. Token Compatibility - All tokens compatible with all services
-7. Advanced Trading Orders (Stop-Loss, Take-Profit)
-8. Margin Trading Preparation
-9. WebSocket Infrastructure
-10. Paper Trading Environment
-
-### Phase 5: Financial Infrastructure Activation (Validated March 2026)
-1. **Multi-Chain Wallet Sync** - Ethereum, BSC, Polygon on-chain balance reading
-2. **Banking Rails (IBAN/SEPA)** - Virtual IBAN assignment, SEPA deposits/withdrawals
-3. **Enhanced Card Issuing** - Physical cards with shipping address, tracking, delivery estimates
-4. **Crypto-to-Fiat Payment Pipeline** - Complete crypto→conversion→fiat→card pipeline
-5. **Wallet & Banking UI** - Full frontend page with 3 tabs (Wallet, On-Chain, Banking)
-
-## Key API Endpoints
-
-### Multi-Chain
-- `GET /api/multichain/chains` - 3 supported chains
-- `POST /api/multichain/link` - Link wallet address
-- `GET /api/multichain/balances` - On-chain balances
-- `POST /api/multichain/sync` - Force sync
-
-### Banking Rails
-- `POST /api/banking/iban/assign` - Virtual IBAN
-- `GET /api/banking/iban` - User IBANs
-- `POST /api/banking/sepa/deposit` - SEPA deposit
-- `POST /api/banking/sepa/withdraw` - SEPA withdrawal
-- `GET /api/banking/transactions` - History
-- `GET /api/banking/admin/overview` - Admin stats
-
-### Cards (Enhanced)
-- `POST /api/cards/create` - Virtual/Physical with shipping
-- `GET /api/cards/{id}/shipping` - Tracking status
-- `POST /api/cards/{id}/top-up` - Crypto top-up
-- `POST /api/wallet/fund-card` - Crypto→Fiat→Card
-
-### Trading
-- `POST /api/trading/orders` - Market/Limit/SL/TP
-- Paper Trading, Margin prep, WebSocket
-
-### Wallet
-- `GET /api/wallet/balances` - Multi-asset
-- `POST /api/wallet/convert` - Any direction
-
-## Test Credentials
-- Admin: admin@neonobleramp.com / Admin1234!
-- Admin: mfornara93@gmail.com / NeoAdmin@Mf93!
-- Admin: massimo.fornara.2212@gmail.com / NeoAdmin@Max22!
-- User: testchart@example.com / Test1234!
-
-## MOCKED/Simulated Components
-- **IBAN generation**: Simulated NE prefix (production: banking partner API)
-- **SEPA deposits**: User-triggered (production: banking webhooks)
-- **NIUM Card Issuing**: Test API key (production: NIUM production key required)
-- **Settlement rates**: Fixed internal rates (production: live market rates)
-
-## Upcoming Tasks (P1)
-- Microservices Architecture Refactoring
-- Full Margin Trading Implementation
-- Production NIUM key activation
-- Real banking partner integration for IBAN/SEPA
-- Exchange order routing to real liquidity
-
-## Future Backlog (P2)
-- Real On/Off-Ramp (Transak production activation)
-- KYC/AML compliance layer
-- Advanced analytics and reporting
+## Key DB Collections
+- `users`, `wallets`, `orders`, `trades`, `trading_pairs`
+- `margin_accounts`, `margin_positions`
+- `neno_transactions`, `cards`, `user_wallets`, `onchain_wallets`
+- `ibans`, `banking_transactions`
+- `kyc_profiles`, `kyc_tx_log`, `aml_alerts`
