@@ -19,73 +19,38 @@ Build "NeoNoble Ramp", a global enterprise-grade fintech infrastructure platform
 - Advanced Portfolio Analytics (Sharpe ratio, Sortino ratio, drawdown, volatility)
 - Enhanced KYC/AML Compliance (risk scoring, PEP screening, compliance reports)
 - Multi-language i18n (IT, EN, DE, FR, ES, PT, JA, ZH, AR)
-- Webhook system for external integrations
-- Server-side architecture improvements (ServiceContainer pattern)
-- Monte Carlo VaR Simulation for Portfolio
+- Monte Carlo VaR Simulation
 - PEP Screening & Sanctions List
-- Microservices-style Domain Registry
+- Microservices Domain Registry
 
-## User Personas
-- **Individual Crypto Trader**: Buys/sells crypto including $NENO, uses margin trading, DCA bot, referral program
-- **Enterprise User**: Needs IBAN/SEPA banking, physical cards, KYC compliance, compliance reports
-- **Admin**: Manages users, audit logs, NIUM configuration, platform settings, compliance overview, PEP screening
-
-## Core Requirements
-1. No dependency on 3rd party ramp providers (Transak, MoonPay) — use internal NENO Exchange
-2. NENO base price EUR 10,000 with dynamic pricing based on order book pressure
-3. Internal/external wallet balances must mirror exactly (Unified Wallet)
-4. All integrations must be production-ready with real API keys (NIUM, Resend)
-5. Background scheduler runs cron jobs for price alerts, DCA execution, NIUM auth refresh
-6. Comprehensive risk management: KYC tiers, AML monitoring, risk scoring, PEP screening
-7. Multi-language support: 9 languages (IT, EN, DE, FR, ES, PT, JA, ZH, AR)
-
-## Architecture
-- Backend: FastAPI + MongoDB (Motor) — monolith with ServiceContainer + Domain Registry
-- Frontend: React.js with Tailwind CSS
-- Real-time: WebSockets for portfolio prices, SSE for notifications
-- Blockchain: Web3.py for BSC/ETH/Polygon on-chain sync
-- PDF: ReportLab for compliance reports
-- Background: asyncio scheduler for cron jobs
-
-## Completed Features (as of April 2, 2026)
-- [x] Trading Engine with order book
-- [x] Margin Trading (up to 20x leverage) with advanced orders
-- [x] NENO Custom Exchange (12+ assets, direct fiat-to-card/bank off-ramps)
+## Completed Features (100%)
+- [x] Trading Engine + Margin Trading (up to 20x leverage)
+- [x] NENO Custom Exchange — Buy, Sell, Swap, Off-Ramp, Create Token
+- [x] Custom Token Creation + Immediate Wallet Credit + Swap/Sell/Off-Ramp
 - [x] Dynamic NENO Pricing (order book pressure based)
-- [x] Custom Token Creation (create tokens at specified EUR prices)
-- [x] Advanced Swap (any token pair via NENO bridge)
 - [x] Multi-Chain Wallet Sync (ETH, BSC, Polygon)
-- [x] Banking Rails (Virtual IBAN, SEPA deposits/withdrawals — simulated)
-- [x] Physical Card shipping + NIUM live key integration
-- [x] AI KYC Verification (GPT Image OCR via Emergent LLM Key)
+- [x] Banking Rails (Virtual IBAN, SEPA)
+- [x] Card Issuing via NIUM
+- [x] AI KYC Verification (GPT Image OCR)
 - [x] Real-time Portfolio Tracker (WebSocket)
-- [x] Multi-channel Notifications (email, in-app, browser push, SMS-ready)
-- [x] Background Scheduler (price alerts, NIUM auth refresh, rate limiter, DCA bot)
-- [x] DCA Trading Bot (create, pause, resume, cancel, auto-execute)
-- [x] PDF Compliance Reports (portfolio, KYC, trades, margin, DCA)
-- [x] Data Export (CSV for trades, portfolio, margin positions)
+- [x] Multi-channel Notifications (email, in-app, push, SMS-ready)
+- [x] DCA Trading Bot
+- [x] PDF Compliance Reports
+- [x] Data Export (CSV/PDF)
 - [x] Admin Audit Logging
-- [x] NIUM Multi-Strategy Auth Discovery (6 auth types x 3 URLs)
-- [x] NIUM Multi-Version API Retry (v2 > v3 > v4 > v1)
-- [x] NIUM Diagnostic & Template Management endpoints
-- [x] Rate Limiter Middleware
-- [x] i18n (9 languages: IT, EN, DE, FR, ES, PT, JA, ZH, AR)
-- [x] Referral System with NENO bonuses (code generation, apply, stats, leaderboard)
-- [x] Advanced Portfolio Analytics (Sharpe ratio, Sortino ratio, Max Drawdown, Volatility, Calmar ratio)
-- [x] Asset Correlation & Diversification Score (HHI index)
-- [x] Enhanced KYC/AML Compliance (risk scoring 0-100, compliance reports, admin overview)
-- [x] Webhook event system (KYC, Referral, Trading, DCA, Margin event types)
-- [x] BSC RPC error handling (hex block format fallback, debug-level logging)
-- [x] ServiceContainer pattern for backend architecture
-- [x] Monte Carlo VaR Simulation (portfolio risk analysis with configurable params)
-- [x] PEP Screening & Sanctions List (OFAC, UN, EU, internal watchlist, PEP database)
-- [x] Microservices Domain Registry (9 domains: Exchange, Wallet, Banking, Compliance, Analytics, Gateway, Notification, Scheduler, Infrastructure)
+- [x] Referral System with NENO bonuses
+- [x] Advanced Portfolio Analytics
+- [x] Monte Carlo VaR Simulation
+- [x] PEP Screening & Sanctions List
+- [x] i18n (9 languages)
+- [x] Microservices Domain Registry
 
-## Pending / External Blockers
-- NIUM templateId: Must be configured in NIUM Admin portal (external dependency)
-- Twilio SMS: Keys not yet provided (SMS dispatch is ready, silent skip without keys)
+## Critical Bug Fixes
+- [x] "body stream already read" — Fixed with res.clone() triple-fallback pattern in safeJson
+- [x] NENO not recognized in swap quotes — Fixed _get_any_price_eur
+- [x] 520 Deployment Health Check — Fixed with background_init in lifespan
+- [x] Webpack build errors — Fixed with craco.config.js polyfills
 
-## Future / Backlog
-- Full Microservices Split (deploy as independent services with API gateway)
-- Real-time WebSocket price feeds for NENO dynamic pricing
-- Advanced PEP: Connect to real-time providers (Dow Jones, Refinitiv)
+## External Blockers
+- NIUM templateId: Must be configured in NIUM Admin portal
+- Twilio SMS: Keys not yet provided
