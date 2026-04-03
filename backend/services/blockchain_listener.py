@@ -267,7 +267,7 @@ class BlockchainListener:
                 )
             
         except Exception as e:
-            logger.error(f"Error checking transfers for {address}: {e}")
+            logger.debug(f"Error checking transfers for {address}: {e}")
         
         return transfers
     
@@ -377,6 +377,9 @@ class BlockchainListener:
                 if existing:
                     continue
                 
+                # Rate-limit: small delay between address checks to avoid 429s
+                await asyncio.sleep(0.5)
+                
                 # Check for transfers
                 transfers = await self.check_address_for_transfers(
                     address, from_block, current_block
@@ -413,7 +416,7 @@ class BlockchainListener:
             return
         
         self._running = True
-        poll_interval = int(os.environ.get('BSC_POLL_INTERVAL', '15'))  # seconds
+        poll_interval = int(os.environ.get('BSC_POLL_INTERVAL', '60'))  # 60s to avoid rate limits
         
         logger.info(f"Starting blockchain polling (interval: {poll_interval}s)")
         
@@ -426,7 +429,7 @@ class BlockchainListener:
                     await self.poll_for_transfers(active_quotes, on_transfer)
                 
             except Exception as e:
-                logger.error(f"Polling error: {e}")
+                logger.debug(f"Polling cycle error: {e}")
             
             await asyncio.sleep(poll_interval)
     

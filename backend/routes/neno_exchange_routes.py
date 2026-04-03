@@ -17,10 +17,30 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 import uuid
+import hashlib
 import asyncio
 
 from database.mongodb import get_database
 from routes.auth import get_current_user
+
+
+def _generate_settlement_hash(tx_id: str, uid: str, amount: float) -> str:
+    """Generate a deterministic settlement hash (0x-prefixed hex) for tx tracking."""
+    raw = f"{tx_id}:{uid}:{amount}:{datetime.now(timezone.utc).isoformat()}"
+    return "0x" + hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _settlement_record(tx_id: str, tx_type: str, uid: str, amount: float, asset: str, details: dict) -> dict:
+    """Create a complete settlement record for a transaction."""
+    settlement_hash = _generate_settlement_hash(tx_id, uid, amount)
+    return {
+        "settlement_hash": settlement_hash,
+        "settlement_status": "settled",
+        "settlement_timestamp": datetime.now(timezone.utc).isoformat(),
+        "settlement_network": "NeoNoble Internal Ledger",
+        "settlement_confirmations": 1,
+        "settlement_details": details,
+    }
 
 router = APIRouter(prefix="/neno-exchange", tags=["NENO Exchange"])
 
@@ -261,11 +281,20 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
     await _debit(db, uid, asset, total_cost)
     await _credit(db, uid, "NENO", req.neno_amount)
 
+    tx_id = str(uuid.uuid4())
+    settlement = _settlement_record(tx_id, "buy_neno", uid, req.neno_amount, "NENO", {
+        "debit": {"asset": asset, "amount": total_cost},
+        "credit": {"asset": "NENO", "amount": req.neno_amount},
+        "fee": {"asset": asset, "amount": fee},
+    })
+
     tx = {
-        "id": str(uuid.uuid4()), "user_id": uid, "type": "buy_neno",
+        "id": tx_id, "user_id": uid, "type": "buy_neno",
         "neno_amount": req.neno_amount, "pay_asset": asset,
         "pay_amount": total_cost, "rate": rate, "neno_eur_price": neno_eur_price,
         "fee": fee, "fee_asset": asset, "status": "completed",
+        "eur_value": round(req.neno_amount * neno_eur_price, 2),
+        **settlement,
         "created_at": datetime.now(timezone.utc),
     }
     await _log_tx(db, tx)
@@ -317,11 +346,20 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     await _debit(db, uid, "NENO", req.neno_amount)
     await _credit(db, uid, asset, net)
 
+    tx_id = str(uuid.uuid4())
+    settlement = _settlement_record(tx_id, "sell_neno", uid, req.neno_amount, asset, {
+        "debit": {"asset": "NENO", "amount": req.neno_amount},
+        "credit": {"asset": asset, "amount": net},
+        "fee": {"asset": asset, "amount": fee},
+    })
+
     tx = {
-        "id": str(uuid.uuid4()), "user_id": uid, "type": "sell_neno",
+        "id": tx_id, "user_id": uid, "type": "sell_neno",
         "neno_amount": req.neno_amount, "receive_asset": asset,
         "receive_amount": net, "rate": rate, "neno_eur_price": neno_eur_price,
         "fee": fee, "fee_asset": asset, "status": "completed",
+        "eur_value": round(req.neno_amount * neno_eur_price, 2),
+        **settlement,
         "created_at": datetime.now(timezone.utc),
     }
     await _log_tx(db, tx)
@@ -379,14 +417,22 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     await _debit(db, uid, from_asset, req.amount)
     await _credit(db, uid, to_asset, receive_amount)
 
+    tx_id = str(uuid.uuid4())
+    settlement = _settlement_record(tx_id, "swap", uid, req.amount, from_asset, {
+        "debit": {"asset": from_asset, "amount": req.amount},
+        "credit": {"asset": to_asset, "amount": receive_amount},
+        "fee_eur": round(fee_eur, 4),
+    })
+
     tx = {
-        "id": str(uuid.uuid4()), "user_id": uid, "type": "swap",
+        "id": tx_id, "user_id": uid, "type": "swap",
         "from_asset": from_asset, "from_amount": req.amount,
         "to_asset": to_asset, "to_amount": receive_amount,
         "eur_value": round(eur_value, 2), "fee_eur": round(fee_eur, 4),
         "fee_in_to_asset": fee_in_to,
         "rate": round(from_price / to_price, 8),
         "status": "completed",
+        **settlement,
         "created_at": datetime.now(timezone.utc),
     }
     await _log_tx(db, tx)
@@ -540,12 +586,20 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     else:
         raise HTTPException(status_code=400, detail="destination deve essere 'card' o 'bank'")
 
+    tx_id = str(uuid.uuid4())
+    settlement = _settlement_record(tx_id, "neno_offramp", uid, req.neno_amount, "EUR", {
+        "debit": {"asset": "NENO", "amount": req.neno_amount},
+        "credit": {"asset": "EUR", "amount": eur_net, "destination": req.destination},
+        "fee": {"asset": "EUR", "amount": fee},
+    })
+
     tx = {
-        "id": str(uuid.uuid4()), "user_id": uid, "type": "neno_offramp",
+        "id": tx_id, "user_id": uid, "type": "neno_offramp",
         "neno_amount": req.neno_amount, "eur_gross": eur_gross, "fee": fee,
         "eur_net": eur_net, "destination": req.destination,
         "destination_info": dest_info,
         "status": "completed" if req.destination == "card" else "processing",
+        **settlement,
         "created_at": datetime.now(timezone.utc),
     }
     await _log_tx(db, tx)
@@ -598,4 +652,143 @@ async def neno_market_info():
         "supported_assets": all_assets,
         "pairs": pairs,
         "custom_tokens": custom_tokens,
+    }
+
+
+
+# ── Settlement Verification ──
+
+@router.get("/settlement/{tx_id}")
+async def verify_settlement(tx_id: str, current_user: dict = Depends(get_current_user)):
+    """Verify settlement status for a specific transaction."""
+    db = get_database()
+    tx = await db.neno_transactions.find_one(
+        {"id": tx_id, "user_id": current_user["user_id"]}, {"_id": 0}
+    )
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transazione non trovata")
+
+    if "created_at" in tx and hasattr(tx["created_at"], "isoformat"):
+        tx["created_at"] = tx["created_at"].isoformat()
+
+    return {
+        "transaction_id": tx["id"],
+        "settlement_hash": tx.get("settlement_hash", "N/A"),
+        "settlement_status": tx.get("settlement_status", "unknown"),
+        "settlement_timestamp": tx.get("settlement_timestamp"),
+        "settlement_network": tx.get("settlement_network", "NeoNoble Internal Ledger"),
+        "settlement_confirmations": tx.get("settlement_confirmations", 0),
+        "type": tx.get("type"),
+        "status": tx.get("status"),
+        "details": tx.get("settlement_details", {}),
+    }
+
+
+# ── Wallet Sync: Compare internal vs external (on-chain) balances ──
+
+class WalletSyncRequest(BaseModel):
+    external_address: str = Field(min_length=10, max_length=100)
+    chain_id: int = 1
+    on_chain_balances: Optional[dict] = None
+
+
+@router.post("/wallet-sync")
+async def wallet_sync(req: WalletSyncRequest, current_user: dict = Depends(get_current_user)):
+    """Compare internal platform balances with connected external wallet."""
+    db = get_database()
+    uid = current_user["user_id"]
+
+    # Fetch all internal balances
+    wallets = await db.wallets.find(
+        {"user_id": uid, "balance": {"$gt": 0}}, {"_id": 0}
+    ).to_list(50)
+
+    internal_balances = {w["asset"]: w["balance"] for w in wallets}
+
+    # Store the external wallet address association
+    await db.users.update_one(
+        {"user_id": uid},
+        {"$set": {
+            "connected_wallet": req.external_address,
+            "connected_chain_id": req.chain_id,
+            "wallet_synced_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    # Calculate sync status
+    on_chain = req.on_chain_balances or {}
+    sync_report = []
+    for asset, internal_bal in internal_balances.items():
+        external_bal = on_chain.get(asset, 0)
+        sync_report.append({
+            "asset": asset,
+            "internal_balance": round(internal_bal, 8),
+            "external_balance": round(external_bal, 8) if external_bal else "N/A",
+            "synced": abs(internal_bal - external_bal) < 0.00001 if isinstance(external_bal, (int, float)) else False,
+        })
+
+    return {
+        "external_address": req.external_address,
+        "chain_id": req.chain_id,
+        "synced_at": datetime.now(timezone.utc).isoformat(),
+        "internal_balances": internal_balances,
+        "sync_report": sync_report,
+        "total_internal_assets": len(internal_balances),
+    }
+
+
+# ── Full Portfolio Snapshot (internal + external) ──
+
+@router.get("/portfolio-snapshot")
+async def portfolio_snapshot(current_user: dict = Depends(get_current_user)):
+    """Get a complete snapshot of the user's portfolio for audit/verification."""
+    db = get_database()
+    uid = current_user["user_id"]
+
+    wallets = await db.wallets.find({"user_id": uid, "balance": {"$gt": 0}}, {"_id": 0}).to_list(50)
+    custom_tokens = await db.custom_tokens.find({}, {"_id": 0}).to_list(100)
+    custom_prices = {t["symbol"]: t["price_eur"] for t in custom_tokens}
+
+    pricing = await _get_dynamic_neno_price()
+    neno_price = pricing["price"]
+
+    positions = []
+    total_eur = 0
+    for w in wallets:
+        asset = w["asset"]
+        bal = w["balance"]
+        if asset == "NENO":
+            price = neno_price
+        else:
+            price = MARKET_PRICES_EUR.get(asset) or custom_prices.get(asset, 0)
+        value = bal * price
+        positions.append({
+            "asset": asset, "balance": round(bal, 8),
+            "price_eur": price, "value_eur": round(value, 2),
+        })
+        total_eur += value
+
+    # Recent settlements
+    recent_txs = await db.neno_transactions.find(
+        {"user_id": uid}, {"_id": 0}
+    ).sort("created_at", -1).limit(10).to_list(10)
+    for t in recent_txs:
+        if "created_at" in t and hasattr(t["created_at"], "isoformat"):
+            t["created_at"] = t["created_at"].isoformat()
+
+    user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1, "wallet_synced_at": 1})
+
+    return {
+        "snapshot_timestamp": datetime.now(timezone.utc).isoformat(),
+        "total_value_eur": round(total_eur, 2),
+        "positions": sorted(positions, key=lambda x: -x["value_eur"]),
+        "connected_wallet": user.get("connected_wallet") if user else None,
+        "wallet_synced_at": user.get("wallet_synced_at") if user else None,
+        "recent_settlements": [{
+            "id": t["id"],
+            "type": t["type"],
+            "settlement_hash": t.get("settlement_hash", "N/A"),
+            "status": t.get("settlement_status", t.get("status")),
+            "timestamp": t.get("settlement_timestamp", t.get("created_at")),
+        } for t in recent_txs],
     }

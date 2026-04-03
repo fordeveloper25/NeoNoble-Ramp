@@ -5,10 +5,7 @@
 
 import { http, createConfig } from 'wagmi';
 import { mainnet, bsc, polygon, arbitrum, base, sepolia } from 'wagmi/chains';
-import { coinbaseWallet, walletConnect, injected } from 'wagmi/connectors';
-
-// WalletConnect Project ID - Get from https://cloud.walletconnect.com
-const WALLETCONNECT_PROJECT_ID = process.env.REACT_APP_WALLETCONNECT_PROJECT_ID || 'demo-project-id';
+import { coinbaseWallet, injected } from 'wagmi/connectors';
 
 // Supported chains
 export const supportedChains = [mainnet, bsc, polygon, arbitrum, base, sepolia];
@@ -23,31 +20,32 @@ export const chainMetadata = {
   11155111: { name: 'Sepolia', symbol: 'ETH', icon: '🧪', color: '#CFB5F0' },
 };
 
+// Build connectors list — only add WalletConnect if valid project ID exists
+const connectors = [
+  injected({ shimDisconnect: true }),
+  coinbaseWallet({ appName: 'NeoNoble Ramp' }),
+];
+
+const wcProjectId = process.env.REACT_APP_WALLETCONNECT_PROJECT_ID;
+if (wcProjectId && wcProjectId !== 'demo-project-id' && wcProjectId.length > 10) {
+  // Only import and add WalletConnect if a real project ID is configured
+  const { walletConnect } = require('wagmi/connectors');
+  connectors.push(walletConnect({
+    projectId: wcProjectId,
+    showQrModal: true,
+    metadata: {
+      name: 'NeoNoble Ramp',
+      description: 'Enterprise Fintech Infrastructure - Crypto On/Off Ramp',
+      url: 'https://neonobleramp.com',
+      icons: ['https://neonobleramp.com/logo.png'],
+    },
+  }));
+}
+
 // Wagmi configuration
 export const wagmiConfig = createConfig({
   chains: supportedChains,
-  connectors: [
-    // MetaMask and other injected wallets (Trust Wallet, etc.)
-    injected({
-      shimDisconnect: true,
-    }),
-    // WalletConnect v2 - supports 400+ wallets including Trust Wallet
-    walletConnect({
-      projectId: WALLETCONNECT_PROJECT_ID,
-      showQrModal: true,
-      metadata: {
-        name: 'NeoNoble Ramp',
-        description: 'Enterprise Fintech Infrastructure - Crypto On/Off Ramp',
-        url: 'https://neonobleramp.com',
-        icons: ['https://neonobleramp.com/logo.png'],
-      },
-    }),
-    // Coinbase Wallet
-    coinbaseWallet({
-      appName: 'NeoNoble Ramp',
-      appLogoUrl: 'https://neonobleramp.com/logo.png',
-    }),
-  ],
+  connectors,
   transports: {
     [mainnet.id]: http(),
     [bsc.id]: http('https://bsc-dataseed1.binance.org'),
@@ -58,7 +56,9 @@ export const wagmiConfig = createConfig({
   },
 });
 
-// Wallet metadata for UI
+// Wallet metadata for UI — only show WalletConnect if configured
+const wcAvailable = !!(process.env.REACT_APP_WALLETCONNECT_PROJECT_ID && process.env.REACT_APP_WALLETCONNECT_PROJECT_ID !== 'demo-project-id');
+
 export const walletMetadata = [
   {
     id: 'metamask',
@@ -67,13 +67,13 @@ export const walletMetadata = [
     description: 'Connect using MetaMask browser extension',
     connector: 'injected',
   },
-  {
+  ...(wcAvailable ? [{
     id: 'walletconnect',
     name: 'WalletConnect',
     icon: '🔗',
     description: 'Scan QR code with any WalletConnect wallet',
     connector: 'walletConnect',
-  },
+  }] : []),
   {
     id: 'coinbase',
     name: 'Coinbase Wallet',
@@ -81,13 +81,13 @@ export const walletMetadata = [
     description: 'Connect using Coinbase Wallet',
     connector: 'coinbaseWallet',
   },
-  {
+  ...(wcAvailable ? [{
     id: 'trust',
     name: 'Trust Wallet',
     icon: '🛡️',
     description: 'Connect via WalletConnect or browser',
     connector: 'walletConnect',
-  },
+  }] : []),
 ];
 
 export default wagmiConfig;

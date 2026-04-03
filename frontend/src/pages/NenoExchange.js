@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building, ArrowRight,
-  Clock, ChevronDown, TrendingUp, TrendingDown, Plus, Repeat
+  Clock, ChevronDown, TrendingUp, TrendingDown, Plus, Repeat,
+  Wallet, CheckCircle, Link2, ExternalLink, Copy, Check
 } from 'lucide-react';
+import { useWeb3 } from '../context/Web3Context';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
@@ -57,6 +59,7 @@ const BUILTIN_ASSETS = ['EUR', 'BNB', 'ETH', 'USDT', 'BTC', 'USDC', 'MATIC', 'US
 
 export default function NenoExchange() {
   const navigate = useNavigate();
+  const { address, isConnected, balance: onChainBalance, currentChain, formatAddress } = useWeb3();
   const [tab, setTab] = useState('buy');
   const [asset, setAsset] = useState('EUR');
   const [nenoAmount, setNenoAmount] = useState('1');
@@ -71,6 +74,7 @@ export default function NenoExchange() {
   const [result, setResult] = useState(null);
   const [customTokens, setCustomTokens] = useState([]);
   const [allAssets, setAllAssets] = useState(BUILTIN_ASSETS);
+  const [copiedHash, setCopiedHash] = useState(null);
 
   // Off-ramp
   const [offrampDest, setOfframpDest] = useState('card');
@@ -152,7 +156,24 @@ export default function NenoExchange() {
       const token = localStorage.getItem('token');
       const { ok, data } = await safePost(`${BACKEND_URL}${url}`, body, token);
       if (!ok) throw new Error(data.detail || JSON.stringify(data) || 'Errore');
-      setResult({ ok: true, msg: data.message || 'Operazione completata', balances: data.balances });
+
+      // Build result with settlement info
+      const tx = data.transaction || {};
+      const settlementHash = tx.settlement_hash || data.settlement_hash || null;
+      const settlementMsg = settlementHash
+        ? `${data.message || 'Operazione completata'} | Settlement: ${settlementHash.slice(0, 10)}...${settlementHash.slice(-6)}`
+        : (data.message || 'Operazione completata');
+
+      setResult({ ok: true, msg: settlementMsg, balances: data.balances, settlementHash });
+
+      // Sync wallet if connected
+      if (isConnected && address) {
+        safePost(`${BACKEND_URL}/api/neno-exchange/wallet-sync`, {
+          external_address: address,
+          chain_id: currentChain?.id || 1,
+          on_chain_balances: onChainBalance ? { [onChainBalance.symbol]: parseFloat(onChainBalance.formatted) } : {},
+        }, token).catch(() => {});
+      }
       fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
     finally { setLoading(false); }
@@ -195,9 +216,18 @@ export default function NenoExchange() {
               </span>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-zinc-500 text-[10px]">NENO Balance</div>
-            <div className="text-white font-mono font-bold" data-testid="neno-balance">{(balances.NENO || 0).toFixed(4)}</div>
+          <div className="flex items-center gap-4">
+            {isConnected && address && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg" data-testid="wallet-connected-status">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-400 text-[10px] font-mono">{formatAddress(address)}</span>
+                {onChainBalance && <span className="text-zinc-500 text-[10px]">({parseFloat(onChainBalance.formatted).toFixed(4)} {onChainBalance.symbol})</span>}
+              </div>
+            )}
+            <div className="text-right">
+              <div className="text-zinc-500 text-[10px]">NENO Balance</div>
+              <div className="text-white font-mono font-bold" data-testid="neno-balance">{(balances.NENO || 0).toFixed(4)}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -216,7 +246,17 @@ export default function NenoExchange() {
         {/* Result banner */}
         {result && (
           <div className={`rounded-lg px-4 py-3 text-sm ${result.ok ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`} data-testid="result-banner">
-            {result.msg}
+            <div>{result.msg}</div>
+            {result.settlementHash && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <Link2 className="w-3 h-3 text-emerald-500/60" />
+                <span className="text-emerald-500/60 text-[10px] font-mono">{result.settlementHash}</span>
+                <button onClick={() => { navigator.clipboard.writeText(result.settlementHash); setCopiedHash(result.settlementHash); setTimeout(() => setCopiedHash(null), 2000); }}
+                  className="p-0.5 hover:bg-emerald-500/20 rounded" data-testid="copy-settlement-hash">
+                  {copiedHash === result.settlementHash ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-emerald-500/60" />}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -397,14 +437,25 @@ export default function NenoExchange() {
           <div className="divide-y divide-zinc-800/50 max-h-60 overflow-y-auto">
             {txs.length === 0 && <div className="py-6 text-center text-zinc-500 text-xs">Nessuna transazione</div>}
             {txs.map(t => (
-              <div key={t.id} className="px-4 py-2 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${t.type === 'buy_neno' ? 'bg-emerald-500/20 text-emerald-400' : t.type === 'swap' ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {t.type === 'buy_neno' ? 'BUY' : t.type === 'sell_neno' ? 'SELL' : t.type === 'swap' ? 'SWAP' : 'OFFRAMP'}
-                  </span>
-                  <span className="text-zinc-300">{t.neno_amount ? `${t.neno_amount} NENO` : t.from_amount ? `${t.from_amount} ${t.from_asset}` : ''}</span>
+              <div key={t.id} className="px-4 py-2 space-y-0.5">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${t.type === 'buy_neno' ? 'bg-emerald-500/20 text-emerald-400' : t.type === 'swap' ? 'bg-purple-500/20 text-purple-400' : t.type === 'neno_offramp' ? 'bg-blue-500/20 text-blue-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {t.type === 'buy_neno' ? 'BUY' : t.type === 'sell_neno' ? 'SELL' : t.type === 'swap' ? 'SWAP' : 'OFFRAMP'}
+                    </span>
+                    <span className="text-zinc-300">{t.neno_amount ? `${t.neno_amount} NENO` : t.from_amount ? `${t.from_amount} ${t.from_asset}` : ''}</span>
+                    {t.eur_value && <span className="text-zinc-600 text-[10px]">(EUR {t.eur_value})</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {t.settlement_status === 'settled' && <CheckCircle className="w-3 h-3 text-emerald-500" />}
+                    <span className="text-zinc-500">{t.created_at?.slice(0, 16).replace('T', ' ')}</span>
+                  </div>
                 </div>
-                <div className="text-zinc-500">{t.created_at?.slice(0, 16).replace('T', ' ')}</div>
+                {t.settlement_hash && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-zinc-700 text-[9px] font-mono">{t.settlement_hash.slice(0, 18)}...</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
