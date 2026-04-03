@@ -1,56 +1,55 @@
 # NeoNoble Ramp — Product Requirements Document
 
 ## Original Problem Statement
-Build "NeoNoble Ramp", a global enterprise-grade fintech infrastructure platform featuring:
-- Custom internal NENO Exchange (bypassing 3rd party providers like Transak) with fixed base price EUR 10,000
-- Full Margin Trading with advanced orders
-- Multi-chain Token Discovery and Unified Wallet (ETH, BSC, Polygon)
-- IBAN/SEPA Banking Rails
-- Real Card Issuing via NIUM (production key)
-- AI KYC Verification
-- Real-time Portfolio Tracker via WebSockets
-- Multi-channel Notifications (email, in-app, browser push, SMS)
-- Background Scheduler (cron jobs for price alerts, DCA bot)
-- PDF Compliance Reports
-- DCA (Dollar-Cost Averaging) Trading Bot
-- Data Export (CSV/PDF)
-- Admin Audit Logging
-- Referral System with NENO bonuses
-- Advanced Portfolio Analytics (Sharpe ratio, Sortino ratio, drawdown, volatility)
-- Enhanced KYC/AML Compliance (risk scoring, PEP screening, compliance reports)
-- Multi-language i18n (IT, EN, DE, FR, ES, PT, JA, ZH, AR)
-- Monte Carlo VaR Simulation
-- PEP Screening & Sanctions List
-- Microservices Domain Registry
+Enterprise-grade fintech platform with NENO custom exchange, multi-chain wallet, NIUM banking, margin trading, DCA bot, compliance tools, and full settlement tracking.
+
+## Architecture
+- **Backend**: FastAPI + MongoDB (Motor) + Background Scheduler
+- **Frontend**: React.js + Tailwind + Wagmi (MetaMask/Coinbase Wallet)
+- **Settlement**: Internal Ledger with deterministic SHA-256 settlement hashes (0x-prefixed)
+- **Wallet Sync**: Web3Context integration — Exchange reads connected wallet balance
 
 ## Completed Features (100%)
-- [x] Trading Engine + Margin Trading (up to 20x leverage)
-- [x] NENO Custom Exchange — Buy, Sell, Swap, Off-Ramp, Create Token
-- [x] Custom Token Creation + Immediate Wallet Credit + Swap/Sell/Off-Ramp
-- [x] Dynamic NENO Pricing (order book pressure based)
+- [x] NENO Exchange: Buy, Sell, Swap, Off-Ramp, Create Token
+- [x] Settlement Tracking: Every transaction gets a unique 0x-prefixed settlement_hash
+- [x] Settlement Verification API: GET /api/neno-exchange/settlement/{tx_id}
+- [x] Wallet Sync API: POST /api/neno-exchange/wallet-sync
+- [x] Portfolio Snapshot API: GET /api/neno-exchange/portfolio-snapshot
+- [x] Custom Token Creation with immediate wallet credit
+- [x] Dynamic NENO Pricing (order book pressure)
+- [x] Margin Trading (up to 20x leverage)
 - [x] Multi-Chain Wallet Sync (ETH, BSC, Polygon)
-- [x] Banking Rails (Virtual IBAN, SEPA)
-- [x] Card Issuing via NIUM
-- [x] AI KYC Verification (GPT Image OCR)
-- [x] Real-time Portfolio Tracker (WebSocket)
-- [x] Multi-channel Notifications (email, in-app, push, SMS-ready)
+- [x] IBAN/SEPA Banking Rails
+- [x] Card Issuing (NIUM)
+- [x] AI KYC Verification
 - [x] DCA Trading Bot
 - [x] PDF Compliance Reports
-- [x] Data Export (CSV/PDF)
-- [x] Admin Audit Logging
 - [x] Referral System with NENO bonuses
-- [x] Advanced Portfolio Analytics
+- [x] Advanced Portfolio Analytics (Sharpe, Sortino, Drawdown)
 - [x] Monte Carlo VaR Simulation
 - [x] PEP Screening & Sanctions List
-- [x] i18n (9 languages)
+- [x] i18n (9 languages: IT, EN, DE, FR, ES, PT, JA, ZH, AR)
 - [x] Microservices Domain Registry
+- [x] WalletConnect Error Fix (conditional loading)
+- [x] Blockchain Listener Rate Limiting (60s intervals)
+- [x] Zero console errors in production
 
-## Critical Bug Fixes
-- [x] "body stream already read" — Fixed with res.clone() triple-fallback pattern in safeJson
-- [x] NENO not recognized in swap quotes — Fixed _get_any_price_eur
-- [x] 520 Deployment Health Check — Fixed with background_init in lifespan
-- [x] Webpack build errors — Fixed with craco.config.js polyfills
+## Key API Endpoints
+- POST /api/neno-exchange/buy — Buy NENO (returns settlement_hash)
+- POST /api/neno-exchange/sell — Sell NENO (returns settlement_hash)
+- POST /api/neno-exchange/swap — Swap tokens (returns settlement_hash)
+- POST /api/neno-exchange/offramp — Off-ramp to card/bank (returns settlement_hash)
+- POST /api/neno-exchange/create-token — Create custom token
+- GET /api/neno-exchange/settlement/{tx_id} — Verify settlement
+- POST /api/neno-exchange/wallet-sync — Sync external wallet
+- GET /api/neno-exchange/portfolio-snapshot — Full portfolio with settlements
 
 ## External Blockers
 - NIUM templateId: Must be configured in NIUM Admin portal
 - Twilio SMS: Keys not yet provided
+- WalletConnect: Requires real project ID from cloud.walletconnect.com for QR scanning
+
+## Future / Backlog
+- Full Microservices Split
+- Real-time PEP screening (Dow Jones, Refinitiv)
+- WebSocket price feeds for NENO
