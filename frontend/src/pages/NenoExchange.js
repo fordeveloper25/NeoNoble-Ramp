@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building,
   Clock, TrendingUp, TrendingDown, Plus, Repeat,
-  Wallet, CheckCircle, ExternalLink, Copy, Check, AlertTriangle, Shield
+  Wallet, CheckCircle, ExternalLink, Copy, Check, AlertTriangle, Shield,
+  QrCode, ArrowDownToLine
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useWeb3 } from '../context/Web3Context';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -96,6 +98,7 @@ export default function NenoExchange() {
   const [selectedCard, setSelectedCard] = useState('');
   const [offrampIban, setOfframpIban] = useState('');
   const [offrampName, setOfframpName] = useState('');
+  const [copiedAddr, setCopiedAddr] = useState(false);
 
   // Swap
   const [swapFrom, setSwapFrom] = useState('NENO');
@@ -143,7 +146,7 @@ export default function NenoExchange() {
 
   // Live NENO quote
   useEffect(() => {
-    if (!nenoAmount || parseFloat(nenoAmount) <= 0 || tab === 'swap' || tab === 'create') { setQuote(null); return; }
+    if (!nenoAmount || parseFloat(nenoAmount) <= 0 || tab === 'swap' || tab === 'create' || tab === 'deposit') { setQuote(null); return; }
     if (abortRef.current) abortRef.current.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -284,13 +287,14 @@ export default function NenoExchange() {
     { id: 'buy', label: 'Compra', icon: TrendingUp },
     { id: 'sell', label: 'Vendi', icon: TrendingDown },
     { id: 'swap', label: 'Swap', icon: Repeat },
+    { id: 'deposit', label: 'Deposita', icon: ArrowDownToLine },
     { id: 'offramp', label: 'Off-Ramp', icon: Building },
     { id: 'create', label: 'Crea Token', icon: Plus },
   ];
 
   // Determine if current operation will use on-chain
   const willUseOnChain = (requiresNeno) => requiresNeno && isConnected && platformWallet && nenoOnChainBalance > 0;
-  const showOnChainBadge = willUseOnChain(tab === 'sell' || tab === 'offramp' || (tab === 'swap' && swapFrom.toUpperCase() === 'NENO'));
+  const showOnChainBadge = willUseOnChain(tab === 'sell' || tab === 'offramp' || (tab === 'swap' && swapFrom.toUpperCase() === 'NENO')) && tab !== 'deposit';
 
   // Transaction step labels
   const stepLabel = txStep === 'signing' ? 'Firma con MetaMask...'
@@ -502,6 +506,124 @@ export default function NenoExchange() {
             </button>
           </div>
         )}
+
+
+        {/* Deposit NENO Widget */}
+        {tab === 'deposit' && platformWallet && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden" data-testid="deposit-neno-widget">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-600/20 to-teal-600/20 border-b border-emerald-500/20 px-5 py-3">
+              <div className="flex items-center gap-2">
+                <ArrowDownToLine className="w-4.5 h-4.5 text-emerald-400" />
+                <h3 className="text-white font-bold text-sm">Deposita $NENO</h3>
+              </div>
+              <p className="text-emerald-400/70 text-[11px] mt-0.5">Invia NENO dal tuo wallet al hot wallet della piattaforma per operazioni di vendita e off-ramp</p>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* QR Code + Address */}
+              <div className="flex flex-col items-center space-y-4">
+                <div className="bg-white p-4 rounded-2xl shadow-lg shadow-emerald-500/10" data-testid="deposit-qr-code">
+                  <QRCodeSVG
+                    value={platformWallet}
+                    size={180}
+                    bgColor="#ffffff"
+                    fgColor="#0a0a0a"
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+
+                {/* Address with copy */}
+                <div className="w-full max-w-md">
+                  <label className="text-zinc-500 text-[10px] uppercase tracking-wider block mb-1.5 text-center">Indirizzo Hot Wallet (BSC)</label>
+                  <div className="flex items-center gap-2 bg-zinc-800/80 border border-zinc-700 rounded-lg px-3 py-2.5">
+                    <span className="text-emerald-400 font-mono text-[11px] break-all flex-1 select-all" data-testid="deposit-wallet-address">
+                      {platformWallet}
+                    </span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(platformWallet); setCopiedAddr(true); setTimeout(() => setCopiedAddr(false), 2500); }}
+                      className="flex-shrink-0 p-1.5 rounded-md hover:bg-zinc-700 transition-colors"
+                      data-testid="copy-deposit-address-btn"
+                    >
+                      {copiedAddr
+                        ? <Check className="w-4 h-4 text-emerald-400" />
+                        : <Copy className="w-4 h-4 text-zinc-500 hover:text-white" />
+                      }
+                    </button>
+                  </div>
+                  {copiedAddr && (
+                    <p className="text-emerald-400 text-[10px] text-center mt-1 animate-pulse">Indirizzo copiato!</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="space-y-2.5">
+                <div className="flex items-start gap-3 bg-zinc-800/40 rounded-lg px-3 py-2.5">
+                  <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-emerald-400 text-[10px] font-bold">1</span>
+                  </div>
+                  <div>
+                    <p className="text-white text-xs font-medium">Apri MetaMask o il tuo wallet BSC</p>
+                    <p className="text-zinc-500 text-[10px]">Assicurati di essere sulla rete BNB Smart Chain (Chain ID 56)</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 bg-zinc-800/40 rounded-lg px-3 py-2.5">
+                  <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-emerald-400 text-[10px] font-bold">2</span>
+                  </div>
+                  <div>
+                    <p className="text-white text-xs font-medium">Invia i token $NENO all'indirizzo sopra</p>
+                    <p className="text-zinc-500 text-[10px]">Copia l'indirizzo o scansiona il QR code dal tuo wallet mobile</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 bg-zinc-800/40 rounded-lg px-3 py-2.5">
+                  <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-emerald-400 text-[10px] font-bold">3</span>
+                  </div>
+                  <div>
+                    <p className="text-white text-xs font-medium">Il deposito viene verificato automaticamente</p>
+                    <p className="text-zinc-500 text-[10px]">Dopo la conferma on-chain, il saldo sara' aggiornato e potrai vendere/scambiare/off-ramp</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Token contract info */}
+              <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-lg p-3 space-y-1.5">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-zinc-500">Token</span>
+                  <span className="text-white font-mono">$NENO (ERC-20)</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-zinc-500">Network</span>
+                  <span className="text-white font-mono">BNB Smart Chain (BSC)</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-zinc-500">Contratto</span>
+                  <a href="https://bscscan.com/token/0xeF3F5C1892A8d7A3304E4A15959E124402d69974" target="_blank" rel="noopener noreferrer"
+                    className="text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1" data-testid="deposit-contract-link">
+                    0xeF3F...d69974 <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-zinc-500">Decimali</span>
+                  <span className="text-white font-mono">18</span>
+                </div>
+              </div>
+
+              {/* Warning */}
+              <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-amber-400/80 text-[10px] leading-relaxed">
+                  Invia solo token <strong>$NENO</strong> su rete <strong>BSC Mainnet</strong> a questo indirizzo.
+                  Inviare altri token o su altre reti puo' causare la perdita dei fondi.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
 
         {/* Off-Ramp */}
         {tab === 'offramp' && (
