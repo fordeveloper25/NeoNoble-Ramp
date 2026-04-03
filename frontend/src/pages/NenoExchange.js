@@ -12,25 +12,34 @@ const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer
 
 /**
  * Parse response safely — clones before reading to prevent "body stream already read".
- * Tries .json() first on clone, falls back to .text() on second clone.
+ * Uses multiple fallback strategies for maximum compatibility.
  */
 async function safeJson(res) {
+  // Strategy 1: clone + json
   try {
-    const c1 = res.clone();
-    return await c1.json();
-  } catch {
+    return await res.clone().json();
+  } catch (e1) {
+    // Strategy 2: clone + text → parse
     try {
-      const c2 = res.clone();
-      const txt = await c2.text();
-      try { return JSON.parse(txt); } catch { return { detail: txt || 'Errore sconosciuto' }; }
-    } catch {
-      return { detail: 'Errore di rete — impossibile leggere la risposta' };
+      const txt = await res.clone().text();
+      if (txt) {
+        try { return JSON.parse(txt); } catch { return { detail: txt }; }
+      }
+    } catch (e2) {
+      // Strategy 3: direct text (last resort)
+      try {
+        const txt = await res.text();
+        if (txt) return { detail: txt };
+      } catch (e3) {
+        // All strategies failed
+      }
     }
+    return { detail: `Errore ${res.status || 'di rete'}: risposta non leggibile` };
   }
 }
 
 /**
- * Safe GET fetch that always returns parsed data, never throws on body read.
+ * Safe GET fetch — never throws on body read.
  */
 async function safeGet(url, options = {}) {
   try {
@@ -43,14 +52,19 @@ async function safeGet(url, options = {}) {
 }
 
 /**
- * Safe POST fetch that returns { ok, data } — never throws on body read.
+ * Safe POST fetch — returns { ok, data }.
  */
 async function safePost(url, body, token) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    return { ok: false, status: 0, data: { detail: `Connessione fallita: ${e.message}` } };
+  }
   const data = await safeJson(res);
   return { ok: res.ok, status: res.status, data };
 }

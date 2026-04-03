@@ -734,15 +734,16 @@ set_webhook_hmac(hmac_middleware)
 # Include the main router
 app.include_router(api_router)
 
-# CORS middleware
+# Rate Limiting middleware (must be added BEFORE CORS so CORS wraps it)
+from middleware.rate_limiter import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
+# CORS middleware (added LAST = executes FIRST = outermost)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-RateLimit-Remaining", "X-RateLimit-Limit"],
 )
-
-# Rate Limiting middleware
-from middleware.rate_limiter import RateLimitMiddleware
-app.add_middleware(RateLimitMiddleware)

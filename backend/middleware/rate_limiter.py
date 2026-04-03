@@ -104,6 +104,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.headers.get("upgrade", "").lower() == "websocket":
             return await call_next(request)
 
+        # Skip CORS preflight OPTIONS requests
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         max_req, window = _get_rate_limit(path)
         key = f"{_get_client_key(request)}:{path.split('/')[2] if len(path.split('/')) > 2 else 'root'}"
 
