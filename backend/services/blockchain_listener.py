@@ -411,3 +411,179 @@ class BlockchainListener:
         self._running = False
         if self._poll_task:
             self._poll_task.cancel()
+
+    # ── Hot Wallet Auto-Deposit Monitor ──
+
+    async def monitor_hot_wallet(self, hot_wallet_address: str):
+        """
+        Continuously monitors the platform hot wallet for incoming NENO transfers.
+        When a new deposit is detected:
+          1. Looks up the sender's user account by connected wallet address
+          2. Credits NENO to their internal wallet
+          3. Creates a transaction record
+        """
+        if not self._enabled:
+            logger.warning("Hot wallet monitor not started (RPC not configured)")
+            return
+
+        poll_interval = int(os.environ.get('BSC_POLL_INTERVAL', '60'))
+        logger.info(f"Starting hot wallet monitor for {hot_wallet_address[:10]}... (interval: {poll_interval}s)")
+
+        # Track the last scanned block
+        last_block = None
+
+        while self._running:
+            try:
+                web3 = self._get_web3()
+                if not web3:
+                    await asyncio.sleep(poll_interval)
+                    continue
+
+                current_block = web3.eth.block_number
+                if last_block is None:
+                    # Start scanning from recent blocks (last ~5 minutes / ~100 blocks)
+                    last_block = max(current_block - 100, 0)
+
+                if current_block <= last_block:
+                    await asyncio.sleep(poll_interval)
+                    continue
+
+                # Scan for NENO transfers TO our hot wallet
+                transfer_topic = web3.keccak(text="Transfer(address,address,uint256)").hex()
+                padded_hw = "0x" + hot_wallet_address[2:].lower().zfill(64)
+
+                try:
+                    logs = web3.eth.get_logs({
+                        'fromBlock': last_block + 1,
+                        'toBlock': current_block,
+                        'address': Web3.to_checksum_address(NENO_CONTRACT_ADDRESS),
+                        'topics': [transfer_topic, None, padded_hw]
+                    })
+                except Exception as e:
+                    logger.debug(f"Hot wallet get_logs error: {e}")
+                    await asyncio.sleep(poll_interval)
+                    continue
+
+                for log_entry in logs:
+                    tx_hash = log_entry['transactionHash'].hex()
+                    block_number = log_entry['blockNumber']
+                    from_addr = "0x" + log_entry['topics'][1].hex()[-40:]
+                    data_hex = log_entry['data'].hex() if hasattr(log_entry['data'], 'hex') else str(log_entry['data'])
+                    raw_amount = int(data_hex, 16)
+                    amount = float(Decimal(raw_amount) / Decimal(10 ** self._token_decimals))
+
+                    if amount <= 0:
+                        continue
+
+                    # Check if already processed
+                    existing = await self.db.onchain_deposits.find_one({"tx_hash": tx_hash})
+                    if existing:
+                        continue
+
+                    from_addr_checksum = Web3.to_checksum_address("0x" + from_addr.replace("0x", "").zfill(40)[-40:])
+                    logger.info(f"[HOT WALLET] New NENO deposit detected: {amount} NENO from {from_addr_checksum} (tx: {tx_hash[:16]}...)")
+
+                    # Find user by connected wallet address
+                    user = await self.db.users.find_one(
+                        {"$or": [
+                            {"wallet_address": {"$regex": from_addr_checksum, "$options": "i"}},
+                            {"connected_wallets": {"$regex": from_addr_checksum, "$options": "i"}},
+                            {"web3_address": {"$regex": from_addr_checksum, "$options": "i"}},
+                        ]},
+                        {"_id": 0, "user_id": 1, "email": 1}
+                    )
+
+                    # Process the deposit
+                    await self._process_hot_wallet_deposit(
+                        tx_hash=tx_hash,
+                        sender=from_addr_checksum,
+                        amount=amount,
+                        block_number=block_number,
+                        hot_wallet=hot_wallet_address,
+                        user=user,
+                    )
+
+                last_block = current_block
+
+            except Exception as e:
+                logger.debug(f"Hot wallet monitor cycle error: {e}")
+
+            await asyncio.sleep(poll_interval)
+
+    async def _process_hot_wallet_deposit(
+        self, tx_hash: str, sender: str, amount: float,
+        block_number: int, hot_wallet: str, user: dict = None
+    ):
+        """Process a detected hot wallet deposit — credit internal balance + record tx."""
+        import uuid
+
+        uid = user["user_id"] if user else None
+        status = "verified" if uid else "pending_user_match"
+
+        # Credit NENO to user's internal wallet if user is found
+        if uid:
+            wallet = await self.db.wallets.find_one({"user_id": uid, "asset": "NENO"})
+            if wallet:
+                await self.db.wallets.update_one(
+                    {"user_id": uid, "asset": "NENO"},
+                    {"$inc": {"balance": amount}}
+                )
+            else:
+                await self.db.wallets.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "user_id": uid,
+                    "asset": "NENO",
+                    "balance": amount,
+                    "created_at": datetime.now(timezone.utc),
+                })
+            logger.info(f"[HOT WALLET] Credited {amount} NENO to user {uid}")
+
+        # Create transaction record
+        tx_id = str(uuid.uuid4())
+        tx_record = {
+            "id": tx_id,
+            "user_id": uid,
+            "type": "onchain_deposit",
+            "neno_amount": amount,
+            "sender_address": sender,
+            "hot_wallet": hot_wallet,
+            "tx_hash": tx_hash,
+            "block_number": block_number,
+            "execution_mode": "onchain",
+            "onchain_tx_hash": tx_hash,
+            "status": "completed" if uid else "pending_user_match",
+            "auto_detected": True,
+            "created_at": datetime.now(timezone.utc),
+        }
+        await self.db.neno_transactions.insert_one({**tx_record, "_id": tx_id})
+
+        # Store deposit record
+        deposit_record = {
+            "id": str(uuid.uuid4()),
+            "tx_hash": tx_hash,
+            "user_id": uid,
+            "sender_address": sender,
+            "hot_wallet": hot_wallet,
+            "neno_amount": amount,
+            "operation": "auto_deposit",
+            "block_number": block_number,
+            "status": status,
+            "credited": bool(uid),
+            "internal_tx_id": tx_id,
+            "auto_detected": True,
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await self.db.onchain_deposits.insert_one({**deposit_record, "_id": deposit_record["id"]})
+
+        # Notify user if found
+        if uid:
+            try:
+                from services.notification_dispatch import notify_trade_executed
+                asyncio.ensure_future(notify_trade_executed(uid, "NENO", "deposit", amount, 0, 0))
+            except Exception:
+                pass
+
+        logger.info(
+            f"[HOT WALLET] Deposit processed: {amount} NENO from {sender[:10]}... "
+            f"(tx: {tx_hash[:16]}..., user: {uid or 'UNMATCHED'})"
+        )

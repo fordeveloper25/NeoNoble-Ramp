@@ -712,7 +712,10 @@ class VerifyDepositRequest(BaseModel):
 async def verify_onchain_deposit(req: VerifyDepositRequest, current_user: dict = Depends(get_current_user)):
     """
     Verify an on-chain NENO transfer to the platform hot wallet.
-    After verification, the backend credits the user's internal balance.
+    After verification:
+      (a) Credits NENO to user's internal wallet
+      (b) Creates a transaction record in neno_transactions
+      (c) Sends notification
     """
     db = get_database()
     uid = current_user["user_id"]
@@ -739,10 +742,8 @@ async def verify_onchain_deposit(req: VerifyDepositRequest, current_user: dict =
             raise HTTPException(status_code=400, detail="Transazione fallita on-chain (reverted)")
 
         # Parse ERC-20 Transfer event logs
-        # Transfer(address from, address to, uint256 value)
         transfer_topic = Web3.keccak(text="Transfer(address,address,uint256)").hex()
         neno_contract_lower = "0xeF3F5C1892A8d7A3304E4A15959E124402d69974".lower()
-        hot_wallet_padded = "0x" + hot_wallet.lower().replace("0x", "").zfill(64)
 
         verified_amount = 0
         sender_address = None
@@ -756,21 +757,16 @@ async def verify_onchain_deposit(req: VerifyDepositRequest, current_user: dict =
             topic0 = topics[0].hex() if hasattr(topics[0], 'hex') else str(topics[0])
             if topic0 != transfer_topic:
                 continue
-            # topics[1] = from, topics[2] = to
             to_addr = "0x" + (topics[2].hex() if hasattr(topics[2], 'hex') else str(topics[2]))[-40:]
             from_addr = "0x" + (topics[1].hex() if hasattr(topics[1], 'hex') else str(topics[1]))[-40:]
-            if to_addr.lower() == hot_wallet.lower().replace("0x", ""):
-                to_addr = hot_wallet.lower()
-            # Check if recipient is our hot wallet
-            if to_addr.lower() != hot_wallet.lower() and ("0x" + to_addr.lower()) != hot_wallet.lower():
-                # Normalize comparison
-                if to_addr.lower().replace("0x","") != hot_wallet.lower().replace("0x",""):
-                    continue
+            # Normalize and compare
+            if to_addr.lower().replace("0x", "") != hot_wallet.lower().replace("0x", ""):
+                continue
             data_hex = log_entry.data.hex() if hasattr(log_entry.data, 'hex') else str(log_entry.data)
             raw_amount = int(data_hex, 16)
             from decimal import Decimal
             verified_amount = float(Decimal(raw_amount) / Decimal(10 ** 18))
-            sender_address = Web3.to_checksum_address("0x" + from_addr.replace("0x","").zfill(40)[-40:])
+            sender_address = Web3.to_checksum_address("0x" + from_addr.replace("0x", "").zfill(40)[-40:])
             break
 
         if verified_amount <= 0:
@@ -779,15 +775,44 @@ async def verify_onchain_deposit(req: VerifyDepositRequest, current_user: dict =
                 detail=f"Nessun trasferimento NENO trovato verso il hot wallet ({hot_wallet}) in questa transazione"
             )
 
-        # Allow 1% tolerance for amount matching
-        tolerance = req.expected_amount * 0.01
+        # Allow 2% tolerance for amount matching
+        tolerance = req.expected_amount * 0.02
         if abs(verified_amount - req.expected_amount) > tolerance:
             raise HTTPException(
                 status_code=400,
                 detail=f"Importo non corrispondente: atteso {req.expected_amount} NENO, trovato {verified_amount} NENO on-chain"
             )
 
-        # Store the verified deposit
+        # ── (a) Credit NENO to user's internal wallet ──
+        await _credit(db, uid, "NENO", verified_amount)
+        logger.info(f"Credited {verified_amount} NENO to user {uid} from on-chain deposit {req.tx_hash[:16]}...")
+
+        # ── (b) Create transaction record ──
+        tx_id = str(uuid.uuid4())
+        settlement = _settlement_record(tx_id, "onchain_deposit", uid, verified_amount, "NENO", {
+            "credit": {"asset": "NENO", "amount": verified_amount},
+            "onchain_tx_hash": req.tx_hash,
+            "sender_address": sender_address,
+        })
+
+        deposit_tx = {
+            "id": tx_id,
+            "user_id": uid,
+            "type": "onchain_deposit",
+            "neno_amount": verified_amount,
+            "sender_address": sender_address,
+            "hot_wallet": hot_wallet,
+            "tx_hash": req.tx_hash,
+            "block_number": tx_receipt.blockNumber,
+            "execution_mode": "onchain",
+            "onchain_tx_hash": req.tx_hash,
+            "status": "completed",
+            **settlement,
+            "created_at": datetime.now(timezone.utc),
+        }
+        await _log_tx(db, deposit_tx)
+
+        # Store verified deposit record
         deposit_record = {
             "id": str(uuid.uuid4()),
             "tx_hash": req.tx_hash,
@@ -798,9 +823,20 @@ async def verify_onchain_deposit(req: VerifyDepositRequest, current_user: dict =
             "operation": req.operation,
             "block_number": tx_receipt.blockNumber,
             "status": "verified",
+            "credited": True,
+            "internal_tx_id": tx_id,
             "verified_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.onchain_deposits.insert_one({**deposit_record, "_id": deposit_record["id"]})
+
+        # ── (c) Send notification ──
+        try:
+            from services.notification_dispatch import notify_trade_executed
+            asyncio.ensure_future(notify_trade_executed(uid, "NENO", "deposit", verified_amount, 0, 0))
+        except Exception:
+            pass
+
+        new_balance = await _get_balance(db, uid, "NENO")
 
         return {
             "verified": True,
@@ -809,7 +845,10 @@ async def verify_onchain_deposit(req: VerifyDepositRequest, current_user: dict =
             "sender": sender_address,
             "block_number": tx_receipt.blockNumber,
             "explorer": f"https://bscscan.com/tx/{req.tx_hash}",
-            "message": f"Deposito verificato: {verified_amount} NENO da {sender_address}",
+            "message": f"Deposito verificato e accreditato: {verified_amount} NENO",
+            "credited": True,
+            "new_neno_balance": round(new_balance, 8),
+            "internal_tx_id": tx_id,
         }
 
     except HTTPException:

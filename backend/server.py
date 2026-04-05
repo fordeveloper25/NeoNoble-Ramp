@@ -605,12 +605,26 @@ async def _background_init():
     if os.environ.get('BSC_RPC_URL'):
         try:
             await blockchain_listener.initialize()
+            # Legacy quote-based polling
             blockchain_poll_task = asyncio.create_task(
                 blockchain_listener.start_polling(
                     get_active_quotes_for_monitoring,
                     on_deposit_confirmed
                 )
             )
+            # Hot wallet auto-deposit monitor (watches ALL incoming NENO to hot wallet)
+            try:
+                from eth_account import Account
+                Account.enable_unaudited_hdwallet_features()
+                mnemonic = os.environ.get('NENO_WALLET_MNEMONIC', '')
+                if mnemonic:
+                    hot_wallet_addr = Account.from_mnemonic(mnemonic).address
+                    asyncio.create_task(blockchain_listener.monitor_hot_wallet(hot_wallet_addr))
+                    logger.info(f"Hot wallet monitor started for {hot_wallet_addr[:12]}...")
+                else:
+                    logger.warning("NENO_WALLET_MNEMONIC not set - hot wallet monitoring disabled")
+            except Exception as hw_err:
+                logger.warning(f"Hot wallet monitor failed to start: {hw_err}")
             logger.info("Blockchain monitoring started")
         except Exception as e:
             logger.warning(f"Blockchain monitoring failed to start: {e}")
