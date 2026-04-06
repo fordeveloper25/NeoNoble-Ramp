@@ -144,6 +144,24 @@ export default function NenoExchange() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Live balance polling every 5 seconds for real-time sync
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const authHdr = { Authorization: `Bearer ${token}` };
+      xhrFetch(`${BACKEND_URL}/api/wallet/balances`, { headers: authHdr })
+        .then(bData => {
+          const bMap = {};
+          (bData.wallets || []).forEach(w => { bMap[w.asset] = w.balance; });
+          setBalances(bMap);
+        })
+        .catch(() => {});
+      if (refetchNenoBalance) refetchNenoBalance();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [refetchNenoBalance]);
+
   // Live NENO quote
   useEffect(() => {
     if (!nenoAmount || parseFloat(nenoAmount) <= 0 || tab === 'swap' || tab === 'create' || tab === 'deposit') { setQuote(null); return; }
@@ -258,6 +276,10 @@ export default function NenoExchange() {
         isOnChain: !!onchainHash,
         onchainExplorer: data.onchain_explorer,
       });
+      // Immediately update local balances with the response data
+      if (data.balances) {
+        setBalances(prev => ({ ...prev, ...data.balances }));
+      }
       fetchData();
     } catch (e) {
       setResult({ ok: false, msg: e.message });
@@ -280,7 +302,7 @@ export default function NenoExchange() {
     exec('/api/neno-exchange/offramp', body, true);
   };
   const handleCreateToken = () => exec('/api/neno-exchange/create-token', {
-    symbol: newSym, name: newName, price_eur: parseFloat(newPrice), total_supply: parseFloat(newSupply) || 1000000,
+    symbol: newSym, name: newName, price_usd: parseFloat(newPrice), total_supply: parseFloat(newSupply) || 1000000,
   });
 
   const TABS = [

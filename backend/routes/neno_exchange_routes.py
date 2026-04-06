@@ -355,17 +355,16 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
     # If tx_hash provided, this is a real on-chain sell (MetaMask signed)
+    # verify-deposit already credited NENO to internal wallet, so we MUST debit it
     onchain_tx = req.tx_hash or None
 
-    if not onchain_tx:
-        # Fallback: internal ledger sell (check internal balance)
-        neno_balance = await _get_balance(db, uid, "NENO")
-        if neno_balance < req.neno_amount:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Saldo NENO insufficiente: {neno_balance:.8g} disponibile",
-            )
-        await _debit(db, uid, "NENO", req.neno_amount)
+    neno_balance = await _get_balance(db, uid, "NENO")
+    if neno_balance < req.neno_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Saldo NENO insufficiente: {neno_balance:.8g} disponibile",
+        )
+    await _debit(db, uid, "NENO", req.neno_amount)
 
     pricing = await _get_dynamic_neno_price()
     neno_eur_price = pricing["price"]
@@ -437,14 +436,14 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     if to_price is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {to_asset}")
 
-    if not onchain_tx:
-        balance = await _get_balance(db, uid, from_asset)
-        if balance < req.amount:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Saldo {from_asset} insufficiente: {balance:.8g} disponibile, {req.amount:.8g} necessario",
-            )
-        await _debit(db, uid, from_asset, req.amount)
+    # Always debit from_asset: for on-chain tx, verify-deposit already credited it
+    balance = await _get_balance(db, uid, from_asset)
+    if balance < req.amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Saldo {from_asset} insufficiente: {balance:.8g} disponibile, {req.amount:.8g} necessario",
+        )
+    await _debit(db, uid, from_asset, req.amount)
 
     eur_value = req.amount * from_price
     fee_eur = round(eur_value * PLATFORM_FEE, 8)
@@ -801,11 +800,11 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     uid = current_user["user_id"]
     onchain_tx = req.tx_hash or None
 
-    if not onchain_tx:
-        neno_balance = await _get_balance(db, uid, "NENO")
-        if neno_balance < req.neno_amount:
-            raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
-        await _debit(db, uid, "NENO", req.neno_amount)
+    # Always debit NENO: for on-chain tx, verify-deposit already credited it
+    neno_balance = await _get_balance(db, uid, "NENO")
+    if neno_balance < req.neno_amount:
+        raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
+    await _debit(db, uid, "NENO", req.neno_amount)
 
     pricing = await _get_dynamic_neno_price()
     neno_eur_price = pricing["price"]
