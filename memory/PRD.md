@@ -1,37 +1,29 @@
 # NeoNoble Ramp — PRD
 
-## Original Problem Statement
-Enterprise-grade fintech platform for crypto on/off-ramp, NENO token exchange, card issuing, and multi-chain wallet management.
-
 ## Architecture
-- Backend: FastAPI, MongoDB (Motor), Web3.py, Alchemy BSC RPC
+- Backend: FastAPI, MongoDB, Web3.py, Alchemy BSC RPC
 - Frontend: React.js, Tailwind, Wagmi v3/viem, WalletConnect, qrcode.react
 - NENO Contract: `0xeF3F5C1892A8d7A3304E4A15959E124402d69974` (BSC Mainnet)
 - Hot Wallet: `0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E`
-- RPC: Alchemy (`bnb-mainnet.g.alchemy.com`)
 
-## Implemented Features (100%)
-- [x] NENO Exchange: buy/sell/swap/off-ramp/deposit (XHR-based)
-- [x] Deposit NENO widget: QR code + hot wallet address + 3-step flow
+## Implemented Features (100% Operativa)
+- [x] NENO Exchange: buy/sell/swap/off-ramp/deposit (on-chain + internal)
+- [x] **verify-deposit**: Verifica on-chain → accredita NENO → crea record → notifica
+- [x] **Hot wallet monitor**: Blockchain listener attivo, scansiona NENO transfers
+- [x] Deposit widget: QR code, indirizzo copiabile, 3-step flow
 - [x] Real on-chain NENO balance (Wagmi useReadContract)
 - [x] MetaMask transaction signing (sell/swap/off-ramp)
-- [x] On-chain deposit verification (verify-deposit endpoint)
-- [x] Alchemy BSC RPC (replaced Infura)
-- [x] Blockchain listener: POA middleware, clean RPC calls, no log spam
 - [x] CORS fix: XMLHttpRequest bypasses Emergent fetch interception
-- [x] NIUM Banking (V2 Unified API)
-- [x] DCA Bot + Background Scheduler + PDF Reports + SMS
-- [x] Margin Trading + Monte Carlo VaR + PEP screening
-- [x] Multi-language + Microservices routing
+- [x] Alchemy BSC RPC + POA middleware
+- [x] NIUM Banking V2, DCA Bot, PDF Reports, SMS, Margin Trading
+- [x] Monte Carlo VaR, PEP screening, multi-language, microservices routing
 
-## Pre-Deploy Status
-- Backend: All endpoints verified, logs clean (no RPC errors)
-- Frontend: All 6 tabs working, error messages displayed correctly
-- RPC: Alchemy BSC Mainnet stable
-- **Waiting**: User's MetaMask test (1-5 NENO transfer to hot wallet)
-- **Waiting**: NIUM templateId from portal
+## Production Readiness
+- End-to-end test su BSC Mainnet: COMPLETATO (5 NENO deposit + sell)
+- TX hash verificato: `0x4aba1b5b9abba545583e42330babeee89bf8201d5432fd796bae833cb127ceb7`
+- Hot wallet monitor: ATTIVO (polling 120s)
 
 ## Backlog
-- [ ] NIUM templateId configuration
-- [ ] Dynamic NENO pricing from order book
-- [ ] Referral system with NENO bonuses
+- [ ] NIUM templateId (in attesa da utente)
+- [ ] Dynamic NENO pricing da order book
+- [ ] Referral system con bonus NENO
