@@ -1,30 +1,38 @@
 # Changelog
 
-## 2026-04-05 — verify-deposit Fix + Hot Wallet Monitor (100% Operativa)
-- **Fixed**: verify-deposit ora esegue il flusso completo:
-  - (a) Accredita NENO al wallet interno dell'utente
-  - (b) Crea record transazione in `neno_transactions` (tipo `onchain_deposit`)
-  - (c) Registra deposito in `onchain_deposits` con `credited: true`
-  - (d) Invia notifica all'utente
-- **Added**: Hot wallet monitor nel blockchain listener
-  - Scansiona ogni 120s TUTTI i trasferimenti NENO in arrivo al hot wallet
-  - Auto-match utente tramite indirizzo wallet connesso
-  - Auto-credit NENO + auto-registra transazione
-  - Gestisce anche depositi da utenti non ancora associati (status: pending_user_match)
-- **Verified**: Test end-to-end su BSC Mainnet COMPLETATO
-  - TX: `0x4aba1b5b9abba545583e42330babeee89bf8201d5432fd796bae833cb127ceb7`
-  - 5.0 NENO depositati e accreditati correttamente
-- **Testing**: iteration_26.json — 100% pass (15 backend + full frontend + MongoDB + listener)
+## 2026-04-06 - Phase 1-4 Custom Token System (Complete)
 
-## 2026-04-03 — RPC Cleanup + Pre-Deploy Optimizations
-- blockchain_listener.py: POA middleware, clean RPC calls, no log spam
-- Alchemy BSC RPC configurato e stabile
+### Phase 1: Custom Token Creation
+- Updated `POST /api/neno-exchange/create-token`: Symbol max 8 chars, price_usd with 2 decimals
+- Added `GET /api/neno-exchange/my-tokens`: User's tokens with balances
+- Rewrote `TokenCreation.js` with simplified form (Name, Symbol, Supply, Price USD) using XHR
+- Added "Crea Token Personalizzato" button and "I Miei Token Personalizzati" section to Dashboard
 
-## 2026-04-03 — Alchemy RPC + Deposit NENO Widget
-- Tab "Deposita" con QR code, indirizzo copiabile, istruzioni, warning
-- iteration_25.json — 100% pass
+### Phase 2: Buy/Sell Custom Tokens
+- Added `POST /api/neno-exchange/buy-custom-token`: Buy any custom token with EUR/USDT/BTC/ETH/BNB/NENO
+- Added `POST /api/neno-exchange/sell-custom-token`: Sell custom tokens for any asset
+- Created `CustomTokenTrade.js` page with Buy/Sell tabs
 
-## 2026-04-03 — CORS Fix + Real Web3 Integration
-- "Errore di rete" risolto (XHR bypass Emergent fetch interception)
-- On-chain NENO balance, MetaMask signing, platform-wallet, verify-deposit
-- iteration_24.json — 100% pass
+### Phase 3: Swap Logic
+- Enhanced existing `POST /api/neno-exchange/swap` to handle custom tokens via NENO bridge
+- Swap tab added to CustomTokenTrade page with real-time quotes
+- Swap direction toggle for convenience
+
+### Phase 4: Real-Time Balance Sync
+- Added `GET /api/neno-exchange/live-balances`: Polling endpoint for real-time balance updates
+- Dashboard shows live balances widget with auto-refresh (5s polling)
+- CustomTokenTrade sidebar shows live balances with LIVE indicator
+
+### Backend changes
+- `neno_exchange_routes.py`: Added USD_EUR_RATE, BuyCustomTokenRequest, SellCustomTokenRequest models
+- Updated CreateTokenRequest: symbol max 8 chars, price_usd field
+- Backward compatible: old tokens without price_usd get it computed from price_eur
+
+### Frontend changes
+- `TokenCreation.js`: Complete rewrite with XHR, dark theme, simplified form
+- `Dashboard.js`: Added xhrGet helper, myTokens/liveBalances state, token section + balances widget
+- `CustomTokenTrade.js`: New page with Buy/Sell/Swap tabs, live balances sidebar
+- `App.js`: Added /custom-tokens route
+
+### Test Results
+- Iteration 27: 18/18 backend tests passed, all frontend UI elements verified

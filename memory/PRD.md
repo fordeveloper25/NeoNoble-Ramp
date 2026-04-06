@@ -1,29 +1,61 @@
-# NeoNoble Ramp — PRD
+# NeoNoble Ramp - Product Requirements Document
+
+## Original Problem Statement
+Enterprise-grade fintech platform (NeoNoble Ramp) with multi-chain crypto wallet, NENO token exchange, real Web3 integration (BSC Mainnet via Alchemy), MetaMask transaction signing, and complete banking/card infrastructure.
+
+## 4-Phase Custom Token Roadmap (Completed Feb 2026)
+
+### Phase 1 - Custom Token Creation ✅
+- Form: Name, Symbol (max 8 chars), Initial Supply, Price USD (2 decimals)
+- Saved to MongoDB `custom_tokens` collection
+- "Crea Token Personalizzato" button in Dashboard
+- "I Miei Token Personalizzati" list in Dashboard
+- Endpoint: `POST /api/neno-exchange/create-token`
+- Endpoint: `GET /api/neno-exchange/my-tokens`
+
+### Phase 2 - Buy/Sell Custom Tokens ✅
+- Buy custom tokens with any supported asset (EUR, USDT, BTC, ETH, BNB, NENO)
+- Sell custom tokens for any supported asset
+- Balance validation and 0.3% platform fee
+- Endpoint: `POST /api/neno-exchange/buy-custom-token`
+- Endpoint: `POST /api/neno-exchange/sell-custom-token`
+- Dedicated /custom-tokens page with Buy/Sell tabs
+
+### Phase 3 - Swap Logic Custom/Native ✅
+- Swap any token pair (custom ↔ native) via NENO bridge
+- Real-time swap quotes with fee calculation
+- Slippage estimation
+- Endpoint: `POST /api/neno-exchange/swap`
+- Endpoint: `GET /api/neno-exchange/swap-quote`
+- Swap tab in /custom-tokens page
+
+### Phase 4 - Off-Ramp + Real-Time Balance Sync ✅
+- Live balances endpoint with polling (5s interval)
+- USD values and custom token flag for each balance
+- Off-ramp to card/bank already implemented
+- Dashboard shows real-time balances widget
+- Endpoint: `GET /api/neno-exchange/live-balances`
+
+## Backlog (Previously Completed)
+- Dynamic NENO pricing based on order book pressure ✅
+- Referral System with NENO bonuses ✅
+- DCA Trading Bot ✅
+- PDF Compliance Reports ✅
+- SMS Notifications (Twilio-ready) ✅
 
 ## Architecture
-- Backend: FastAPI, MongoDB, Web3.py, Alchemy BSC RPC
-- Frontend: React.js, Tailwind, Wagmi v3/viem, WalletConnect, qrcode.react
-- NENO Contract: `0xeF3F5C1892A8d7A3304E4A15959E124402d69974` (BSC Mainnet)
-- Hot Wallet: `0x18CE1930820d5e1B87F37a8a2F7Cf59E7BF6da4E`
+- Backend: FastAPI + MongoDB (Motor) + Web3.py
+- Frontend: React.js + Tailwind + Wagmi/WalletConnect
+- API calls: XMLHttpRequest (not fetch) to bypass Emergent interceptor
+- Background: Blockchain listener, DCA scheduler, price alerts
 
-## Implemented Features (100% Operativa)
-- [x] NENO Exchange: buy/sell/swap/off-ramp/deposit (on-chain + internal)
-- [x] **verify-deposit**: Verifica on-chain → accredita NENO → crea record → notifica
-- [x] **Hot wallet monitor**: Blockchain listener attivo, scansiona NENO transfers
-- [x] Deposit widget: QR code, indirizzo copiabile, 3-step flow
-- [x] Real on-chain NENO balance (Wagmi useReadContract)
-- [x] MetaMask transaction signing (sell/swap/off-ramp)
-- [x] CORS fix: XMLHttpRequest bypasses Emergent fetch interception
-- [x] Alchemy BSC RPC + POA middleware
-- [x] NIUM Banking V2, DCA Bot, PDF Reports, SMS, Margin Trading
-- [x] Monte Carlo VaR, PEP screening, multi-language, microservices routing
+## Key Collections
+- `custom_tokens`: {id, symbol, name, price_usd, price_eur, total_supply, creator_id, created_at}
+- `wallets`: {user_id, asset, balance}
+- `neno_transactions`: {id, user_id, type, ...}
 
-## Production Readiness
-- End-to-end test su BSC Mainnet: COMPLETATO (5 NENO deposit + sell)
-- TX hash verificato: `0x4aba1b5b9abba545583e42330babeee89bf8201d5432fd796bae833cb127ceb7`
-- Hot wallet monitor: ATTIVO (polling 120s)
-
-## Backlog
-- [ ] NIUM templateId (in attesa da utente)
-- [ ] Dynamic NENO pricing da order book
-- [ ] Referral system con bonus NENO
+## Key Routes
+- `/tokens/create` - Token creation form
+- `/custom-tokens` - Buy/Sell/Swap marketplace
+- `/dashboard` - Main dashboard with all quick access
+- `/neno-exchange` - NENO exchange
