@@ -99,6 +99,8 @@ export default function NenoExchange() {
   const [offrampIban, setOfframpIban] = useState('');
   const [offrampName, setOfframpName] = useState('');
   const [copiedAddr, setCopiedAddr] = useState(false);
+  const [offrampWallet, setOfframpWallet] = useState('');
+  const [preferredStable, setPreferredStable] = useState('USDT');
 
   // Force Sync
   const [syncTxHash, setSyncTxHash] = useState('');
@@ -282,6 +284,7 @@ export default function NenoExchange() {
         isOnChain: !!onchainHash,
         onchainExplorer: data.onchain_explorer,
         payout: data.payout || null,
+        market_maker: data.market_maker || null,
       });
       // Immediately update local balances with the response data
       if (data.balances) {
@@ -306,6 +309,10 @@ export default function NenoExchange() {
     const body = { neno_amount: parseFloat(nenoAmount), destination: offrampDest };
     if (offrampDest === 'card') body.card_id = selectedCard;
     if (offrampDest === 'bank') { body.destination_iban = offrampIban; body.beneficiary_name = offrampName; }
+    if (offrampDest === 'crypto' || offrampDest === 'bank') {
+      body.destination_wallet = offrampWallet || (address || '');
+      body.preferred_stable = preferredStable;
+    }
     exec('/api/neno-exchange/offramp', body, true);
   };
   const handleCreateToken = () => exec('/api/neno-exchange/create-token', {
@@ -358,9 +365,23 @@ export default function NenoExchange() {
             </button>
             <div>
               <h1 className="text-white font-bold text-lg">$NENO Exchange</h1>
-              <span className="text-zinc-500 text-xs">
-                {priceData ? `EUR ${priceData.neno_eur_price?.toLocaleString()} ${priceData.shift_pct > 0 ? '+' : ''}${priceData.shift_pct}%` : '...'}
-              </span>
+              <div className="flex items-center gap-2 text-[10px]">
+                {priceData ? (
+                  <>
+                    <span className="text-zinc-500">Mid</span>
+                    <span className="text-white font-mono">{priceData.mid_price?.toLocaleString() || priceData.neno_eur_price?.toLocaleString()}</span>
+                    {priceData.bid && (
+                      <>
+                        <span className="text-zinc-600">|</span>
+                        <span className="text-emerald-500">Bid {priceData.bid?.toLocaleString()}</span>
+                        <span className="text-red-400">Ask {priceData.ask?.toLocaleString()}</span>
+                        <span className="text-zinc-600">|</span>
+                        <span className="text-amber-400">{priceData.spread_bps?.toFixed(0)}bps</span>
+                      </>
+                    )}
+                  </>
+                ) : <span className="text-zinc-500">...</span>}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -395,6 +416,40 @@ export default function NenoExchange() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+        {/* Market Maker Pricing Strip */}
+        {priceData && priceData.bid && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3" data-testid="mm-pricing-strip">
+            <div className="grid grid-cols-6 gap-2 text-center">
+              <div>
+                <div className="text-zinc-500 text-[9px] uppercase">Bid</div>
+                <div className="text-emerald-400 font-mono text-sm font-bold" data-testid="mm-bid">{priceData.bid?.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-zinc-500 text-[9px] uppercase">Ask</div>
+                <div className="text-red-400 font-mono text-sm font-bold" data-testid="mm-ask">{priceData.ask?.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-zinc-500 text-[9px] uppercase">Spread</div>
+                <div className="text-amber-400 font-mono text-sm" data-testid="mm-spread">{priceData.spread_bps?.toFixed(1)} bps</div>
+              </div>
+              <div>
+                <div className="text-zinc-500 text-[9px] uppercase">Skew</div>
+                <div className={`font-mono text-sm ${(priceData.inventory_skew || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {(priceData.inventory_skew || 0) >= 0 ? '+' : ''}{((priceData.inventory_skew || 0) * 100).toFixed(2)}%
+                </div>
+              </div>
+              <div>
+                <div className="text-zinc-500 text-[9px] uppercase">Treasury</div>
+                <div className="text-white font-mono text-sm" data-testid="mm-treasury-neno">{priceData.treasury_neno?.toFixed(1)}</div>
+              </div>
+              <div>
+                <div className="text-zinc-500 text-[9px] uppercase">Model</div>
+                <div className="text-purple-400 text-[10px] font-medium">Market Maker</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 overflow-x-auto">
           {TABS.map(t => (
@@ -434,13 +489,15 @@ export default function NenoExchange() {
                   result.state === 'payout_pending' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
                   result.state === 'payout_sent' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
                   result.state === 'payout_settled' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                  result.state === 'payout_executed_external' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' :
                   'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
                 }`} data-testid="tx-state-badge">
-                  {result.state === 'internal_credited' && '✓ Accreditato internamente'}
-                  {result.state === 'payout_pending' && '⏳ Payout in coda'}
-                  {result.state === 'payout_sent' && '↗ Payout inviato'}
-                  {result.state === 'payout_settled' && '✓ Payout completato'}
-                  {!['internal_credited','payout_pending','payout_sent','payout_settled'].includes(result.state) && result.state}
+                  {result.state === 'internal_credited' && 'Accreditato internamente'}
+                  {result.state === 'payout_pending' && 'Payout in coda'}
+                  {result.state === 'payout_sent' && 'Payout inviato'}
+                  {result.state === 'payout_settled' && 'Payout completato'}
+                  {result.state === 'payout_executed_external' && 'Payout Crypto Eseguito'}
+                  {!['internal_credited','payout_pending','payout_sent','payout_settled','payout_executed_external'].includes(result.state) && result.state}
                 </span>
               </div>
             )}
@@ -482,6 +539,32 @@ export default function NenoExchange() {
                 </div>
               </div>
             )}
+            {result.ok && result.market_maker && (
+              <div className="mt-2 bg-zinc-800/50 rounded-lg p-2 text-[10px] space-y-0.5" data-testid="mm-result-info">
+                <div className="text-zinc-500 uppercase font-bold tracking-wider">Market Maker</div>
+                <div className="flex justify-between"><span className="text-zinc-400">Prezzo ({result.market_maker.price_type})</span><span className="text-white font-mono">EUR {result.market_maker.effective_price?.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-400">Mid Price</span><span className="text-zinc-300 font-mono">EUR {result.market_maker.mid_price?.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-400">Spread</span><span className="text-amber-400">{result.market_maker.spread_bps?.toFixed(1)} bps</span></div>
+                {result.market_maker.matched_internal && <div className="text-emerald-400 font-bold">Matched Interno (netting)</div>}
+                {result.market_maker.spread_revenue > 0 && (
+                  <div className="flex justify-between"><span className="text-zinc-400">Revenue Spread</span><span className="text-purple-400">EUR {result.market_maker.spread_revenue?.toFixed(4)}</span></div>
+                )}
+              </div>
+            )}
+            {result.ok && result.payout && result.payout.crypto_tx_hash && (
+              <div className="mt-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-2 text-[10px] space-y-1" data-testid="crypto-payout-info">
+                <div className="text-cyan-400 font-bold">Payout Crypto Eseguito</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-cyan-600">TX Hash:</span>
+                  <span className="font-mono text-cyan-400">{result.payout.crypto_tx_hash.slice(0, 14)}...{result.payout.crypto_tx_hash.slice(-8)}</span>
+                </div>
+                {result.payout.crypto_explorer && (
+                  <a href={result.payout.crypto_explorer} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-cyan-400 hover:text-cyan-300">
+                    <ExternalLink className="w-2.5 h-2.5" /> Verifica su BscScan
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -504,7 +587,13 @@ export default function NenoExchange() {
             </div>
             {quote && (
               <div className="bg-zinc-800/50 rounded-lg p-3 text-xs space-y-1" data-testid="quote-info">
-                <div className="flex justify-between"><span className="text-zinc-500">Prezzo NENO</span><span className="text-white">EUR {quote.neno_eur_price?.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Prezzo NENO ({tab === 'buy' ? 'Ask' : 'Bid'})</span><span className="text-white">EUR {quote.neno_eur_price?.toLocaleString()}</span></div>
+                {quote.mm_mid_price && (
+                  <div className="flex justify-between"><span className="text-zinc-500">Mid Price</span><span className="text-zinc-400">EUR {quote.mm_mid_price?.toLocaleString()}</span></div>
+                )}
+                {quote.mm_spread_bps && (
+                  <div className="flex justify-between"><span className="text-zinc-500">Spread</span><span className="text-amber-400">{quote.mm_spread_bps?.toFixed(1)} bps ({quote.mm_spread_pct?.toFixed(2)}%)</span></div>
+                )}
                 <div className="flex justify-between"><span className="text-zinc-500">Rate</span><span className="text-white">1 NENO = {quote.rate?.toFixed(6)} {asset}</span></div>
                 <div className="flex justify-between"><span className="text-zinc-500">Fee ({quote.fee_percent}%)</span><span className="text-amber-400">{quote.fee?.toFixed(8)} {asset}</span></div>
                 <div className="flex justify-between font-bold"><span className="text-zinc-300">{tab === 'buy' ? 'Costo Totale' : 'Ricevi Netto'}</span>
@@ -559,6 +648,9 @@ export default function NenoExchange() {
               <div className="bg-zinc-800/50 rounded-lg p-3 text-xs space-y-1" data-testid="swap-quote">
                 <div className="flex justify-between"><span className="text-zinc-500">Rate</span><span className="text-white">1 {swapFrom} = {swapQuote.rate?.toFixed(8)} {swapTo}</span></div>
                 <div className="flex justify-between"><span className="text-zinc-500">Fee ({swapQuote.fee_pct}%)</span><span className="text-amber-400">EUR {swapQuote.fee_eur}</span></div>
+                {swapQuote.mm_spread_bps && (
+                  <div className="flex justify-between"><span className="text-zinc-500">MM Spread</span><span className="text-amber-400">{swapQuote.mm_spread_bps?.toFixed(1)} bps</span></div>
+                )}
                 <div className="flex justify-between font-bold"><span className="text-zinc-300">Ricevi</span><span className="text-emerald-400">{swapQuote.receive_amount?.toFixed(8)} {swapTo}</span></div>
               </div>
             )}
@@ -727,7 +819,7 @@ export default function NenoExchange() {
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
             </div>
             <div className="flex gap-2">
-              {[{ id: 'card', label: 'Carta', icon: CreditCard }, { id: 'bank', label: 'Banca SEPA', icon: Building }].map(d => (
+              {[{ id: 'card', label: 'Carta', icon: CreditCard }, { id: 'bank', label: 'Banca', icon: Building }, { id: 'crypto', label: 'Crypto', icon: Wallet }].map(d => (
                 <button key={d.id} onClick={() => setOfframpDest(d.id)} data-testid={`offramp-dest-${d.id}`}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-medium border transition-colors ${offrampDest === d.id ? 'bg-purple-600/20 border-purple-500 text-purple-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400'}`}>
                   <d.icon className="w-3.5 h-3.5" /> {d.label}
@@ -747,16 +839,39 @@ export default function NenoExchange() {
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm" />
               </div>
             )}
+            {offrampDest === 'crypto' && (
+              <div className="space-y-2">
+                <div>
+                  <label className="text-zinc-500 text-xs mb-1 block">Wallet Destinazione (BSC)</label>
+                  <input value={offrampWallet || address || ''} onChange={e => setOfframpWallet(e.target.value)} placeholder="0x..." data-testid="offramp-wallet-input"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
+                </div>
+                <div className="flex gap-2">
+                  {['USDT', 'USDC'].map(s => (
+                    <button key={s} onClick={() => setPreferredStable(s)} data-testid={`offramp-stable-${s}`}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-colors ${preferredStable === s ? 'bg-emerald-600/20 border-emerald-500 text-emerald-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400'}`}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 text-[10px] text-amber-400" data-testid="crypto-offramp-info">
+                  Riceverai {preferredStable} sul tuo wallet BSC. Equivalente EUR calcolato al tasso di cambio corrente.
+                </div>
+              </div>
+            )}
             {quote && (
               <div className="bg-zinc-800/50 rounded-lg p-3 text-xs space-y-1">
-                <div className="flex justify-between"><span className="text-zinc-500">Valore lordo</span><span className="text-white">EUR {quote.gross_value?.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Valore lordo (Bid)</span><span className="text-white">EUR {quote.gross_value?.toFixed(2)}</span></div>
                 <div className="flex justify-between"><span className="text-zinc-500">Fee</span><span className="text-amber-400">EUR {quote.fee?.toFixed(2)}</span></div>
+                {quote.mm_spread_bps && (
+                  <div className="flex justify-between"><span className="text-zinc-500">Spread</span><span className="text-amber-400">{quote.mm_spread_bps?.toFixed(1)} bps</span></div>
+                )}
                 <div className="flex justify-between font-bold"><span className="text-zinc-300">Ricevi</span><span className="text-emerald-400">EUR {quote.net_receive?.toFixed(2)}</span></div>
               </div>
             )}
             <button onClick={handleOfframp} disabled={loading || !nenoAmount || parseFloat(nenoAmount) <= 0} data-testid="offramp-btn"
               className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-sm text-white transition-colors disabled:opacity-50">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Off-Ramp ${nenoAmount} NENO → ${offrampDest === 'card' ? 'Carta' : 'Banca'}`}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Off-Ramp ${nenoAmount} NENO → ${offrampDest === 'card' ? 'Carta' : offrampDest === 'bank' ? 'Banca' : preferredStable}`}
             </button>
           </div>
         )}

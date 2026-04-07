@@ -29,9 +29,10 @@ from services.settlement_ledger import (
     create_ledger_entry, transition_state, enqueue_payout,
     get_user_ledger, get_user_payouts, reconcile_deposits,
     STATE_ONCHAIN_EXECUTED, STATE_INTERNAL_CREDITED, STATE_PAYOUT_PENDING,
-    STATE_PAYOUT_SENT, STATE_PAYOUT_SETTLED,
+    STATE_PAYOUT_SENT, STATE_PAYOUT_SETTLED, STATE_PAYOUT_EXECUTED_EXTERNAL,
 )
 from services.execution_engine import ExecutionEngine, TreasuryEngine, LiquidityEngine
+from services.market_maker_service import MarketMakerService
 
 logger = logging.getLogger(__name__)
 
@@ -166,11 +167,13 @@ class SellNenoRequest(BaseModel):
 
 class OfframpRequest(BaseModel):
     neno_amount: float = Field(gt=0)
-    destination: str = Field(description="'card' or 'bank'")
+    destination: str = Field(description="'card', 'bank', or 'crypto'")
     card_id: Optional[str] = None
     destination_iban: Optional[str] = None
     beneficiary_name: Optional[str] = None
     tx_hash: Optional[str] = Field(None, description="On-chain tx hash from MetaMask transfer to hot wallet")
+    destination_wallet: Optional[str] = Field(None, description="External wallet for crypto off-ramp fallback")
+    preferred_stable: Optional[str] = Field("USDT", description="USDT or USDC for crypto off-ramp")
 
 
 class CreateTokenRequest(BaseModel):
@@ -233,15 +236,26 @@ async def _log_tx(db, tx: dict):
 @router.get("/price")
 async def get_neno_price():
     pricing = await _get_dynamic_neno_price()
+    # ── Include MM bid/ask ──
+    mm = MarketMakerService.get_instance()
+    mm_pricing = await mm.get_pricing()
     return {
-        "neno_eur_price": pricing["price"],
+        "neno_eur_price": mm_pricing["mid_price"],
+        "bid": mm_pricing["bid"],
+        "ask": mm_pricing["ask"],
+        "spread_bps": mm_pricing["spread_bps"],
+        "spread_pct": mm_pricing["spread_pct"],
+        "spread_eur": mm_pricing["spread_eur"],
+        "mid_price": mm_pricing["mid_price"],
         "base_price": pricing["base_price"],
         "price_shift": pricing["shift"],
         "shift_pct": pricing["shift_pct"],
         "buy_volume_24h": pricing["buy_volume_24h"],
         "sell_volume_24h": pricing["sell_volume_24h"],
         "net_pressure": pricing["net_pressure"],
-        "pricing_model": "dynamic_orderbook",
+        "inventory_skew": mm_pricing["inventory_skew"],
+        "treasury_neno": mm_pricing["treasury_neno"],
+        "pricing_model": "market_maker_bid_ask",
         "max_deviation": f"{NENO_MAX_DEVIATION * 100}%",
     }
 
@@ -256,31 +270,37 @@ async def get_quote(direction: str = "buy", asset: str = "EUR", neno_amount: flo
     if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
-    pricing = await _get_dynamic_neno_price()
-    neno_eur_price = pricing["price"]
+    # ── Use MM bid/ask ──
+    mm = MarketMakerService.get_instance()
+    mm_pricing = await mm.get_pricing()
+    neno_eur_price = mm_pricing["ask"] if direction == "buy" else mm_pricing["bid"]
+
     rate = neno_eur_price / price_eur
     gross = round(neno_amount * rate, 8)
     fee = round(gross * PLATFORM_FEE, 8)
 
+    base = {
+        "direction": direction, "neno_amount": neno_amount,
+        "rate": round(rate, 8), "neno_eur_price": neno_eur_price,
+        "base_price": NENO_BASE_PRICE,
+        "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
+        "mm_spread_bps": mm_pricing["spread_bps"], "mm_spread_pct": mm_pricing["spread_pct"],
+        "mm_mid_price": mm_pricing["mid_price"],
+        "gross_cost" if direction == "buy" else "gross_value": gross,
+        "fee": fee, "fee_percent": PLATFORM_FEE * 100,
+    }
+
     if direction == "buy":
         total_cost = round(gross + fee, 8)
         return {
-            "direction": "buy", "neno_amount": neno_amount, "pay_asset": asset,
-            "rate": round(rate, 8), "neno_eur_price": neno_eur_price,
-            "base_price": NENO_BASE_PRICE, "price_shift_pct": pricing["shift_pct"],
-            "gross_cost": gross, "fee": fee, "fee_percent": PLATFORM_FEE * 100,
-            "total_cost": total_cost,
-            "summary": f"Per acquistare {neno_amount} NENO servono {total_cost} {asset} (fee {PLATFORM_FEE*100}%)",
+            **base, "pay_asset": asset, "total_cost": total_cost,
+            "summary": f"Per acquistare {neno_amount} NENO servono {total_cost} {asset} (ask: EUR {neno_eur_price})",
         }
     else:
         net_receive = round(gross - fee, 8)
         return {
-            "direction": "sell", "neno_amount": neno_amount, "receive_asset": asset,
-            "rate": round(rate, 8), "neno_eur_price": neno_eur_price,
-            "base_price": NENO_BASE_PRICE, "price_shift_pct": pricing["shift_pct"],
-            "gross_value": gross, "fee": fee, "fee_percent": PLATFORM_FEE * 100,
-            "net_receive": net_receive,
-            "summary": f"Vendendo {neno_amount} NENO ricevi {net_receive} {asset} (fee {PLATFORM_FEE*100}%)",
+            **base, "receive_asset": asset, "net_receive": net_receive,
+            "summary": f"Vendendo {neno_amount} NENO ricevi {net_receive} {asset} (bid: EUR {neno_eur_price})",
         }
 
 
@@ -296,8 +316,15 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
     if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
-    pricing = await _get_dynamic_neno_price()
-    neno_eur_price = pricing["price"]
+    # ── Market Maker Pricing: user buys at ASK ──
+    mm = MarketMakerService.get_instance()
+    mm_pricing = await mm.get_pricing()
+    neno_eur_price = mm_pricing["ask"]  # user pays ask
+    mid_price = mm_pricing["mid_price"]
+
+    # Try internal matching first
+    match_result = await mm.try_internal_match("buy", "NENO", req.neno_amount, neno_eur_price)
+
     rate = neno_eur_price / price_eur
     gross_cost = round(req.neno_amount * rate, 8)
     fee = round(gross_cost * PLATFORM_FEE, 8)
@@ -320,12 +347,25 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
         "fee": {"asset": asset, "amount": fee},
     })
 
+    # ── Treasury counterparty execution ──
+    mm_result = await mm.execute_as_counterparty(
+        tx_id=tx_id, user_id=uid, direction="buy",
+        neno_amount=req.neno_amount, counter_asset=asset,
+        counter_amount=total_cost, fee_amount=fee, fee_asset=asset,
+        effective_price=neno_eur_price, mid_price=mid_price,
+    )
+
     tx = {
         "id": tx_id, "user_id": uid, "type": "buy_neno",
         "neno_amount": req.neno_amount, "pay_asset": asset,
         "pay_amount": total_cost, "rate": rate, "neno_eur_price": neno_eur_price,
         "fee": fee, "fee_asset": asset, "status": "completed",
         "eur_value": round(req.neno_amount * neno_eur_price, 2),
+        "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
+        "mm_spread_bps": mm_pricing["spread_bps"],
+        "mm_matched_internal": bool(match_result),
+        "mm_counterparty": mm_result.get("counterparty", "treasury"),
+        "mm_spread_revenue": mm_result.get("spread_revenue_eur", 0),
         **settlement,
         "created_at": datetime.now(timezone.utc),
     }
@@ -346,6 +386,14 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
         "message": f"Acquistati {req.neno_amount} NENO per {total_cost} {asset}",
         "transaction": tx,
         "balances": {"NENO": round(new_neno, 8), asset: round(new_pay, 8)},
+        "market_maker": {
+            "price_type": "ask",
+            "effective_price": neno_eur_price,
+            "mid_price": mid_price,
+            "spread_bps": mm_pricing["spread_bps"],
+            "matched_internal": bool(match_result),
+            "spread_revenue": mm_result.get("spread_revenue_eur", 0),
+        },
     }
 
 
@@ -361,8 +409,6 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
     if price_eur is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
 
-    # If tx_hash provided, this is a real on-chain sell (MetaMask signed)
-    # verify-deposit already credited NENO to internal wallet, so we MUST debit it
     onchain_tx = req.tx_hash or None
 
     neno_balance = await _get_balance(db, uid, "NENO")
@@ -373,8 +419,15 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         )
     await _debit(db, uid, "NENO", req.neno_amount)
 
-    pricing = await _get_dynamic_neno_price()
-    neno_eur_price = pricing["price"]
+    # ── Market Maker Pricing: user sells at BID ──
+    mm = MarketMakerService.get_instance()
+    mm_pricing = await mm.get_pricing()
+    neno_eur_price = mm_pricing["bid"]  # user receives bid
+    mid_price = mm_pricing["mid_price"]
+
+    # Try internal matching first
+    match_result = await mm.try_internal_match("sell", "NENO", req.neno_amount, neno_eur_price)
+
     rate = neno_eur_price / price_eur
     gross = round(req.neno_amount * rate, 8)
     fee = round(gross * PLATFORM_FEE, 8)
@@ -390,6 +443,14 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         "onchain_tx_hash": onchain_tx,
     })
 
+    # ── Treasury counterparty execution ──
+    mm_result = await mm.execute_as_counterparty(
+        tx_id=tx_id, user_id=uid, direction="sell",
+        neno_amount=req.neno_amount, counter_asset=asset,
+        counter_amount=net, fee_amount=fee, fee_asset=asset,
+        effective_price=neno_eur_price, mid_price=mid_price,
+    )
+
     tx = {
         "id": tx_id, "user_id": uid, "type": "sell_neno",
         "neno_amount": req.neno_amount, "receive_asset": asset,
@@ -399,6 +460,11 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         "execution_mode": "onchain" if onchain_tx else "internal",
         "onchain_tx_hash": onchain_tx,
         "eur_value": round(req.neno_amount * neno_eur_price, 2),
+        "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
+        "mm_spread_bps": mm_pricing["spread_bps"],
+        "mm_matched_internal": bool(match_result),
+        "mm_counterparty": mm_result.get("counterparty", "treasury"),
+        "mm_spread_revenue": mm_result.get("spread_revenue_eur", 0),
         **settlement,
         "created_at": datetime.now(timezone.utc),
     }
@@ -433,6 +499,14 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
         "balances": {"NENO": round(new_neno, 8), asset: round(new_asset, 8)},
         "state": STATE_INTERNAL_CREDITED,
         "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
+        "market_maker": {
+            "price_type": "bid",
+            "effective_price": neno_eur_price,
+            "mid_price": mid_price,
+            "spread_bps": mm_pricing["spread_bps"],
+            "matched_internal": bool(match_result),
+            "spread_revenue": mm_result.get("spread_revenue_eur", 0),
+        },
     }
 
 
@@ -457,7 +531,17 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
     if to_price is None:
         raise HTTPException(status_code=400, detail=f"Asset non supportato: {to_asset}")
 
-    # Always debit from_asset: for on-chain tx, verify-deposit already credited it
+    # ── MM Pricing for NENO legs ──
+    mm = MarketMakerService.get_instance()
+    mm_pricing = await mm.get_pricing()
+
+    # If from_asset is NENO: user sells NENO → bid price
+    # If to_asset is NENO: user buys NENO → ask price
+    if from_asset == "NENO":
+        from_price = mm_pricing["bid"]
+    if to_asset == "NENO":
+        to_price = mm_pricing["ask"]
+
     balance = await _get_balance(db, uid, from_asset)
     if balance < req.amount:
         raise HTTPException(
@@ -482,6 +566,26 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
         "onchain_tx_hash": onchain_tx,
     })
 
+    # ── Treasury updates for swap ──
+    await mm.update_treasury(from_asset, req.amount, "swap_receive", from_price)
+    await mm.update_treasury(to_asset, -receive_amount, "swap_send", to_price)
+
+    # Record PnL from swap spread
+    mm_pnl_entry = {
+        "_id": str(uuid.uuid4()),
+        "tx_id": tx_id, "user_id": uid, "direction": "swap",
+        "neno_amount": req.amount if from_asset == "NENO" else receive_amount if to_asset == "NENO" else 0,
+        "counter_asset": to_asset, "counter_amount": receive_amount,
+        "effective_price": from_price, "mid_price": mm_pricing["mid_price"],
+        "spread_revenue_eur": round(fee_eur * 0.3, 4),  # 30% of fee is spread revenue
+        "fee_revenue_eur": round(fee_eur * 0.7, 4),
+        "total_revenue_eur": round(fee_eur, 4),
+        "inventory_change_neno": 0,
+        "inventory_change_counter": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.mm_pnl_ledger.insert_one(mm_pnl_entry)
+
     tx = {
         "id": tx_id, "user_id": uid, "type": "swap",
         "from_asset": from_asset, "from_amount": req.amount,
@@ -492,6 +596,8 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
         "status": "completed",
         "execution_mode": "onchain" if onchain_tx else "internal",
         "onchain_tx_hash": onchain_tx,
+        "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
+        "mm_spread_bps": mm_pricing["spread_bps"],
         **settlement,
         "created_at": datetime.now(timezone.utc),
     }
@@ -507,6 +613,10 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
         },
         "state": STATE_INTERNAL_CREDITED,
         "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
+        "market_maker": {
+            "bid": mm_pricing["bid"], "ask": mm_pricing["ask"],
+            "spread_bps": mm_pricing["spread_bps"],
+        },
     }
 
 
@@ -523,6 +633,14 @@ async def swap_quote(from_asset: str = "NENO", to_asset: str = "ETH", amount: fl
     if from_price is None or to_price is None:
         raise HTTPException(status_code=400, detail="Asset non supportato")
 
+    # ── MM pricing for NENO legs ──
+    mm = MarketMakerService.get_instance()
+    mm_pricing = await mm.get_pricing()
+    if from_asset == "NENO":
+        from_price = mm_pricing["bid"]
+    if to_asset == "NENO":
+        to_price = mm_pricing["ask"]
+
     eur_value = amount * from_price
     fee_eur = round(eur_value * PLATFORM_FEE, 8)
     net_eur = eur_value - fee_eur
@@ -533,6 +651,8 @@ async def swap_quote(from_asset: str = "NENO", to_asset: str = "ETH", amount: fl
         "receive_amount": receive, "rate": round(from_price / to_price, 8),
         "eur_value": round(eur_value, 2), "fee_eur": round(fee_eur, 4),
         "fee_pct": PLATFORM_FEE * 100,
+        "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
+        "mm_spread_bps": mm_pricing["spread_bps"],
     }
 
 
@@ -822,17 +942,27 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     uid = current_user["user_id"]
     onchain_tx = req.tx_hash or None
 
-    # Always debit NENO: for on-chain tx, verify-deposit already credited it
     neno_balance = await _get_balance(db, uid, "NENO")
     if neno_balance < req.neno_amount:
         raise HTTPException(status_code=400, detail=f"Saldo NENO insufficiente: {neno_balance:.8g}")
     await _debit(db, uid, "NENO", req.neno_amount)
 
-    pricing = await _get_dynamic_neno_price()
-    neno_eur_price = pricing["price"]
+    # ── MM Pricing: sell at bid ──
+    mm = MarketMakerService.get_instance()
+    mm_pricing = await mm.get_pricing()
+    neno_eur_price = mm_pricing["bid"]
+
     eur_gross = round(req.neno_amount * neno_eur_price, 2)
     fee = round(eur_gross * PLATFORM_FEE, 2)
     eur_net = round(eur_gross - fee, 2)
+
+    # ── Treasury update: receives NENO ──
+    await mm.update_treasury("NENO", req.neno_amount, "offramp_receive", neno_eur_price)
+
+    # ── Destination routing ──
+    payout_state = STATE_INTERNAL_CREDITED
+    dest_info = ""
+    crypto_result = None
 
     if req.destination == "card":
         if not req.card_id:
@@ -842,25 +972,73 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
             raise HTTPException(status_code=404, detail="Carta non trovata")
         await db.cards.update_one({"id": req.card_id}, {"$inc": {"balance": eur_net}})
         dest_info = f"Carta {card.get('card_number_masked', '****')}"
+        payout_state = STATE_PAYOUT_SETTLED
+        await mm.update_treasury("EUR", -eur_net, "offramp_card_payout", 1.0)
+
     elif req.destination == "bank":
-        if not req.destination_iban:
-            raise HTTPException(status_code=400, detail="IBAN richiesto per off-ramp su conto")
-        withdrawal_fee = max(round(eur_net * 0.001, 2), 0.50)
-        eur_after_bank = round(eur_net - withdrawal_fee, 2)
-        bank_tx = {
-            "id": str(uuid.uuid4()), "user_id": uid, "type": "sepa_withdrawal",
-            "amount": eur_net, "fee": withdrawal_fee, "net_amount": eur_after_bank,
-            "currency": "EUR", "destination_iban": req.destination_iban,
-            "beneficiary_name": req.beneficiary_name or "NeoNoble User",
-            "reference": f"NENO-OFFRAMP-{uuid.uuid4().hex[:8].upper()}",
-            "status": "processing", "estimated_arrival": "1-2 giorni lavorativi",
-            "created_at": datetime.now(timezone.utc),
-        }
-        await db.banking_transactions.insert_one({**bank_tx, "_id": bank_tx["id"]})
-        eur_net = eur_after_bank
-        dest_info = f"IBAN {req.destination_iban[-4:]}"
+        nium_key = os.environ.get("NIUM_API_KEY")
+        if nium_key:
+            # Real NIUM payout
+            if not req.destination_iban:
+                raise HTTPException(status_code=400, detail="IBAN richiesto per off-ramp su conto")
+            withdrawal_fee = max(round(eur_net * 0.001, 2), 0.50)
+            eur_after_bank = round(eur_net - withdrawal_fee, 2)
+            bank_tx = {
+                "id": str(uuid.uuid4()), "user_id": uid, "type": "sepa_withdrawal",
+                "amount": eur_net, "fee": withdrawal_fee, "net_amount": eur_after_bank,
+                "currency": "EUR", "destination_iban": req.destination_iban,
+                "beneficiary_name": req.beneficiary_name or "NeoNoble User",
+                "reference": f"NENO-OFFRAMP-{uuid.uuid4().hex[:8].upper()}",
+                "status": "processing", "estimated_arrival": "1-2 giorni lavorativi",
+                "created_at": datetime.now(timezone.utc),
+            }
+            await db.banking_transactions.insert_one({**bank_tx, "_id": bank_tx["id"]})
+            eur_net = eur_after_bank
+            dest_info = f"IBAN {req.destination_iban[-4:]}"
+            payout_state = STATE_PAYOUT_PENDING
+            await mm.update_treasury("EUR", -eur_net, "offramp_bank_payout", 1.0)
+        else:
+            # ── FALLBACK: NIUM non configurato → crypto off-ramp ──
+            dest_wallet = req.destination_wallet
+            if not dest_wallet:
+                # Try user's connected wallet
+                user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1})
+                dest_wallet = user.get("connected_wallet") if user else None
+            if not dest_wallet:
+                raise HTTPException(
+                    status_code=400,
+                    detail="NIUM non configurato e nessun wallet esterno disponibile. Fornisci destination_wallet o connetti un wallet."
+                )
+            stable = (req.preferred_stable or "USDT").upper()
+            crypto_result = await mm.execute_stablecoin_offramp(uid, eur_net, dest_wallet, stable)
+            if crypto_result["success"]:
+                dest_info = f"{crypto_result['stable_asset']} → {dest_wallet[:8]}...{dest_wallet[-6:]}"
+                payout_state = STATE_PAYOUT_EXECUTED_EXTERNAL
+            else:
+                # Refund NENO if crypto offramp failed
+                await _credit(db, uid, "NENO", req.neno_amount)
+                await mm.update_treasury("NENO", -req.neno_amount, "offramp_refund", neno_eur_price)
+                raise HTTPException(status_code=500, detail=f"Off-ramp crypto fallito: {crypto_result['error']}")
+
+    elif req.destination == "crypto":
+        # Explicit crypto off-ramp
+        dest_wallet = req.destination_wallet
+        if not dest_wallet:
+            user = await db.users.find_one({"user_id": uid}, {"_id": 0, "connected_wallet": 1})
+            dest_wallet = user.get("connected_wallet") if user else None
+        if not dest_wallet:
+            raise HTTPException(status_code=400, detail="destination_wallet richiesto per off-ramp crypto")
+        stable = (req.preferred_stable or "USDT").upper()
+        crypto_result = await mm.execute_stablecoin_offramp(uid, eur_net, dest_wallet, stable)
+        if crypto_result["success"]:
+            dest_info = f"{crypto_result['stable_asset']} → {dest_wallet[:8]}...{dest_wallet[-6:]}"
+            payout_state = STATE_PAYOUT_EXECUTED_EXTERNAL
+        else:
+            await _credit(db, uid, "NENO", req.neno_amount)
+            await mm.update_treasury("NENO", -req.neno_amount, "offramp_refund", neno_eur_price)
+            raise HTTPException(status_code=500, detail=f"Off-ramp crypto fallito: {crypto_result['error']}")
     else:
-        raise HTTPException(status_code=400, detail="destination deve essere 'card' o 'bank'")
+        raise HTTPException(status_code=400, detail="destination deve essere 'card', 'bank' o 'crypto'")
 
     tx_id = str(uuid.uuid4())
     settlement = _settlement_record(tx_id, "neno_offramp", uid, req.neno_amount, "EUR", {
@@ -868,6 +1046,7 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         "credit": {"asset": "EUR", "amount": eur_net, "destination": req.destination},
         "fee": {"asset": "EUR", "amount": fee},
         "onchain_tx_hash": onchain_tx,
+        "crypto_tx_hash": crypto_result.get("tx_hash") if crypto_result else None,
     })
 
     tx = {
@@ -875,9 +1054,12 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         "neno_amount": req.neno_amount, "eur_gross": eur_gross, "fee": fee,
         "eur_net": eur_net, "destination": req.destination,
         "destination_info": dest_info,
-        "status": "completed" if req.destination == "card" else "processing",
-        "execution_mode": "onchain" if onchain_tx else "internal",
+        "status": "completed" if payout_state in (STATE_PAYOUT_SETTLED, STATE_PAYOUT_EXECUTED_EXTERNAL) else "processing",
+        "execution_mode": "onchain" if onchain_tx else ("crypto_external" if crypto_result else "internal"),
         "onchain_tx_hash": onchain_tx,
+        "crypto_payout": crypto_result if crypto_result else None,
+        "mm_bid": mm_pricing["bid"], "mm_ask": mm_pricing["ask"],
+        "mm_spread_bps": mm_pricing["spread_bps"],
         **settlement,
         "created_at": datetime.now(timezone.utc),
     }
@@ -893,14 +1075,16 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         destination_details={
             "iban": req.destination_iban, "card_id": req.card_id,
             "beneficiary": req.beneficiary_name,
+            "crypto_wallet": req.destination_wallet,
+            "crypto_tx_hash": crypto_result.get("tx_hash") if crypto_result else None,
         },
         initial_state=STATE_INTERNAL_CREDITED,
     )
 
-    # Enqueue payout for bank transfers
-    payout = None
-    payout_state = STATE_INTERNAL_CREDITED
-    if req.destination == "bank":
+    # Transition ledger state
+    if payout_state == STATE_PAYOUT_EXECUTED_EXTERNAL:
+        await transition_state(ledger["id"], STATE_PAYOUT_EXECUTED_EXTERNAL, "Crypto off-ramp executed")
+    elif req.destination == "bank" and os.environ.get("NIUM_API_KEY"):
         payout = await enqueue_payout(
             user_id=uid, amount=eur_net, currency="EUR",
             destination_type="bank", destination_iban=req.destination_iban,
@@ -908,10 +1092,23 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
             ledger_entry_id=ledger["id"],
         )
         await transition_state(ledger["id"], STATE_PAYOUT_PENDING, "Bank payout queued")
-        payout_state = STATE_PAYOUT_PENDING
     elif req.destination == "card":
         await transition_state(ledger["id"], STATE_PAYOUT_PENDING, "Card top-up")
-        payout_state = STATE_PAYOUT_SETTLED
+
+    # PnL entry
+    await db.mm_pnl_ledger.insert_one({
+        "_id": str(uuid.uuid4()),
+        "tx_id": tx_id, "user_id": uid, "direction": "offramp",
+        "neno_amount": req.neno_amount, "counter_asset": "EUR",
+        "counter_amount": eur_net,
+        "effective_price": neno_eur_price, "mid_price": mm_pricing["mid_price"],
+        "spread_revenue_eur": round(abs(mm_pricing["mid_price"] - neno_eur_price) * req.neno_amount, 4),
+        "fee_revenue_eur": round(fee, 4),
+        "total_revenue_eur": round(fee + abs(mm_pricing["mid_price"] - neno_eur_price) * req.neno_amount, 4),
+        "inventory_change_neno": round(req.neno_amount, 8),
+        "inventory_change_counter": round(-eur_net, 8),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
 
     return {
         "message": f"{req.neno_amount} NENO -> EUR {eur_net:.2f} -> {dest_info}" + (" (on-chain)" if onchain_tx else ""),
@@ -919,12 +1116,17 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
         "neno_balance": round(await _get_balance(db, uid, "NENO"), 8),
         "state": payout_state,
         "payout": {
-            "id": payout["id"] if payout else None,
             "state": payout_state,
             "amount": eur_net,
             "destination": dest_info,
+            "crypto_tx_hash": crypto_result.get("tx_hash") if crypto_result else None,
+            "crypto_explorer": crypto_result.get("explorer") if crypto_result else None,
         },
         "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
+        "market_maker": {
+            "price_type": "bid", "effective_price": neno_eur_price,
+            "mid_price": mm_pricing["mid_price"], "spread_bps": mm_pricing["spread_bps"],
+        },
     }
 
 
@@ -947,14 +1149,16 @@ async def get_neno_transactions(current_user: dict = Depends(get_current_user)):
 @router.get("/market")
 async def neno_market_info():
     db = get_database()
-    pricing = await _get_dynamic_neno_price()
-    neno_price = pricing["price"]
+    # ── MM pricing ──
+    mm = MarketMakerService.get_instance()
+    mm_pricing = await mm.get_pricing()
+    neno_price = mm_pricing["mid_price"]
+
     pairs = {}
     for asset, eur_price in MARKET_PRICES_EUR.items():
         rate = neno_price / eur_price
         pairs[f"NENO/{asset}"] = {"rate": round(rate, 8), "asset_eur_price": eur_price, "neno_eur_price": neno_price}
 
-    # Add custom tokens to pairs
     custom_tokens = await db.custom_tokens.find({}, {"_id": 0}).to_list(100)
     for t in custom_tokens:
         rate = neno_price / t["price_eur"] if t["price_eur"] > 0 else 0
@@ -964,10 +1168,18 @@ async def neno_market_info():
     return {
         "neno_eur_price": neno_price,
         "neno_usd_price": round(neno_price * 1.087, 2),
+        "bid": mm_pricing["bid"],
+        "ask": mm_pricing["ask"],
+        "spread_bps": mm_pricing["spread_bps"],
+        "spread_pct": mm_pricing["spread_pct"],
+        "spread_eur": mm_pricing["spread_eur"],
+        "inventory_skew": mm_pricing["inventory_skew"],
+        "treasury_neno": mm_pricing["treasury_neno"],
         "fee_percent": PLATFORM_FEE * 100,
         "supported_assets": all_assets,
         "pairs": pairs,
         "custom_tokens": custom_tokens,
+        "pricing_model": "market_maker",
     }
 
 

@@ -194,6 +194,9 @@ from routes.alert_routes import router as alert_router
 # Import DCA Bot routes
 from routes.dca_routes import router as dca_router
 
+# Import Market Maker routes
+from routes.market_maker_routes import router as market_maker_router
+
 # Import Referral System routes
 from routes.referral_routes import router as referral_router
 
@@ -650,6 +653,15 @@ async def _background_init():
     
     logger.info("[INIT] Background initialization complete - all services ready")
 
+    # Initialize Market Maker Treasury
+    try:
+        from services.market_maker_service import MarketMakerService
+        mm = MarketMakerService.get_instance()
+        await mm.initialize_treasury()
+        logger.info("[INIT] Market Maker Treasury initialized from on-chain state")
+    except Exception as e:
+        logger.warning(f"[INIT] Market Maker Treasury initialization failed: {e}")
+
 
 # Create the main app
 app = FastAPI(
@@ -736,6 +748,7 @@ api_router.include_router(referral_router)
 api_router.include_router(advanced_analytics_router)
 api_router.include_router(montecarlo_router)
 api_router.include_router(pep_router)
+api_router.include_router(market_maker_router)
 
 # Infrastructure API
 from routes.infra_routes import router as infra_router
