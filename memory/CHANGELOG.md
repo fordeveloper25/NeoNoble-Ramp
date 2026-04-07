@@ -1,45 +1,52 @@
 # Changelog
 
-## 2026-04-06 - CRITICAL BUG FIX: Balance Sync After On-Chain Transactions
+## 2026-04-07 - Production-Grade Settlement System
 
-### Problem
-On-chain transactions (sell, swap, offramp) via MetaMask executed successfully on BSC Mainnet but internal wallet balances in the app did not update. NENO was not debited after sell/swap/offramp operations.
+### Settlement Ledger & State Machine
+- Created `settlement_ledger.py` with 5-state machine: on_chain_executed → internal_credited → payout_pending → payout_sent → payout_settled
+- Every sell/swap/offramp creates a ledger entry with full audit trail (state_history)
+- `GET /api/neno-exchange/ledger` returns user's complete settlement history
+- `GET /api/neno-exchange/tx-state/{tx_id}` returns transaction + ledger + payout status
 
-### Root Cause
-The `verify-deposit` endpoint credits NENO to internal wallet when on-chain tx is confirmed. But sell/swap/offramp endpoints had an `if not onchain_tx:` guard around `_debit()` calls, which skipped the debit when `tx_hash` was provided.
+### Payout Queue (Off-Ramp)
+- `payout_queue` collection with retry logic (max 3 retries)
+- Offramp creates payout entry with IBAN, beneficiary, amount, state
+- `GET /api/neno-exchange/payouts` shows queue status
+- Background processor runs every 30s, executes via NIUM when API key present
+- Webhook-ready architecture for settlement confirmation
 
-### Fix
-- Removed `if not onchain_tx:` guard in `sell_neno()` (line 360)
-- Removed `if not onchain_tx:` guard in `swap_tokens()` (line 440)
-- Removed `if not onchain_tx:` guard in `offramp_neno()` (line 804)
-- Added 5s balance polling to `NenoExchange.js` for real-time sync
-- Added immediate balance update from transaction response in `exec()`
-- Fixed `handleCreateToken` to use `price_usd` instead of `price_eur`
+### Force Balance Sync
+- `POST /api/neno-exchange/force-balance-sync` - Submit tx_hash to force-credit
+- Reads on-chain receipt, parses Transfer event, credits internally
+- Prevents double-credit with onchain_deposits dedup
+- UI: Force Sync section in deposit tab with input + button
 
-### Test Results
-- Iteration 28: 14/14 backend tests passed, all frontend UI verified
-- Balance correctly debited on sell, swap, and offramp
-- Balance persistence confirmed after refetch
+### Blockchain Listener Enhancement
+- BSC_POLL_INTERVAL reduced from 120s to 3s for near-real-time detection
+- Extended lookback window from 100 to 500 blocks on startup
+- Enhanced user matching: connected_wallets, web3_address, neno_transactions, onchain_deposits
+- New `_find_user_by_wallet()` method with 3-level fallback
 
-## 2026-04-06 - Phase 1-4 Custom Token System (Complete)
+### Reconciliation Engine
+- `POST /api/neno-exchange/reconcile` (admin only) scans unmatched deposits
+- Background reconciliation every 15s via scheduler
+- Auto-credits any deposits that slipped through
 
-### Phase 1: Custom Token Creation
-- `POST /api/neno-exchange/create-token`: Symbol max 8 chars, price_usd 2 decimals
-- `GET /api/neno-exchange/my-tokens`: User's tokens with balances
-- Rewrote `TokenCreation.js` with XHR
-- Added "Crea Token Personalizzato" button + "I Miei Token" section to Dashboard
-
-### Phase 2: Buy/Sell Custom Tokens
-- `POST /api/neno-exchange/buy-custom-token` and `sell-custom-token`
-- Created `CustomTokenTrade.js` with Buy/Sell tabs
-
-### Phase 3: Swap Logic
-- Enhanced swap endpoint for custom tokens via NENO bridge
-- Swap tab in CustomTokenTrade page
-
-### Phase 4: Real-Time Balance Sync
-- `GET /api/neno-exchange/live-balances` polling endpoint
-- Dashboard live balances widget
+### Balance Sync Fix
+- All sell/swap/offramp now ALWAYS debit internally (no `if not onchain_tx` guard)
+- verify-deposit credits → sell/swap debits = net 0 for NENO (correct)
+- 5s polling in NenoExchange.js for real-time balance display
+- Immediate balance update from transaction response
 
 ### Test Results
-- Iteration 27: 18/18 backend tests passed, all frontend UI verified
+- Iteration 29: 18/18 backend tests passed, all frontend UI verified
+- Iteration 28: 14/14 passed (balance sync bug fix)
+- Iteration 27: 18/18 passed (custom token features)
+
+## 2026-04-06 - Phase 1-4 Custom Token System
+- Token creation, buy/sell, swap, live balances
+- Custom token marketplace page
+- Dashboard integration
+
+## 2026-04-06 - Balance Sync Bug Fix
+- Removed `if not onchain_tx` guard from sell/swap/offramp debit operations

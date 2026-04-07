@@ -1,45 +1,61 @@
 # NeoNoble Ramp - Product Requirements Document
 
 ## Original Problem Statement
-Enterprise-grade fintech platform (NeoNoble Ramp) with multi-chain crypto wallet, NENO token exchange, real Web3 integration (BSC Mainnet via Alchemy), MetaMask transaction signing, and complete banking/card infrastructure.
+Enterprise-grade fintech platform with multi-chain crypto wallet, NENO token exchange, real Web3/BSC integration, custom token creation, and complete banking/card infrastructure.
 
-## Current Status: FULLY OPERATIONAL
-All 4 phases of the Custom Token roadmap are complete. Critical balance sync bug has been fixed and verified.
+## Current Status: PRODUCTION-GRADE — FULLY OPERATIONAL
 
-## Core Features
-1. **NENO Exchange** - Buy/Sell/Swap/Off-Ramp with on-chain MetaMask execution
-2. **Custom Token Creation** - Create, list, buy, sell, swap custom tokens
-3. **Multi-chain Wallet** - BSC Mainnet, real Alchemy RPC, WalletConnect
-4. **Real-time Balance Sync** - 5s polling for live balance updates
-5. **DCA Trading Bot** - Automated recurring purchases
-6. **PDF Compliance Reports** - Exportable compliance docs
-7. **Referral System** - NENO bonus rewards
-8. **NIUM Banking** - Card issuing (pending templateId)
+### What's 100% Operativo (No Dependencies)
+- Custom Token Creation (Phase 1)
+- Buy/Sell Custom Tokens (Phase 2)
+- Swap Custom/Native tokens (Phase 3)
+- Settlement Ledger with state machine
+- Force Balance Sync from tx_hash
+- Blockchain Listener (3s aggressive polling)
+- Deposit Reconciliation (auto every 15s)
+- Live Balance Polling (5s)
+- DCA Trading Bot
+- PDF Compliance Reports
+- Referral System
+- Margin Trading
+- Multi-channel Notifications (SSE, Push)
+
+### Attivabile con API Key/Provider
+- Off-Ramp Payout Queue → needs NIUM API key to execute real bank transfers
+- SMS Notifications → needs Twilio API keys
+- NIUM Card Issuing → needs templateId configuration
+
+## Transaction State Machine
+```
+on_chain_executed → internal_credited → payout_pending → payout_sent → payout_settled
+                                                       ↘ payout_failed (retries up to 3x)
+```
 
 ## Architecture
-- Backend: FastAPI + MongoDB (Motor) + Web3.py
+- Backend: FastAPI + MongoDB (Motor) + Web3.py + Alchemy BSC RPC
 - Frontend: React.js + Tailwind + Wagmi/WalletConnect
 - API calls: XMLHttpRequest (not fetch) to bypass Emergent interceptor
-- Background: Blockchain listener, DCA scheduler, price alerts
+- Background: Blockchain listener (3s), DCA scheduler, price alerts, payout queue (30s), reconciliation (15s)
 
 ## Key API Endpoints
-- `POST /api/neno-exchange/sell` - Sell NENO (always debits internal balance)
-- `POST /api/neno-exchange/swap` - Swap tokens (always debits from_asset)
-- `POST /api/neno-exchange/offramp` - Off-ramp NENO (always debits)
+- `POST /api/neno-exchange/sell` - Sell NENO → state: internal_credited
+- `POST /api/neno-exchange/swap` - Swap tokens → state: internal_credited
+- `POST /api/neno-exchange/offramp` - Off-ramp → state: payout_pending, payout queued
+- `POST /api/neno-exchange/force-balance-sync` - Force sync on-chain tx
+- `POST /api/neno-exchange/reconcile` - Admin: reconcile unmatched deposits
+- `GET /api/neno-exchange/ledger` - Settlement ledger with audit trail
+- `GET /api/neno-exchange/payouts` - Payout queue status
+- `GET /api/neno-exchange/tx-state/{tx_id}` - Full transaction state
+- `GET /api/neno-exchange/live-balances` - Real-time balance polling
 - `POST /api/neno-exchange/create-token` - Create custom token
 - `POST /api/neno-exchange/buy-custom-token` - Buy custom tokens
 - `POST /api/neno-exchange/sell-custom-token` - Sell custom tokens
-- `GET /api/neno-exchange/live-balances` - Real-time balance polling
 - `GET /api/neno-exchange/my-tokens` - User's custom tokens
-- `POST /api/neno-exchange/verify-deposit` - Verify on-chain deposit
 
 ## Key DB Collections
-- `custom_tokens`: {id, symbol, name, price_usd, price_eur, total_supply, creator_id}
-- `wallets`: {user_id, asset, balance}
-- `neno_transactions`: {id, user_id, type, ...}
-- `onchain_deposits`: {tx_hash, user_id, amount, ...}
-
-## Bug Fixes Applied
-### Balance Sync Bug (2026-04-06)
-- **Root cause**: sell/swap/offramp had `if not onchain_tx:` guard around `_debit()`. When tx_hash present, debit skipped but verify-deposit already credited NENO.
-- **Fix**: Removed guard - always debit NENO from internal wallet. Net result: verify-deposit +N, sell -N = correct 0 net change.
+- `settlement_ledger`: Full audit trail with state_history
+- `payout_queue`: Off-ramp payouts with retry logic
+- `onchain_deposits`: On-chain deposit tracking
+- `custom_tokens`: User-created tokens
+- `wallets`: Asset balances per user
+- `neno_transactions`: Transaction history
