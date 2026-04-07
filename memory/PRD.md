@@ -1,34 +1,48 @@
-# NeoNoble Ramp - PRD
+# NeoNoble Ramp — PRD
 
-## Original Problem Statement
-Enterprise-grade fintech platform: crypto/fiat bridge, internal exchange (NENO), Market Maker with Treasury as real counterparty.
+## Problema originale
+Piattaforma fintech enterprise per acquisto/vendita/swap di criptovalute con bridge token interno $NENO (EUR 10.000 fisso). Include wallet multichain, Market Maker interno, integrazione NIUM banking, esecuzione reale on-chain, e compliance.
 
-## Architecture
-- **Backend**: FastAPI + MongoDB + Web3.py (BSC Mainnet)
-- **Frontend**: React + Tailwind + Wagmi
-- **Market Maker**: Treasury = Massimo's account (TREASURY_USER_ID)
-- **Audit**: Aggressive logging on every Sell/Swap/Off-Ramp with on-chain verification
+## Utente principale
+- Massimo Fornara (massimo.fornara.2212@gmail.com) — owner Treasury/Admin
 
-## Treasury (Real)
-- **Owner**: massimo.fornara.2212@gmail.com
-- **Source**: Combined internal wallets + on-chain hot wallet
-- **Assets**: EUR ~29,378 | ETH ~884 | BTC ~0.35 | NENO 397 (on-chain) | BNB 0.005
+## Requisiti Core
+1. Exchange $NENO (buy/sell/swap/offramp) con Market Maker dinamico Bid/Ask/Spread
+2. Treasury = Account Massimo (NENO, BNB on-chain + EUR, ETH, BTC interni)
+3. Esecuzione reale on-chain per SWAP/SELL/Withdraw (NENO, BNB, ETH/WETH, BTC/BTCB su BSC)
+4. Payout fiat reale via Stripe SEPA per SELL/OFF-RAMP EUR→bank
+5. Security Hardening: caps (€50k/tx, €200k/day, 50 NENO/tx), rate limit (10 ops/min), reentrancy lock, private key masking
+6. Status enforcement: solo "completed" con proof (tx_hash/payout_id), altrimenti "pending_execution"/"pending_settlement"/"failed"
+7. WebSocket balance sync + polling fallback
+8. Audit logging aggressivo PRE/POST su ogni operazione
+9. DCA Trading Bot, PDF Compliance, SMS Notifications (Twilio-ready)
 
-## Implemented
-- Phase 1-4: Tokens, Exchange, Wallet, Ledger, WebSockets
-- Phase 5: Market Maker (bid/ask, treasury counterparty, matching, PnL)
-- Aggressive Audit Logger: PRE/POST snapshots, on-chain verification, consistency checks
-- Mass testing: 20/20 trades passed, 0 consistency issues, EUR 7.26 PnL generated
+## Architettura
+- Backend: FastAPI + MongoDB (Motor) + Web3.py
+- Frontend: React + Tailwind + Shadcn/UI
+- BSC Mainnet: NENO (0xeF3F...974), WETH (0x2170...F8), BTCB (0x7130...9c)
 
-## Key API Endpoints
-- GET /api/market-maker/pricing (public)
-- GET /api/market-maker/treasury, /pnl, /risk, /order-book (auth)
-- POST /api/neno-exchange/buy, /sell, /swap, /offramp (auth, audited)
+## Stato implementazione — Fase attuale COMPLETATA
+- [x] Exchange completo con Market Maker
+- [x] Treasury unificata (on-chain + interna)
+- [x] Security Hardening (caps, rate limit, reentrancy, key masking)
+- [x] WebSocket balance sync
+- [x] Esecuzione reale on-chain (NENO, BNB, ETH, BTC via BEP-20)
+- [x] Stripe SEPA payout reale
+- [x] Status enforcement con proof
+- [x] Endpoint withdraw-real per ETH/BTC interni→reali
+- [x] Frontend aggiornato con proof display, delivery info, status badges
 
-## Pending
-- NIUM Integration (awaiting templateId)
+## P0 completati
+- Security Guard: /app/backend/services/security_guard.py
+- Enhanced Execution Engine: send_bep20, send_asset_real
+- Exchange routes: sell, swap, offramp con real delivery
+- withdraw-real endpoint per ETH/BTC→on-chain
+- WebSocket + polling fallback nel frontend
 
 ## Backlog
-- Admin Treasury Dashboard with PnL charts (P1)
-- Microservices split (P2)
-- Dynamic NENO pricing from real order book (P2)
+- P1: Microservices split
+- P1: Admin Treasury Dashboard con grafici PnL
+- P2: Dynamic NENO pricing da order book reale
+- P2: Referral System con NENO bonuses
+- P2: NIUM onboarding (bloccato su templateId utente)

@@ -14,3 +14,9 @@
 
 ## Test Wallet
 - Address: 0xf44C81dbab89941173d0d49C1CEA876950eDCfd3
+
+## Security Caps
+- Max singola operazione: €50,000
+- Max giornaliero: €200,000
+- Max NENO per transazione: 50
+- Rate limit: 10 operazioni/minuto
