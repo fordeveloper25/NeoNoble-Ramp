@@ -111,6 +111,26 @@ async def _run_periodic(name: str, func, interval_seconds: int):
         await asyncio.sleep(interval_seconds)
 
 
+async def _process_payouts():
+    """Process the payout queue."""
+    try:
+        from services.settlement_ledger import process_payout_queue
+        await process_payout_queue()
+    except Exception as e:
+        logger.error(f"[SCHEDULER] Payout queue error: {e}")
+
+
+async def _reconcile_deposits():
+    """Run deposit reconciliation."""
+    try:
+        from services.settlement_ledger import reconcile_deposits
+        count = await reconcile_deposits()
+        if count > 0:
+            logger.info(f"[SCHEDULER] Reconciled {count} deposits")
+    except Exception as e:
+        logger.error(f"[SCHEDULER] Reconciliation error: {e}")
+
+
 async def start_scheduler():
     """Start all background tasks."""
     global _running, _tasks
@@ -121,9 +141,11 @@ async def start_scheduler():
         asyncio.create_task(_run_periodic("RateLimiterCleanup", _cleanup_rate_limiter, 300)),
         asyncio.create_task(_run_periodic("NiumAuthRefresh", _nium_auth_refresh, 1800)),
         asyncio.create_task(_run_periodic("DCABot", _execute_dca_bot, 60)),
+        asyncio.create_task(_run_periodic("PayoutQueue", _process_payouts, 30)),
+        asyncio.create_task(_run_periodic("DepositReconcile", _reconcile_deposits, 15)),
     ]
 
-    logger.info("[SCHEDULER] Background tasks started: PriceAlerts(60s), RateLimiterCleanup(300s), NiumAuthRefresh(1800s), DCABot(60s)")
+    logger.info("[SCHEDULER] Background tasks started: PriceAlerts(60s), RateLimiterCleanup(300s), NiumAuthRefresh(1800s), DCABot(60s), PayoutQueue(30s), DepositReconcile(15s)")
 
 
 async def stop_scheduler():

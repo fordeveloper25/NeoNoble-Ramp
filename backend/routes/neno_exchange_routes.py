@@ -25,6 +25,12 @@ import logging
 from database.mongodb import get_database
 from routes.auth import get_current_user
 from services.onchain_settlement import OnChainSettlement
+from services.settlement_ledger import (
+    create_ledger_entry, transition_state, enqueue_payout,
+    get_user_ledger, get_user_payouts, reconcile_deposits,
+    STATE_ONCHAIN_EXECUTED, STATE_INTERNAL_CREDITED, STATE_PAYOUT_PENDING,
+    STATE_PAYOUT_SENT, STATE_PAYOUT_SETTLED,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -407,10 +413,20 @@ async def sell_neno(req: SellNenoRequest, current_user: dict = Depends(get_curre
 
     new_neno = await _get_balance(db, uid, "NENO")
     new_asset = await _get_balance(db, uid, asset)
+
+    # Ledger entry for audit trail
+    await create_ledger_entry(
+        user_id=uid, tx_type="sell_neno", debit_asset="NENO", debit_amount=req.neno_amount,
+        credit_asset=asset, credit_amount=net, fee_amount=fee, fee_asset=asset,
+        onchain_tx_hash=onchain_tx,
+        initial_state=STATE_INTERNAL_CREDITED,
+    )
+
     return {
         "message": f"Venduti {req.neno_amount} NENO per {net} {asset}" + (" (on-chain)" if onchain_tx else ""),
         "transaction": tx,
         "balances": {"NENO": round(new_neno, 8), asset: round(new_asset, 8)},
+        "state": STATE_INTERNAL_CREDITED,
         "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
     }
 
@@ -484,6 +500,7 @@ async def swap_tokens(req: SwapRequest, current_user: dict = Depends(get_current
             from_asset: round(await _get_balance(db, uid, from_asset), 8),
             to_asset: round(await _get_balance(db, uid, to_asset), 8),
         },
+        "state": STATE_INTERNAL_CREDITED,
         "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
     }
 
@@ -862,10 +879,46 @@ async def offramp_neno(req: OfframpRequest, current_user: dict = Depends(get_cur
     await _log_tx(db, tx)
     tx["created_at"] = tx["created_at"].isoformat()
 
+    # Create ledger entry
+    ledger = await create_ledger_entry(
+        user_id=uid, tx_type="neno_offramp", debit_asset="NENO",
+        debit_amount=req.neno_amount, credit_asset="EUR", credit_amount=eur_net,
+        fee_amount=fee, fee_asset="EUR", onchain_tx_hash=onchain_tx,
+        destination_type=req.destination,
+        destination_details={
+            "iban": req.destination_iban, "card_id": req.card_id,
+            "beneficiary": req.beneficiary_name,
+        },
+        initial_state=STATE_INTERNAL_CREDITED,
+    )
+
+    # Enqueue payout for bank transfers
+    payout = None
+    payout_state = STATE_INTERNAL_CREDITED
+    if req.destination == "bank":
+        payout = await enqueue_payout(
+            user_id=uid, amount=eur_net, currency="EUR",
+            destination_type="bank", destination_iban=req.destination_iban,
+            beneficiary_name=req.beneficiary_name or "NeoNoble User",
+            ledger_entry_id=ledger["id"],
+        )
+        await transition_state(ledger["id"], STATE_PAYOUT_PENDING, "Bank payout queued")
+        payout_state = STATE_PAYOUT_PENDING
+    elif req.destination == "card":
+        await transition_state(ledger["id"], STATE_PAYOUT_PENDING, "Card top-up")
+        payout_state = STATE_PAYOUT_SETTLED
+
     return {
         "message": f"{req.neno_amount} NENO -> EUR {eur_net:.2f} -> {dest_info}" + (" (on-chain)" if onchain_tx else ""),
         "transaction": tx,
         "neno_balance": round(await _get_balance(db, uid, "NENO"), 8),
+        "state": payout_state,
+        "payout": {
+            "id": payout["id"] if payout else None,
+            "state": payout_state,
+            "amount": eur_net,
+            "destination": dest_info,
+        },
         "onchain_explorer": f"https://bscscan.com/tx/{onchain_tx}" if onchain_tx else None,
     }
 
@@ -1282,4 +1335,175 @@ async def portfolio_snapshot(current_user: dict = Depends(get_current_user)):
             "block_explorer": t.get("settlement_explorer"),
             "timestamp": t.get("settlement_timestamp", t.get("created_at")),
         } for t in recent_txs],
+    }
+
+
+
+# ══════════════════════════════════════════════════════════════════
+# SETTLEMENT LEDGER, FORCE SYNC, RECONCILIATION, PAYOUT QUEUE
+# ══════════════════════════════════════════════════════════════════
+
+
+class ForceBalanceSyncRequest(BaseModel):
+    tx_hash: str = Field(description="On-chain transaction hash to force-sync")
+    user_wallet: Optional[str] = Field(default=None, description="Sender wallet address (optional override)")
+
+
+@router.post("/force-balance-sync")
+async def force_balance_sync(req: ForceBalanceSyncRequest, current_user: dict = Depends(get_current_user)):
+    """Force-sync an on-chain deposit by tx hash. Looks up the tx on BSC, credits internally."""
+    db = get_database()
+    uid = current_user["user_id"]
+    tx_hash = req.tx_hash.strip()
+
+    already = await db.onchain_deposits.find_one({"tx_hash": tx_hash, "credited": True})
+    if already:
+        return {"message": "Transazione gia' sincronizzata", "tx_hash": tx_hash, "amount": already.get("neno_amount", 0)}
+
+    try:
+        from services.blockchain_listener import BlockchainListener, NENO_CONTRACT_ADDRESS
+        from web3 import Web3
+        from decimal import Decimal
+
+        rpc_url = os.environ.get('BSC_RPC_URL')
+        if not rpc_url:
+            raise HTTPException(status_code=500, detail="BSC RPC non configurato")
+
+        from web3.middleware import ExtraDataToPOAMiddleware
+        w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 15}))
+        w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+
+        receipt = w3.eth.get_transaction_receipt(tx_hash)
+        if not receipt or receipt["status"] != 1:
+            raise HTTPException(status_code=400, detail="Transazione non trovata o fallita on-chain")
+
+        transfer_topic = w3.keccak(text="Transfer(address,address,uint256)").hex()
+        neno_addr = Web3.to_checksum_address(NENO_CONTRACT_ADDRESS).lower()
+
+        amount = 0
+        sender = ""
+        for log_entry in receipt["logs"]:
+            if log_entry["address"].lower() == neno_addr and len(log_entry["topics"]) >= 3:
+                if log_entry["topics"][0].hex() == transfer_topic:
+                    sender = "0x" + log_entry["topics"][1].hex()[-40:]
+                    raw_amount = int(log_entry["data"].hex(), 16)
+                    amount = float(Decimal(raw_amount) / Decimal(10 ** 18))
+                    break
+
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="Nessun trasferimento NENO trovato in questa transazione")
+
+        wallet = await db.wallets.find_one({"user_id": uid, "asset": "NENO"})
+        if wallet:
+            await db.wallets.update_one({"user_id": uid, "asset": "NENO"}, {"$inc": {"balance": amount}})
+        else:
+            await db.wallets.insert_one({
+                "id": str(uuid.uuid4()), "user_id": uid, "asset": "NENO",
+                "balance": amount, "created_at": datetime.now(timezone.utc),
+            })
+
+        new_balance = (await db.wallets.find_one({"user_id": uid, "asset": "NENO"}, {"_id": 0}))["balance"]
+
+        deposit_id = str(uuid.uuid4())
+        await db.onchain_deposits.update_one(
+            {"tx_hash": tx_hash},
+            {"$set": {
+                "id": deposit_id, "tx_hash": tx_hash, "user_id": uid,
+                "sender_address": sender, "neno_amount": amount,
+                "operation": "force_sync", "status": "verified",
+                "credited": True, "block_number": receipt["blockNumber"],
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+
+        tx_id = str(uuid.uuid4())
+        await db.neno_transactions.insert_one({
+            "_id": tx_id, "id": tx_id, "user_id": uid, "type": "onchain_deposit",
+            "neno_amount": amount, "sender_address": sender, "tx_hash": tx_hash,
+            "execution_mode": "force_sync", "status": "completed",
+            "created_at": datetime.now(timezone.utc),
+        })
+
+        await create_ledger_entry(
+            user_id=uid, tx_type="deposit_sync", debit_asset="NENO_ONCHAIN",
+            debit_amount=amount, credit_asset="NENO", credit_amount=amount,
+            onchain_tx_hash=tx_hash, initial_state=STATE_INTERNAL_CREDITED,
+        )
+
+        return {
+            "message": f"Sincronizzato: {amount} NENO accreditati dal tx {tx_hash[:16]}...",
+            "tx_hash": tx_hash, "amount": amount,
+            "new_balance": round(new_balance, 8),
+            "state": STATE_INTERNAL_CREDITED,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Force sync error: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore force sync: {str(e)}")
+
+
+@router.post("/reconcile")
+async def run_reconciliation(current_user: dict = Depends(get_current_user)):
+    """Run full reconciliation: find and credit all unmatched on-chain deposits."""
+    db = get_database()
+    if current_user.get("role", "").upper() != "ADMIN":
+        raise HTTPException(status_code=403, detail="Solo admin")
+
+    credited = await reconcile_deposits()
+
+    pending_deposits = await db.onchain_deposits.find(
+        {"status": "pending_user_match"}, {"_id": 0}
+    ).to_list(50)
+
+    return {
+        "reconciled_credits": credited,
+        "unmatched_deposits": len(pending_deposits),
+        "pending_details": [
+            {"tx_hash": d["tx_hash"], "amount": d["neno_amount"], "sender": d.get("sender_address")}
+            for d in pending_deposits
+        ],
+    }
+
+
+@router.get("/ledger")
+async def get_ledger(current_user: dict = Depends(get_current_user)):
+    """Get settlement ledger for current user with full state history."""
+    entries = await get_user_ledger(current_user["user_id"])
+    return {"entries": entries, "total": len(entries)}
+
+
+@router.get("/payouts")
+async def get_payouts(current_user: dict = Depends(get_current_user)):
+    """Get payout queue status for current user."""
+    payouts = await get_user_payouts(current_user["user_id"])
+    return {"payouts": payouts, "total": len(payouts)}
+
+
+@router.get("/tx-state/{tx_id}")
+async def get_transaction_state(tx_id: str, current_user: dict = Depends(get_current_user)):
+    """Get full state of a transaction including ledger and payout status."""
+    db = get_database()
+    uid = current_user["user_id"]
+
+    tx = await db.neno_transactions.find_one({"id": tx_id, "user_id": uid}, {"_id": 0})
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transazione non trovata")
+
+    ledger = await db.settlement_ledger.find_one(
+        {"user_id": uid, "onchain_tx_hash": tx.get("onchain_tx_hash", tx.get("tx_hash"))},
+        {"_id": 0}
+    )
+
+    payout = None
+    if ledger and ledger.get("id"):
+        payout = await db.payout_queue.find_one({"ledger_entry_id": ledger["id"]}, {"_id": 0})
+
+    return {
+        "transaction": tx,
+        "ledger": ledger,
+        "payout": payout,
+        "current_state": ledger["state"] if ledger else tx.get("status"),
     }

@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building,
   Clock, TrendingUp, TrendingDown, Plus, Repeat,
   Wallet, CheckCircle, ExternalLink, Copy, Check, AlertTriangle, Shield,
-  QrCode, ArrowDownToLine
+  QrCode, ArrowDownToLine, RefreshCw
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useWeb3 } from '../context/Web3Context';
@@ -99,6 +99,11 @@ export default function NenoExchange() {
   const [offrampIban, setOfframpIban] = useState('');
   const [offrampName, setOfframpName] = useState('');
   const [copiedAddr, setCopiedAddr] = useState(false);
+
+  // Force Sync
+  const [syncTxHash, setSyncTxHash] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   // Swap
   const [swapFrom, setSwapFrom] = useState('NENO');
@@ -268,6 +273,7 @@ export default function NenoExchange() {
         ok: true,
         msg: data.message || 'Operazione completata',
         balances: data.balances,
+        state: data.state || null,
         settlementHash: onchainHash || tx.settlement_hash,
         blockNumber: tx.settlement_block_number,
         blockExplorer: onchainHash ? `https://bscscan.com/tx/${onchainHash}` : tx.settlement_explorer,
@@ -275,6 +281,7 @@ export default function NenoExchange() {
         network: tx.settlement_network || 'BSC Mainnet',
         isOnChain: !!onchainHash,
         onchainExplorer: data.onchain_explorer,
+        payout: data.payout || null,
       });
       // Immediately update local balances with the response data
       if (data.balances) {
@@ -304,6 +311,22 @@ export default function NenoExchange() {
   const handleCreateToken = () => exec('/api/neno-exchange/create-token', {
     symbol: newSym, name: newName, price_usd: parseFloat(newPrice), total_supply: parseFloat(newSupply) || 1000000,
   });
+
+  const handleForceSync = async () => {
+    if (!syncTxHash.trim()) return;
+    setSyncing(true);
+    setSyncResult(null);
+    const token = localStorage.getItem('token');
+    const res = await xhrPost(`${BACKEND_URL}/api/neno-exchange/force-balance-sync`, { tx_hash: syncTxHash.trim() }, token);
+    if (res.ok) {
+      setSyncResult({ ok: true, msg: res.data.message, amount: res.data.amount, balance: res.data.new_balance });
+      fetchData();
+      if (refetchNenoBalance) refetchNenoBalance();
+    } else {
+      setSyncResult({ ok: false, msg: res.data.detail || 'Errore sync' });
+    }
+    setSyncing(false);
+  };
 
   const TABS = [
     { id: 'buy', label: 'Compra', icon: TrendingUp },
@@ -404,6 +427,23 @@ export default function NenoExchange() {
         {result && (
           <div className={`rounded-lg px-4 py-3 text-sm ${result.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`} data-testid="result-banner">
             <div className="font-medium">{result.msg}</div>
+            {result.ok && result.state && (
+              <div className="mt-1 flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  result.state === 'internal_credited' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                  result.state === 'payout_pending' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                  result.state === 'payout_sent' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                  result.state === 'payout_settled' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                  'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
+                }`} data-testid="tx-state-badge">
+                  {result.state === 'internal_credited' && '✓ Accreditato internamente'}
+                  {result.state === 'payout_pending' && '⏳ Payout in coda'}
+                  {result.state === 'payout_sent' && '↗ Payout inviato'}
+                  {result.state === 'payout_settled' && '✓ Payout completato'}
+                  {!['internal_credited','payout_pending','payout_sent','payout_settled'].includes(result.state) && result.state}
+                </span>
+              </div>
+            )}
             {result.isOnChain && result.settlementHash && (
               <div className="mt-2 space-y-1 text-[11px]">
                 <div className="flex items-center gap-1.5">
@@ -642,6 +682,37 @@ export default function NenoExchange() {
                   Inviare altri token o su altre reti puo' causare la perdita dei fondi.
                 </p>
               </div>
+
+              {/* Force Balance Sync */}
+              <div className="bg-zinc-800/30 border border-cyan-700/30 rounded-lg p-4 space-y-3">
+                <h4 className="text-cyan-400 text-xs font-bold flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Sincronizzazione Manuale (Force Sync)
+                </h4>
+                <p className="text-zinc-500 text-[10px]">Se hai trasferito NENO all'hot wallet ma il saldo non si aggiorna, incolla il TX Hash qui:</p>
+                <div className="flex gap-2">
+                  <input
+                    value={syncTxHash} onChange={e => setSyncTxHash(e.target.value)}
+                    placeholder="0x..." className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-xs font-mono"
+                    data-testid="force-sync-input"
+                  />
+                  <button
+                    onClick={handleForceSync} disabled={syncing || !syncTxHash.trim()}
+                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-white text-xs font-bold disabled:opacity-40 transition-colors flex items-center gap-1"
+                    data-testid="force-sync-btn"
+                  >
+                    {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    Sync
+                  </button>
+                </div>
+                {syncResult && (
+                  <div className={`rounded-lg p-2.5 text-xs ${syncResult.ok ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}
+                    data-testid="force-sync-result">
+                    {syncResult.msg}
+                    {syncResult.balance !== undefined && <span className="block text-[10px] mt-1 text-zinc-400">Nuovo saldo: {syncResult.balance} NENO</span>}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -697,7 +768,7 @@ export default function NenoExchange() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-zinc-500 text-xs mb-1 block">Simbolo (ticker)</label>
-                <input value={newSym} onChange={e => setNewSym(e.target.value.toUpperCase())} placeholder="MYTOKEN" maxLength={10} data-testid="create-symbol-input"
+                <input value={newSym} onChange={e => setNewSym(e.target.value.toUpperCase().slice(0, 8))} placeholder="MYTOKEN" maxLength={8} data-testid="create-symbol-input"
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
               </div>
               <div>
@@ -706,7 +777,7 @@ export default function NenoExchange() {
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm" />
               </div>
               <div>
-                <label className="text-zinc-500 text-xs mb-1 block">Prezzo (EUR)</label>
+                <label className="text-zinc-500 text-xs mb-1 block">Prezzo (USD)</label>
                 <input type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="0.01" min="0" step="any" data-testid="create-price-input"
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-mono" />
               </div>

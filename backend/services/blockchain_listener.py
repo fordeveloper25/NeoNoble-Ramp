@@ -417,19 +417,15 @@ class BlockchainListener:
     async def monitor_hot_wallet(self, hot_wallet_address: str):
         """
         Continuously monitors the platform hot wallet for incoming NENO transfers.
-        When a new deposit is detected:
-          1. Looks up the sender's user account by connected wallet address
-          2. Credits NENO to their internal wallet
-          3. Creates a transaction record
+        Aggressive 3s polling for real-time detection.
         """
         if not self._enabled:
             logger.warning("Hot wallet monitor not started (RPC not configured)")
             return
 
-        poll_interval = int(os.environ.get('BSC_POLL_INTERVAL', '60'))
+        poll_interval = int(os.environ.get('BSC_POLL_INTERVAL', '3'))
         logger.info(f"Starting hot wallet monitor for {hot_wallet_address[:10]}... (interval: {poll_interval}s)")
 
-        # Track the last scanned block
         last_block = None
 
         while self._running:
@@ -441,14 +437,12 @@ class BlockchainListener:
 
                 current_block = web3.eth.block_number
                 if last_block is None:
-                    # Start scanning from recent blocks (last ~5 minutes / ~100 blocks)
-                    last_block = max(current_block - 100, 0)
+                    last_block = max(current_block - 500, 0)
 
                 if current_block <= last_block:
                     await asyncio.sleep(poll_interval)
                     continue
 
-                # Scan for NENO transfers TO our hot wallet
                 transfer_topic = web3.keccak(text="Transfer(address,address,uint256)").hex()
                 padded_hw = "0x" + hot_wallet_address[2:].lower().zfill(64)
 
@@ -475,32 +469,19 @@ class BlockchainListener:
                     if amount <= 0:
                         continue
 
-                    # Check if already processed
                     existing = await self.db.onchain_deposits.find_one({"tx_hash": tx_hash})
                     if existing:
                         continue
 
                     from_addr_checksum = Web3.to_checksum_address("0x" + from_addr.replace("0x", "").zfill(40)[-40:])
-                    logger.info(f"[HOT WALLET] New NENO deposit detected: {amount} NENO from {from_addr_checksum} (tx: {tx_hash[:16]}...)")
+                    logger.info(f"[HOT WALLET] New NENO deposit: {amount} NENO from {from_addr_checksum} (tx: {tx_hash[:16]}...)")
 
-                    # Find user by connected wallet address
-                    user = await self.db.users.find_one(
-                        {"$or": [
-                            {"wallet_address": {"$regex": from_addr_checksum, "$options": "i"}},
-                            {"connected_wallets": {"$regex": from_addr_checksum, "$options": "i"}},
-                            {"web3_address": {"$regex": from_addr_checksum, "$options": "i"}},
-                        ]},
-                        {"_id": 0, "user_id": 1, "email": 1}
-                    )
+                    user = await self._find_user_by_wallet(from_addr_checksum)
 
-                    # Process the deposit
                     await self._process_hot_wallet_deposit(
-                        tx_hash=tx_hash,
-                        sender=from_addr_checksum,
-                        amount=amount,
-                        block_number=block_number,
-                        hot_wallet=hot_wallet_address,
-                        user=user,
+                        tx_hash=tx_hash, sender=from_addr_checksum,
+                        amount=amount, block_number=block_number,
+                        hot_wallet=hot_wallet_address, user=user,
                     )
 
                 last_block = current_block
@@ -509,6 +490,45 @@ class BlockchainListener:
                 logger.debug(f"Hot wallet monitor cycle error: {e}")
 
             await asyncio.sleep(poll_interval)
+
+    async def _find_user_by_wallet(self, wallet_address: str) -> Optional[Dict]:
+        """Find user by wallet address with aggressive matching."""
+        addr_lower = wallet_address.lower()
+        addr_checksum = Web3.to_checksum_address(wallet_address)
+
+        user = await self.db.users.find_one(
+            {"$or": [
+                {"wallet_address": {"$regex": addr_checksum, "$options": "i"}},
+                {"connected_wallets": {"$regex": addr_checksum, "$options": "i"}},
+                {"web3_address": {"$regex": addr_checksum, "$options": "i"}},
+                {"connected_wallet": {"$regex": addr_checksum, "$options": "i"}},
+                {"wallet_address": {"$regex": addr_lower, "$options": "i"}},
+                {"connected_wallet": addr_lower},
+                {"connected_wallet": addr_checksum},
+            ]},
+            {"_id": 0, "user_id": 1, "email": 1}
+        )
+
+        if not user:
+            txs = await self.db.neno_transactions.find(
+                {"$or": [
+                    {"sender_address": {"$regex": addr_checksum, "$options": "i"}},
+                    {"onchain_tx_from": {"$regex": addr_checksum, "$options": "i"}},
+                ]},
+                {"_id": 0, "user_id": 1}
+            ).sort("created_at", -1).to_list(1)
+            if txs:
+                user = {"user_id": txs[0]["user_id"]}
+
+        if not user:
+            deposits = await self.db.onchain_deposits.find(
+                {"sender_address": {"$regex": addr_checksum, "$options": "i"}, "user_id": {"$ne": None}},
+                {"_id": 0, "user_id": 1}
+            ).sort("verified_at", -1).to_list(1)
+            if deposits:
+                user = {"user_id": deposits[0]["user_id"]}
+
+        return user
 
     async def _process_hot_wallet_deposit(
         self, tx_hash: str, sender: str, amount: float,
