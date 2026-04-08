@@ -203,6 +203,9 @@ from routes.strategic_routes import router as strategic_router
 # Import Circle USDC routes
 from routes.circle_routes import router as circle_router
 
+# Import Cashout Engine routes
+from routes.cashout_routes import router as cashout_router
+
 # Import Referral System routes
 from routes.referral_routes import router as referral_router
 
@@ -370,6 +373,11 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     try:
+        from services.cashout_engine import CashoutEngine
+        await CashoutEngine.get_instance().stop()
+    except Exception:
+        pass
+    try:
         from services.background_scheduler import stop_scheduler
         await stop_scheduler()
     except Exception:
@@ -463,6 +471,14 @@ async def _background_init():
             await db.auto_op_metrics.create_index([("cycle", -1)])
             await db.auto_op_events.create_index([("timestamp", -1)])
             await db.auto_op_state.create_index("key", unique=True)
+            
+            # Cashout Engine indexes
+            await db.cashout_log.create_index([("created_at", -1)])
+            await db.cashout_log.create_index("type")
+            await db.cashout_log.create_index("status")
+            await db.cashout_events.create_index([("timestamp", -1)])
+            await db.cashout_metrics.create_index([("cycle", -1)])
+            await db.auto_conversions.create_index([("created_at", -1)])
             
             logger.info("[INIT] Database indexes created")
         except Exception as e:
@@ -693,6 +709,15 @@ async def _background_init():
     except Exception as e:
         logger.warning(f"[INIT] Auto-Operation Loop failed to start: {e}")
 
+    # Start Cashout Engine (autonomous profit extraction)
+    try:
+        from services.cashout_engine import CashoutEngine
+        cashout = CashoutEngine.get_instance()
+        await cashout.start()
+        logger.info("[INIT] Cashout Engine started — continuous extraction active")
+    except Exception as e:
+        logger.warning(f"[INIT] Cashout Engine failed to start: {e}")
+
     # Initialize Market Maker Treasury
     try:
         from services.market_maker_service import MarketMakerService
@@ -794,6 +819,7 @@ api_router.include_router(exchange_orders_router)
 api_router.include_router(institutional_router)
 api_router.include_router(strategic_router)
 api_router.include_router(circle_router)
+api_router.include_router(cashout_router)
 
 # Infrastructure API
 from routes.infra_routes import router as infra_router

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, TrendingUp, Building, Activity, Globe, BarChart3, RefreshCw, ExternalLink, Lock, AlertTriangle, CheckCircle, Coins, Zap } from 'lucide-react';
+import { Shield, TrendingUp, Building, Activity, Globe, BarChart3, RefreshCw, ExternalLink, Lock, AlertTriangle, CheckCircle, Coins, Zap, ArrowRightLeft, Banknote } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -40,6 +40,8 @@ export default function AdminDashboard() {
   const [circleAutoOp, setCircleAutoOp] = useState(null);
   const [circleSegregation, setCircleSegregation] = useState(null);
   const [circleFailSafe, setCircleFailSafe] = useState(null);
+  const [cashoutStatus, setCashoutStatus] = useState(null);
+  const [cashoutReport, setCashoutReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
 
@@ -52,7 +54,7 @@ export default function AdminDashboard() {
     setLoading(true);
     const h = headers();
     try {
-      const [fin, p, str, saf, br, sec, tc, txs, rt, vm, cb, cao, csg, cfs] = await Promise.all([
+      const [fin, p, str, saf, br, sec, tc, txs, rt, vm, cb, cao, csg, cfs, cstat, crpt] = await Promise.all([
         xhrFetch(`${API}/api/institutional/financials`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/institutional/pnl?period_hours=24`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/institutional/structure`, { headers: h }).catch(() => null),
@@ -67,6 +69,8 @@ export default function AdminDashboard() {
         xhrFetch(`${API}/api/circle/auto-op/status`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/circle/segregation/summary`, { headers: h }).catch(() => null),
         xhrFetch(`${API}/api/circle/fail-safe/report`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/cashout/status`, { headers: h }).catch(() => null),
+        xhrFetch(`${API}/api/cashout/report`, { headers: h }).catch(() => null),
       ]);
       setFinancials(fin); setPnl(p); setStructure(str); setSafeguarding(saf);
       setBankingRails(br); setSecurityStatus(sec); setTreasuryCheck(tc);
@@ -74,6 +78,7 @@ export default function AdminDashboard() {
       setRealTreasury(rt); setVirtualMetrics(vm);
       setCircleBalances(cb); setCircleAutoOp(cao);
       setCircleSegregation(csg); setCircleFailSafe(cfs);
+      setCashoutStatus(cstat); setCashoutReport(crpt);
     } catch (e) { console.error(e); }
     setLoading(false);
   }, [headers]);
@@ -82,6 +87,7 @@ export default function AdminDashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'cashout', label: 'Cashout Engine', icon: Banknote },
     { id: 'circle-usdc', label: 'Circle USDC', icon: Coins },
     { id: 'real-virtual', label: 'Real vs Virtual', icon: Shield },
     { id: 'treasury', label: 'Treasury & Risk', icon: Lock },
@@ -161,6 +167,135 @@ export default function AdminDashboard() {
                     </div>
                     <div className="text-[10px] text-zinc-500">Coverage</div>
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'cashout' && (
+          <div className="space-y-4" data-testid="cashout-tab">
+            {/* Engine Status */}
+            <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-4" data-testid="cashout-engine-panel">
+              <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-1.5">
+                <Banknote className="w-4 h-4" /> Autonomous Profit Extraction Engine
+                {cashoutStatus?.running && <span className="ml-2 text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full animate-pulse">ACTIVE</span>}
+              </h3>
+              {cashoutStatus && (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                      <div className="text-base font-bold text-emerald-400">{cashoutStatus.cycle_count}</div>
+                      <div className="text-[10px] text-zinc-500">Cicli</div>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                      <div className="text-base font-bold text-cyan-400">{cashoutStatus.cumulative?.extracted_usdc?.toFixed(6)}</div>
+                      <div className="text-[10px] text-zinc-500">USDC Estratti</div>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                      <div className="text-base font-bold text-amber-400">{cashoutStatus.cumulative?.extracted_eur?.toFixed(2)}</div>
+                      <div className="text-[10px] text-zinc-500">EUR Estratti</div>
+                    </div>
+                    <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                      <div className="text-base font-bold text-white">{cashoutStatus.cumulative?.cashouts_executed}</div>
+                      <div className="text-[10px] text-zinc-500">Cashout Eseguiti</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 text-[10px] text-zinc-500">
+                    <span>Intervallo: {cashoutStatus.interval_seconds}s</span>
+                    <span>Buffer TREASURY: {cashoutStatus.treasury_buffer_pct}%</span>
+                    <span>Min USDC: {cashoutStatus.min_cashout_usdc}</span>
+                    <span>Min EUR: {cashoutStatus.min_cashout_eur}</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* EUR Accounts */}
+            <div className="bg-zinc-900/80 border border-blue-500/20 rounded-xl p-4" data-testid="eur-accounts-panel">
+              <h3 className="text-sm font-bold text-blue-400 mb-3 flex items-center gap-1.5"><ArrowRightLeft className="w-4 h-4" /> Conti EUR (SEPA/SWIFT)</h3>
+              {cashoutStatus?.eur_accounts && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {Object.entries(cashoutStatus.eur_accounts).map(([key, acc]) => (
+                    <div key={key} className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-3" data-testid={`eur-account-${key}`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-blue-400">{key}</span>
+                        <span className="text-[9px] bg-zinc-700/50 text-zinc-400 px-1.5 py-0.5 rounded">{acc.bic}</span>
+                      </div>
+                      <div className="text-xs text-white font-mono">{acc.iban}</div>
+                      <div className="text-[10px] text-zinc-500 mt-1">{acc.beneficiary}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div className="bg-zinc-800/30 rounded p-1.5">
+                  <div className="text-[10px] text-emerald-400">SEPA Instant</div>
+                  <div className="text-[9px] text-zinc-500">&lt; 5,000 EUR</div>
+                </div>
+                <div className="bg-zinc-800/30 rounded p-1.5">
+                  <div className="text-[10px] text-blue-400">SEPA Standard</div>
+                  <div className="text-[9px] text-zinc-500">5k — 100k EUR</div>
+                </div>
+                <div className="bg-zinc-800/30 rounded p-1.5">
+                  <div className="text-[10px] text-amber-400">SWIFT</div>
+                  <div className="text-[9px] text-zinc-500">&gt; 100k EUR</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Report Summary */}
+            {cashoutReport && (
+              <div className="bg-zinc-900/80 border border-cyan-500/20 rounded-xl p-4" data-testid="cashout-report-panel">
+                <h3 className="text-sm font-bold text-cyan-400 mb-3">Report Completo</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-cyan-400">{cashoutReport.usdc_total?.toFixed(6)}</div>
+                    <div className="text-[10px] text-zinc-500">USDC On-Chain</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-emerald-400">{cashoutReport.hot_wallet?.neno?.toFixed(4) || '0'}</div>
+                    <div className="text-[10px] text-zinc-500">NENO Hot Wallet</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-amber-400">{cashoutReport.hot_wallet?.bnb?.toFixed(6) || '0'}</div>
+                    <div className="text-[10px] text-zinc-500">BNB Hot Wallet</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-2 text-center">
+                    <div className="text-base font-bold text-blue-400">{cashoutReport.conversion_opportunities}</div>
+                    <div className="text-[10px] text-zinc-500">Conversioni Disponibili</div>
+                  </div>
+                </div>
+                {cashoutReport.usdc_wallets && (
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {Object.entries(cashoutReport.usdc_wallets).map(([role, bal]) => (
+                      <div key={role} className="bg-zinc-800/30 rounded p-1.5 text-center">
+                        <div className="text-[10px] text-zinc-400 uppercase">{role}</div>
+                        <div className="text-xs font-bold text-white">{bal?.toFixed(6)} USDC</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Recent Cashouts */}
+            {cashoutStatus?.recent_cashouts?.length > 0 && (
+              <div className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-4" data-testid="recent-cashouts-panel">
+                <h3 className="text-sm font-bold text-zinc-400 mb-3">Cashout Recenti</h3>
+                <div className="space-y-1.5">
+                  {cashoutStatus.recent_cashouts.slice(0, 10).map((co, i) => (
+                    <div key={i} className="flex items-center justify-between bg-zinc-800/30 rounded p-2 text-[10px]">
+                      <span className={`font-bold ${co.type?.includes('sepa') ? 'text-blue-400' : co.type?.includes('swift') ? 'text-amber-400' : 'text-cyan-400'}`}>
+                        {co.type?.replace(/_/g, ' ').toUpperCase()}
+                      </span>
+                      <span className="text-white font-mono">{co.amount} {co.currency || co.asset || 'USDC'}</span>
+                      <span className={`px-1.5 py-0.5 rounded ${co.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                        {co.status}
+                      </span>
+                      <span className="text-zinc-600">{co.created_at?.slice(0, 16)}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
