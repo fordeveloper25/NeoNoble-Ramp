@@ -223,7 +223,53 @@ async def _credit_neno(db, user_id: str, amount: float, reason: str):
     await db.referral_bonus_log.insert_one({
         "id": str(uuid.uuid4()),
         "user_id": user_id,
-        "amount": amount,
+        "bonus_amount": amount,
         "reason": reason,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
+
+
+# ── Enhanced Viral Loop: Cashback % on referred user's spend ──
+
+REFERRAL_SPEND_CASHBACK_PCT = 0.005  # 0.5% on referred user spend
+
+
+@router.get("/viral-stats")
+async def viral_loop_stats(current_user: dict = Depends(get_current_user)):
+    """Get viral loop metrics: network growth, projected earnings."""
+    db = get_database()
+    uid = current_user["user_id"]
+
+    code_doc = await db.referral_codes.find_one({"user_id": uid}, {"_id": 0})
+    referrals = await db.referral_links.find({"referrer_user_id": uid}, {"_id": 0}).to_list(200)
+    referred_ids = [r["referred_user_id"] for r in referrals]
+
+    # Total volume from referred users
+    if referred_ids:
+        vol_agg = await db.neno_transactions.aggregate([
+            {"$match": {"user_id": {"$in": referred_ids}, "status": "completed"}},
+            {"$group": {"_id": None, "volume": {"$sum": "$eur_value"}, "count": {"$sum": 1}}},
+        ]).to_list(1)
+        vol = vol_agg[0] if vol_agg else {}
+    else:
+        vol = {}
+
+    network_volume = round(vol.get("volume", 0), 2)
+    network_trades = vol.get("count", 0)
+    projected_monthly_earnings = round(network_volume * REFERRAL_SPEND_CASHBACK_PCT, 2)
+
+    return {
+        "my_code": code_doc.get("code") if code_doc else None,
+        "total_referrals": len(referrals),
+        "network_volume_eur": network_volume,
+        "network_trades": network_trades,
+        "cashback_rate": f"{REFERRAL_SPEND_CASHBACK_PCT * 100:.1f}%",
+        "projected_monthly_eur": projected_monthly_earnings,
+        "viral_multiplier": round(len(referrals) * 1.5, 1),  # Each user brings ~1.5 more
+        "funnel": {
+            "invited": len(referrals),
+            "active": len([r for r in referrals if r.get("trade_bonus_paid")]),
+            "spending": len([r for r in referrals if r.get("status") == "active"]),
+        },
+    }
+

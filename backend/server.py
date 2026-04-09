@@ -218,6 +218,12 @@ from routes.hybrid_routes import router as hybrid_router
 # Import Referral System routes
 from routes.referral_routes import router as referral_router
 
+# Import Card Issuing Engine routes
+from routes.card_issuing_routes import router as card_issuing_router
+
+# Import Growth & Analytics routes
+from routes.growth_routes import router as growth_router
+
 # Import Advanced Analytics routes
 from routes.advanced_analytics_routes import router as advanced_analytics_router
 
@@ -884,6 +890,12 @@ api_router.include_router(cashout_router)
 api_router.include_router(sync_router)
 api_router.include_router(live_router)
 api_router.include_router(hybrid_router)
+
+# Card Issuing Engine
+api_router.include_router(card_issuing_router)
+
+# Growth & Analytics Engine
+api_router.include_router(growth_router)
 
 # Infrastructure API
 from routes.infra_routes import router as infra_router

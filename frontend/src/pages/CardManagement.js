@@ -62,6 +62,7 @@ export default function CardManagement() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showTopUp, setShowTopUp] = useState(null);
+  const [showReveal, setShowReveal] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [selectedCard, setSelectedCard] = useState(null);
   const [txLoading, setTxLoading] = useState(false);
@@ -181,6 +182,7 @@ export default function CardManagement() {
                   onFreeze={() => handleFreeze(card.id)}
                   onCancel={() => handleCancel(card.id)}
                   onTopUp={() => setShowTopUp(card)}
+                  onReveal={() => setShowReveal(card)}
                   actionLoading={actionLoading === card.id} />
               ))}
             </div>
@@ -231,11 +233,12 @@ export default function CardManagement() {
 
       {/* Top-Up Modal */}
       {showTopUp && <TopUpModal card={showTopUp} onClose={() => setShowTopUp(null)} onSuccess={() => { setShowTopUp(null); fetchCards(); if (selectedCard) loadTransactions(selectedCard); setSuccess('Top-up completato!'); setTimeout(() => setSuccess(''), 3000); }} />}
+      {showReveal && <CardRevealModal card={showReveal} onClose={() => setShowReveal(null)} />}
     </div>
   );
 }
 
-function CardVisual({ card, isSelected, onSelect, onFreeze, onCancel, onTopUp, actionLoading }) {
+function CardVisual({ card, isSelected, onSelect, onFreeze, onCancel, onTopUp, onReveal, actionLoading }) {
   const network = NETWORK_STYLES[card.card_network] || NETWORK_STYLES.visa;
   const statusBadge = STATUS_COLORS[card.status] || STATUS_COLORS.active;
 
@@ -275,6 +278,11 @@ function CardVisual({ card, isSelected, onSelect, onFreeze, onCancel, onTopUp, a
           </div>
         )}
         <div className="flex gap-2">
+        <button onClick={(e) => { e.stopPropagation(); onReveal(); }}
+          data-testid={`reveal-card-${card.id}`}
+          className="flex-1 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-colors">
+          <Eye className="w-3 h-3" /> Reveal
+        </button>
         <button onClick={(e) => { e.stopPropagation(); onTopUp(); }}
           data-testid={`topup-card-${card.id}`}
           className="flex-1 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-colors">
@@ -466,3 +474,100 @@ function TopUpModal({ card, onClose, onSuccess }) {
     </div>
   );
 }
+
+function CardRevealModal({ card, onClose }) {
+  const [otpCode, setOtpCode] = useState('');
+  const [revealed, setRevealed] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [countdown, setCountdown] = useState(0);
+
+  useEffect(() => {
+    if (countdown > 0) {
+      const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+      return () => clearTimeout(t);
+    } else if (countdown === 0 && revealed) {
+      setRevealed(null);
+    }
+  }, [countdown, revealed]);
+
+  const handleReveal = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await xhrFetchJson(`${BACKEND_URL}/api/card-engine/reveal`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ card_id: card.id, otp_code: otpCode, otp_verified: otpCode.length === 6 })
+      });
+      if (!res.ok) throw new Error(res.data?.detail || 'Errore nel reveal');
+      setRevealed(res.data);
+      setCountdown(res.data.expires_in_seconds || 60);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" data-testid="reveal-modal">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-md">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Lock className="w-5 h-5 text-amber-400" /> Secure Card Reveal
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+        </div>
+
+        {!revealed ? (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-400">Inserisci il codice 2FA a 6 cifre per vedere i dati completi della carta.</p>
+            <div>
+              <label className="text-gray-400 text-sm mb-1 block">Codice 2FA (OTP)</label>
+              <input type="text" maxLength={6} value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="000000"
+                data-testid="otp-input"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white text-center tracking-[0.5em] text-xl font-mono focus:border-amber-500 focus:outline-none" />
+            </div>
+            {error && <div className="text-red-400 text-sm bg-red-500/10 rounded-lg p-2">{error}</div>}
+            <button onClick={handleReveal} disabled={loading || otpCode.length !== 6}
+              data-testid="confirm-reveal"
+              className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg font-bold text-sm transition-all disabled:opacity-50">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Rivela Carta'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4" data-testid="revealed-card-data">
+            <div className="bg-gradient-to-br from-amber-900/30 to-orange-900/30 border border-amber-500/30 rounded-xl p-4 space-y-3">
+              <div>
+                <div className="text-[10px] text-amber-400/70 mb-0.5">Numero Carta (PAN)</div>
+                <div className="text-white font-mono text-lg tracking-widest" data-testid="revealed-pan">
+                  {revealed.pan?.replace(/(\d{4})/g, '$1 ').trim()}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-[10px] text-amber-400/70 mb-0.5">CVV</div>
+                  <div className="text-white font-mono text-lg" data-testid="revealed-cvv">{revealed.cvv}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-amber-400/70 mb-0.5">Scadenza</div>
+                  <div className="text-white font-mono text-lg" data-testid="revealed-expiry">{revealed.expiry}</div>
+                </div>
+              </div>
+              <div className="text-[10px] text-amber-400/70">
+                Titolare: <span className="text-white">{revealed.cardholder}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-amber-400">Dati visibili per {countdown}s</span>
+              <span className="text-zinc-500">Provider: {revealed.provider}</span>
+            </div>
+            <div className="w-full bg-zinc-800 rounded-full h-1.5">
+              <div className="bg-amber-500 h-full rounded-full transition-all" style={{ width: `${(countdown / 60) * 100}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+

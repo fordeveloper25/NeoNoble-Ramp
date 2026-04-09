@@ -8,10 +8,27 @@ import {
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
 
+function xhrFetchJson(url, options = {}) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || 'GET', url, true);
+    const hdrs = options.headers || headers();
+    Object.entries(hdrs).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.onload = () => {
+      try { resolve({ ok: xhr.status >= 200 && xhr.status < 300, data: JSON.parse(xhr.responseText) }); }
+      catch { resolve({ ok: false, data: {} }); }
+    };
+    xhr.onerror = () => resolve({ ok: false, data: {} });
+    xhr.send(options.body || null);
+  });
+}
+
 export default function ReferralPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
+  const [viralStats, setViralStats] = useState(null);
+  const [rewards, setRewards] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [code, setCode] = useState('');
   const [applyCode, setApplyCode] = useState('');
@@ -21,15 +38,18 @@ export default function ReferralPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [codeRes, statsRes, lbRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/referral/code`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/referral/stats`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/referral/leaderboard`, { headers: headers() }),
+      const [codeRes, statsRes, lbRes, viralRes, rewardsRes] = await Promise.all([
+        xhrFetchJson(`${BACKEND_URL}/api/referral/code`, { headers: headers() }),
+        xhrFetchJson(`${BACKEND_URL}/api/referral/stats`, { headers: headers() }),
+        xhrFetchJson(`${BACKEND_URL}/api/referral/leaderboard`, { headers: headers() }),
+        xhrFetchJson(`${BACKEND_URL}/api/referral/viral-stats`, { headers: headers() }),
+        xhrFetchJson(`${BACKEND_URL}/api/growth/my-rewards`, { headers: headers() }),
       ]);
-      const [codeData, statsData, lbData] = await Promise.all([codeRes.json(), statsRes.json(), lbRes.json()]);
-      setCode(codeData.code || '');
-      setStats(statsData);
-      setLeaderboard(lbData.leaderboard || []);
+      setCode(codeRes.data?.code || '');
+      setStats(statsRes.data);
+      setLeaderboard(lbRes.data?.leaderboard || []);
+      setViralStats(viralRes.data);
+      setRewards(rewardsRes.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
@@ -47,17 +67,16 @@ export default function ReferralPage() {
     setApplying(true);
     setApplyMsg('');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/referral/apply`, {
+      const res = await xhrFetchJson(`${BACKEND_URL}/api/referral/apply`, {
         method: 'POST', headers: headers(),
         body: JSON.stringify({ code: applyCode.trim() }),
       });
-      const data = await res.json();
       if (res.ok) {
-        setApplyMsg(data.message || 'Codice applicato!');
+        setApplyMsg(res.data?.message || 'Codice applicato!');
         setApplyCode('');
         fetchData();
       } else {
-        setApplyMsg(data.detail || 'Errore');
+        setApplyMsg(res.data?.detail || 'Errore');
       }
     } catch (e) { setApplyMsg('Errore di connessione'); }
     finally { setApplying(false); }
@@ -185,6 +204,72 @@ export default function ReferralPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Viral Loop Stats */}
+        {viralStats && (
+          <div className="bg-gradient-to-br from-purple-900/20 to-zinc-900 border border-purple-500/20 rounded-xl p-5" data-testid="viral-stats">
+            <h3 className="text-sm font-bold text-purple-400 mb-3 flex items-center gap-1.5">
+              <Share2 className="w-4 h-4" /> Viral Loop — Il Tuo Network
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-zinc-500">Volume Network</div>
+                <div className="text-lg font-bold text-white font-mono">{viralStats.network_volume_eur?.toLocaleString()} EUR</div>
+              </div>
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-zinc-500">Trade Network</div>
+                <div className="text-lg font-bold text-cyan-400">{viralStats.network_trades}</div>
+              </div>
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-zinc-500">Guadagno Proiettato</div>
+                <div className="text-lg font-bold text-emerald-400 font-mono">{viralStats.projected_monthly_eur} EUR/mese</div>
+              </div>
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-zinc-500">Moltiplicatore Virale</div>
+                <div className="text-lg font-bold text-amber-400">x{viralStats.viral_multiplier}</div>
+              </div>
+            </div>
+            {viralStats.funnel && (
+              <div className="mt-3 flex gap-2 text-[10px]">
+                <span className="bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-full">Invitati: {viralStats.funnel.invited}</span>
+                <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full">Attivi: {viralStats.funnel.active}</span>
+                <span className="bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded-full">Spendenti: {viralStats.funnel.spending}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Rewards Summary */}
+        {rewards && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5" data-testid="rewards-summary">
+            <h3 className="text-sm font-bold text-amber-400 mb-3">I Tuoi Premi Totali</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-zinc-500">Cashback Totale</div>
+                <div className="text-lg font-bold text-emerald-400 font-mono">{rewards.cashback?.total_earned || 0} EUR</div>
+              </div>
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-zinc-500">Referral Earnings</div>
+                <div className="text-lg font-bold text-purple-400 font-mono">{rewards.referral_earnings?.total || 0}</div>
+              </div>
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <div className="text-zinc-500">Tier</div>
+                <div className="text-lg font-bold" style={{ color: rewards.tier?.color || '#a3a3a3' }}>{rewards.tier?.current_tier}</div>
+                <div className="text-zinc-600">Cashback: {rewards.tier?.cashback_pct}</div>
+              </div>
+            </div>
+            {rewards.tier?.next_tier && (
+              <div className="mt-3">
+                <div className="text-[10px] text-zinc-500 mb-1">
+                  Prossimo tier: {rewards.tier.next_tier} (min {rewards.tier.next_tier_min?.toLocaleString()} EUR/mese)
+                </div>
+                <div className="w-full bg-zinc-800 rounded-full h-1.5">
+                  <div className="bg-emerald-500 h-full rounded-full transition-all" style={{ width: `${Math.min(rewards.tier.progress_to_next, 100)}%` }} />
+                </div>
+              </div>
+            )}
           </div>
         )}
 

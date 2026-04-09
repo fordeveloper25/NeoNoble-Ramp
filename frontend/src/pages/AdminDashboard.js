@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, TrendingUp, Building, Activity, Globe, BarChart3, RefreshCw, ExternalLink, Lock, AlertTriangle, CheckCircle, Coins, Zap, ArrowRightLeft, Banknote } from 'lucide-react';
+import { Shield, TrendingUp, Building, Activity, Globe, BarChart3, RefreshCw, ExternalLink, Lock, AlertTriangle, CheckCircle, Coins, Zap, ArrowRightLeft, Banknote, Users, Target, CreditCard } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -24,6 +24,178 @@ const StatCard = ({ label, value, sub, icon: Icon, color = 'emerald' }) => (
     {sub && <div className="text-[10px] text-zinc-600 mt-1">{sub}</div>}
   </div>
 );
+
+function GrowthDashboardPanel() {
+  const [data, setData] = useState(null);
+  const [revenue, setRevenue] = useState(null);
+  const [daily, setDaily] = useState([]);
+  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
+
+  useEffect(() => {
+    Promise.all([
+      xhrFetch(`${API}/api/growth/dashboard`, { headers: hdrs }),
+      xhrFetch(`${API}/api/growth/revenue`, { headers: hdrs }),
+      xhrFetch(`${API}/api/growth/revenue/daily?days=7`, { headers: hdrs }),
+    ]).then(([d, r, dy]) => { setData(d); setRevenue(r); setDaily(dy || []); });
+  }, []);
+
+  if (!data) return <div className="text-zinc-500 text-sm">Caricamento Growth Dashboard...</div>;
+
+  const f = data.funnel || {};
+  const ret = data.retention || {};
+  const arpu = data.revenue_per_user || {};
+
+  return (
+    <div className="space-y-4" data-testid="growth-tab">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-4">
+          <div className="text-[10px] text-zinc-500 mb-1">Utenti Totali</div>
+          <div className="text-xl font-bold text-emerald-400" data-testid="total-users">{f.total_users || ret.total_users || 0}</div>
+        </div>
+        <div className="bg-zinc-900/80 border border-cyan-500/20 rounded-xl p-4">
+          <div className="text-[10px] text-zinc-500 mb-1">DAU / MAU</div>
+          <div className="text-xl font-bold text-cyan-400">{ret.dau || 0} / {ret.mau || 0}</div>
+          <div className="text-[10px] text-zinc-600">Ratio: {ret.dau_mau_ratio || 0}%</div>
+        </div>
+        <div className="bg-zinc-900/80 border border-amber-500/20 rounded-xl p-4">
+          <div className="text-[10px] text-zinc-500 mb-1">ARPU</div>
+          <div className="text-xl font-bold text-amber-400">{arpu.arpu_eur || 0} EUR</div>
+        </div>
+        <div className="bg-zinc-900/80 border border-purple-500/20 rounded-xl p-4">
+          <div className="text-[10px] text-zinc-500 mb-1">Volume Totale</div>
+          <div className="text-xl font-bold text-purple-400">{(arpu.total_volume || 0).toLocaleString()} EUR</div>
+        </div>
+      </div>
+
+      <div className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-4">
+        <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-1.5">
+          <Target className="w-4 h-4" /> Funnel di Acquisizione
+        </h3>
+        <div className="space-y-2">
+          {(f.steps || []).map((s, i) => (
+            <div key={s.step} className="flex items-center gap-3">
+              <div className="w-28 text-xs text-zinc-400 capitalize">{s.step.replace('_', ' ')}</div>
+              <div className="flex-1 bg-zinc-800 rounded-full h-5 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-emerald-600 to-cyan-500 rounded-full transition-all"
+                  style={{ width: `${Math.max(s.pct, 2)}%` }} />
+              </div>
+              <div className="w-16 text-right text-xs font-mono text-zinc-300">{s.count} ({s.pct}%)</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {revenue && (
+        <div className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-4">
+          <h3 className="text-sm font-bold text-amber-400 mb-3">Revenue Breakdown ({revenue.period_days}d)</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+            <div><span className="text-zinc-500">Trading Fees:</span> <span className="text-white font-mono">{revenue.trading?.fees_earned || 0} EUR</span></div>
+            <div><span className="text-zinc-500">Spread Revenue:</span> <span className="text-white font-mono">{revenue.trading?.spread_revenue || 0} EUR</span></div>
+            <div><span className="text-zinc-500">Card Revenue:</span> <span className="text-white font-mono">{revenue.cards?.total_card_revenue || 0} EUR</span></div>
+            <div><span className="text-zinc-500">Volume:</span> <span className="text-white font-mono">{revenue.trading?.volume?.toLocaleString() || 0} EUR</span></div>
+            <div><span className="text-zinc-500">Net Revenue:</span> <span className="font-bold text-emerald-400 font-mono">{revenue.net_revenue_eur || 0} EUR</span></div>
+            <div><span className="text-zinc-500">Referral Costs:</span> <span className="text-red-400 font-mono">-{revenue.costs?.referral_bonuses || 0}</span></div>
+          </div>
+        </div>
+      )}
+
+      {daily.length > 0 && (
+        <div className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-4">
+          <h3 className="text-sm font-bold text-cyan-400 mb-3">Revenue Giornaliero (7d)</h3>
+          <div className="flex items-end gap-1 h-24">
+            {daily.map((d, i) => {
+              const maxVol = Math.max(...daily.map(x => x.volume || 1));
+              const h = Math.max(((d.volume || 0) / maxVol) * 100, 4);
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="w-full bg-emerald-600/70 rounded-t" style={{ height: `${h}%` }} title={`${d.date}: ${d.volume} EUR`} />
+                  <div className="text-[8px] text-zinc-600">{d.date?.slice(5)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MonetizationPanel() {
+  const [cardStats, setCardStats] = useState(null);
+  const [arpu, setArpu] = useState(null);
+  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
+
+  useEffect(() => {
+    Promise.all([
+      xhrFetch(`${API}/api/card-engine/monetization`, { headers: hdrs }),
+      xhrFetch(`${API}/api/growth/arpu`, { headers: hdrs }),
+    ]).then(([c, a]) => { setCardStats(c); setArpu(a); });
+  }, []);
+
+  return (
+    <div className="space-y-4" data-testid="monetization-tab">
+      <div className="bg-zinc-900/80 border border-amber-500/20 rounded-xl p-5">
+        <h3 className="text-sm font-bold text-amber-400 mb-4 flex items-center gap-1.5">
+          <CreditCard className="w-4 h-4" /> Card Monetization Engine
+        </h3>
+        {cardStats ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div className="bg-zinc-800/50 rounded-lg p-3">
+              <div className="text-zinc-500">Carte Attive</div>
+              <div className="text-lg font-bold text-white">{cardStats.total_cards_active}</div>
+            </div>
+            <div className="bg-zinc-800/50 rounded-lg p-3">
+              <div className="text-zinc-500">Volume Carte</div>
+              <div className="text-lg font-bold text-white">{cardStats.total_volume?.toLocaleString()} EUR</div>
+            </div>
+            <div className="bg-zinc-800/50 rounded-lg p-3">
+              <div className="text-zinc-500">Interchange</div>
+              <div className="text-lg font-bold text-emerald-400">{cardStats.total_interchange_revenue} EUR</div>
+            </div>
+            <div className="bg-zinc-800/50 rounded-lg p-3">
+              <div className="text-zinc-500">FX Revenue</div>
+              <div className="text-lg font-bold text-cyan-400">{cardStats.total_fx_revenue} EUR</div>
+            </div>
+          </div>
+        ) : <div className="text-zinc-600 text-xs">Caricamento...</div>}
+
+        {cardStats?.revenue_streams && (
+          <div className="mt-4 grid grid-cols-2 gap-2 text-[10px]">
+            {Object.entries(cardStats.revenue_streams).map(([k, v]) => (
+              <div key={k} className="flex justify-between bg-zinc-800/30 rounded px-2 py-1">
+                <span className="text-zinc-500 capitalize">{k.replace(/_/g, ' ')}</span>
+                <span className="text-zinc-300 font-mono">{v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {arpu && (
+        <div className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-4">
+          <h3 className="text-sm font-bold text-purple-400 mb-3">Revenue Per User (ARPU)</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+            <div><span className="text-zinc-500">ARPU:</span> <span className="text-white font-bold">{arpu.arpu_eur} EUR</span></div>
+            <div><span className="text-zinc-500">Volume/Utente:</span> <span className="text-white">{arpu.avg_volume_per_user} EUR</span></div>
+            <div><span className="text-zinc-500">Revenue Totale:</span> <span className="text-emerald-400 font-bold">{arpu.total_revenue_eur} EUR</span></div>
+          </div>
+          <div className="mt-3 text-[10px] text-zinc-600">
+            GA4: {arpu.external_tracking?.ga4 ? 'Attivo' : 'Non configurato'} | Meta Pixel: {arpu.external_tracking?.meta_pixel ? 'Attivo' : 'Non configurato'}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-zinc-900/80 border border-zinc-700/30 rounded-xl p-4">
+        <h3 className="text-sm font-bold text-zinc-400 mb-2">Modello di Scaling Revenue</h3>
+        <div className="text-xs text-zinc-500 space-y-1">
+          <div className="flex items-center gap-2"><Users className="w-3 h-3" /> Piu utenti → piu transazioni → piu spread → piu profitto</div>
+          <div>Revenue Sources: Interchange (1.5%) + FX (0.5%) + Trading Spread + Card Fees + Yield</div>
+          <div>Provider: <span className="text-emerald-400 font-mono">{cardStats?.provider || 'internal'}</span> (plug-and-play per Marqeta/NIUM/Adyen)</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function RevenueWithdrawPanel() {
   const [amount, setAmount] = useState('');
@@ -211,11 +383,12 @@ export default function AdminDashboard() {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'revenue', label: 'Revenue', icon: TrendingUp },
+    { id: 'growth', label: 'Growth', icon: Target },
+    { id: 'monetization', label: 'Monetization', icon: CreditCard },
     { id: 'cashout', label: 'Cashout Engine', icon: Banknote },
     { id: 'circle-usdc', label: 'Circle USDC', icon: Coins },
     { id: 'real-virtual', label: 'Real vs Virtual', icon: Shield },
     { id: 'treasury', label: 'Treasury & Risk', icon: Lock },
-    { id: 'structure', label: 'IPO Structure', icon: Building },
     { id: 'rails', label: 'Banking Rails', icon: Globe },
     { id: 'executions', label: 'Execution Logs', icon: Activity },
   ];
@@ -328,6 +501,10 @@ export default function AdminDashboard() {
 
 
         {tab === 'revenue' && <RevenueWithdrawPanel />}
+
+        {tab === 'growth' && <GrowthDashboardPanel />}
+
+        {tab === 'monetization' && <MonetizationPanel />}
 
         {tab === 'cashout' && (
           <div className="space-y-4" data-testid="cashout-tab">
