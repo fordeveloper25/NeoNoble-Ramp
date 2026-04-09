@@ -237,8 +237,125 @@ function RevenueWithdrawPanel() {
     finally { setLoading(false); }
   };
 
+  const [stripeBalance, setStripeBalance] = useState(null);
+  const [topupAmount, setTopupAmount] = useState('50');
+  const [topupLoading, setTopupLoading] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState('5');
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutResult, setPayoutResult] = useState(null);
+
+  const fetchStripeBalance = useCallback(async () => {
+    try {
+      const data = await xhrFetch(`${API}/api/cashout/stripe-balance`, { headers: hdrs });
+      setStripeBalance(data);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchStripeBalance(); }, [fetchStripeBalance]);
+
+  const handleStripeTopup = async () => {
+    setTopupLoading(true);
+    try {
+      const data = await xhrFetch(`${API}/api/cashout/stripe-topup`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify({ amount_eur: parseFloat(topupAmount) })
+      });
+      if (data.checkout_url) {
+        window.open(data.checkout_url, '_blank');
+      }
+    } catch {}
+    finally { setTopupLoading(false); }
+  };
+
+  const handleSepaPayout = async () => {
+    setPayoutLoading(true); setPayoutResult(null);
+    try {
+      const data = await xhrFetch(`${API}/api/cashout/sepa-payout`, {
+        method: 'POST', headers: hdrs,
+        body: JSON.stringify({ amount_eur: parseFloat(payoutAmount), description: 'NeoNoble Revenue SEPA Payout' })
+      });
+      setPayoutResult(data);
+      if (data.success) fetchStripeBalance();
+    } catch (e) { setPayoutResult({ success: false, message: e.message }); }
+    finally { setPayoutLoading(false); }
+  };
+
   return (
     <div className="space-y-4" data-testid="revenue-tab">
+      {/* Stripe Balance + SEPA Payout */}
+      <div className="bg-zinc-900/80 border border-cyan-500/20 rounded-xl p-5" data-testid="stripe-section">
+        <h3 className="text-sm font-bold text-cyan-400 mb-4 flex items-center gap-1.5">
+          <Banknote className="w-4 h-4" /> Stripe — Saldo & SEPA Payout
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="bg-zinc-800/50 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-500">EUR Disponibile</div>
+            <div className="text-lg font-bold text-emerald-400 font-mono" data-testid="stripe-eur-available">
+              {stripeBalance ? `€${stripeBalance.available?.EUR?.toFixed(2) || '0.00'}` : '...'}
+            </div>
+          </div>
+          <div className="bg-zinc-800/50 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-500">EUR Pending</div>
+            <div className="text-lg font-bold text-amber-400 font-mono">
+              {stripeBalance ? `€${stripeBalance.pending?.EUR?.toFixed(2) || '0.00'}` : '...'}
+            </div>
+          </div>
+          <div className="bg-zinc-800/50 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-500">Payout Ready</div>
+            <div className={`text-lg font-bold ${stripeBalance?.payout_ready ? 'text-emerald-400' : 'text-red-400'}`}>
+              {stripeBalance?.payout_ready ? 'SI' : 'NO'}
+            </div>
+          </div>
+          <div className="bg-zinc-800/50 rounded-lg p-3 flex flex-col">
+            <div className="text-[10px] text-zinc-500 mb-1">Top-Up Stripe</div>
+            <div className="flex gap-1">
+              <input type="number" value={topupAmount} onChange={e => setTopupAmount(e.target.value)}
+                className="flex-1 bg-zinc-700 border border-zinc-600 rounded px-2 py-1 text-xs text-white font-mono min-w-0" />
+              <button onClick={handleStripeTopup} disabled={topupLoading}
+                data-testid="stripe-topup-btn"
+                className="px-2 py-1 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-bold disabled:opacity-50">
+                {topupLoading ? '...' : 'Pay'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div>
+            <label className="text-[10px] text-zinc-500 mb-1 block">Importo SEPA Payout (EUR)</label>
+            <input type="number" value={payoutAmount} onChange={e => setPayoutAmount(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white font-mono"
+              data-testid="sepa-payout-amount" />
+          </div>
+          <button onClick={handleSepaPayout} disabled={payoutLoading || !stripeBalance?.payout_ready}
+            data-testid="sepa-payout-btn"
+            className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg disabled:opacity-50 transition">
+            {payoutLoading ? 'Esecuzione...' : 'Esegui SEPA Payout'}
+          </button>
+          <button onClick={fetchStripeBalance}
+            className="py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition flex items-center justify-center gap-1">
+            <RefreshCw className="w-3 h-3" /> Aggiorna Saldo
+          </button>
+        </div>
+
+        {payoutResult && (
+          <div className={`mt-3 p-3 rounded-lg text-xs ${payoutResult.success ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`} data-testid="payout-result">
+            {payoutResult.success ? (
+              <>
+                <div className="font-bold">{payoutResult.message}</div>
+                <div className="font-mono mt-1">Payout ID: {payoutResult.payout_id}</div>
+                <div>Status: {payoutResult.status} → {payoutResult.status_flow}</div>
+                {payoutResult.arrival_date && <div>Arrivo: {payoutResult.arrival_date}</div>}
+              </>
+            ) : (
+              <>
+                <div>{payoutResult.message}</div>
+                {payoutResult.fix && <div className="mt-1 text-amber-400">{payoutResult.fix}</div>}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-5" data-testid="revenue-withdraw-panel">
         <h3 className="text-sm font-bold text-emerald-400 mb-4 flex items-center gap-1.5">
           <TrendingUp className="w-4 h-4" /> Revenue Withdrawal — Prelievo Profitti

@@ -275,6 +275,212 @@ async def revenue_withdrawal_history(
     withdrawals = await db.revenue_withdrawals.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
     return {"withdrawals": withdrawals, "count": len(withdrawals)}
 
+# ── STRIPE BALANCE TOP-UP (Checkout Session) ──
+
+class StripeTopUpRequest(BaseModel):
+    amount_eur: float
+
+@router.post("/stripe-topup")
+async def stripe_balance_topup(req: StripeTopUpRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Create a Stripe Checkout session to top up the platform's Stripe balance.
+    Admin only. After payment completes, funds are available for SEPA payouts.
+    """
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin only")
+    if req.amount_eur < 1:
+        raise HTTPException(status_code=400, detail="Minimo 1 EUR")
+
+    import stripe
+    import os
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not stripe.api_key:
+        raise HTTPException(status_code=500, detail="Stripe non configurato")
+
+    frontend_url = "https://multi-chain-wallet-14.preview.emergentagent.com"
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            mode="payment",
+            line_items=[{
+                "price_data": {
+                    "currency": "eur",
+                    "unit_amount": int(req.amount_eur * 100),
+                    "product_data": {
+                        "name": "NeoNoble Platform Balance Top-Up",
+                        "description": f"Top-up saldo piattaforma: {req.amount_eur} EUR",
+                    },
+                },
+                "quantity": 1,
+            }],
+            success_url=f"{frontend_url}/admin?topup=success",
+            cancel_url=f"{frontend_url}/admin?topup=cancelled",
+            metadata={
+                "type": "platform_balance_topup",
+                "admin_user_id": current_user["user_id"],
+                "admin_email": current_user.get("email", ""),
+            },
+        )
+        logger.info(f"[STRIPE-TOPUP] Checkout session created: {session.id} for {req.amount_eur} EUR")
+        return {
+            "checkout_url": session.url,
+            "session_id": session.id,
+            "amount_eur": req.amount_eur,
+        }
+    except stripe.error.StripeError as e:
+        logger.error(f"[STRIPE-TOPUP] Error: {e}")
+        raise HTTPException(status_code=400, detail=f"Stripe error: {e.user_message}")
+
+
+# ── STRIPE BALANCE CHECK ──
+
+@router.get("/stripe-balance")
+async def stripe_balance(current_user: dict = Depends(get_current_user)):
+    """Check Stripe account balance. Admin only."""
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    import stripe
+    import os
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not stripe.api_key:
+        raise HTTPException(status_code=500, detail="Stripe non configurato")
+
+    try:
+        bal = stripe.Balance.retrieve()
+        available = {}
+        pending = {}
+        for b in bal.available:
+            available[b.currency.upper()] = b.amount / 100
+        for b in bal.pending:
+            pending[b.currency.upper()] = b.amount / 100
+
+        return {
+            "available": available,
+            "pending": pending,
+            "total_eur": available.get("EUR", 0) + pending.get("EUR", 0),
+            "payout_ready": available.get("EUR", 0) > 0,
+        }
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=f"Stripe error: {e.user_message}")
+
+
+# ── SEPA PAYOUT (direct Stripe Payout API) ──
+
+class SepaPayoutRequest(BaseModel):
+    amount_eur: float
+    description: str = "NeoNoble Revenue Withdrawal"
+
+@router.post("/sepa-payout")
+async def sepa_payout(req: SepaPayoutRequest, current_user: dict = Depends(get_current_user)):
+    """
+    Execute a real SEPA payout via Stripe.
+    Sends from Stripe balance to the configured bank account.
+    Admin only. Full audit trail.
+    """
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin only")
+    if req.amount_eur < 1:
+        raise HTTPException(status_code=400, detail="Minimo 1 EUR")
+
+    import stripe
+    import os
+    import uuid
+    from datetime import datetime, timezone
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+
+    # Pre-check balance
+    try:
+        bal = stripe.Balance.retrieve()
+        eur_available = 0
+        for b in bal.available:
+            if b.currency == 'eur':
+                eur_available = b.amount / 100
+    except Exception:
+        eur_available = 0
+
+    if eur_available < req.amount_eur:
+        return {
+            "success": False,
+            "error": "balance_insufficient",
+            "message": f"Saldo Stripe insufficiente: €{eur_available:.2f} disponibili, €{req.amount_eur:.2f} richiesti",
+            "stripe_balance_eur": eur_available,
+            "fix": "Effettua un top-up tramite /api/cashout/stripe-topup o ricevi pagamenti tramite Stripe",
+        }
+
+    payout_id = None
+    try:
+        # Create real SEPA payout
+        logger.info(f"[SEPA-PAYOUT] Creating payout: {req.amount_eur} EUR | Desc: {req.description}")
+        payout = stripe.Payout.create(
+            amount=int(req.amount_eur * 100),
+            currency='eur',
+            description=req.description,
+            statement_descriptor="NEONOBLE",
+            method="standard",
+            metadata={
+                'type': 'sepa_revenue_payout',
+                'admin_user_id': current_user["user_id"],
+                'admin_email': current_user.get("email", ""),
+            }
+        )
+        payout_id = payout.id
+
+        logger.info(f"[SEPA-PAYOUT] SUCCESS: {payout.id} | Status: {payout.status} | Amount: {payout.amount/100:.2f} EUR")
+
+        # Audit in DB
+        from database.mongodb import get_database
+        db = get_database()
+        audit_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        await db.sepa_payouts.update_one(
+            {"_id": audit_id},
+            {"$setOnInsert": {
+                "payout_id": payout.id,
+                "amount_eur": req.amount_eur,
+                "status": payout.status,
+                "method": payout.method,
+                "description": req.description,
+                "admin_email": current_user.get("email", ""),
+                "arrival_date": payout.arrival_date,
+                "created_at": now.isoformat(),
+            }},
+            upsert=True,
+        )
+
+        arrival = None
+        if payout.arrival_date:
+            from datetime import datetime as dt
+            arrival = dt.fromtimestamp(payout.arrival_date).isoformat()
+
+        return {
+            "success": True,
+            "payout_id": payout.id,
+            "status": payout.status,
+            "amount_eur": payout.amount / 100,
+            "currency": payout.currency,
+            "method": payout.method,
+            "arrival_date": arrival,
+            "description": payout.description,
+            "message": f"SEPA payout {payout.id} creato: €{payout.amount/100:.2f} | Status: {payout.status}",
+            "status_flow": "pending → in_transit → paid",
+        }
+
+    except stripe.error.StripeError as e:
+        err_body = e.json_body.get('error', {}) if hasattr(e, 'json_body') and e.json_body else {}
+        logger.error(f"[SEPA-PAYOUT] Stripe error: {e.user_message} | Code: {getattr(e, 'code', 'N/A')}")
+        return {
+            "success": False,
+            "error": getattr(e, 'code', 'stripe_error'),
+            "message": e.user_message,
+            "error_type": err_body.get('type', ''),
+            "http_status": e.http_status,
+            "payout_id": payout_id,
+        }
+
+
+
 @router.get("/report")
 async def comprehensive_report(current_user: dict = Depends(get_current_user)):
     """
