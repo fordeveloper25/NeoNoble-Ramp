@@ -1,5 +1,14 @@
 # NeoNoble Ramp — CHANGELOG
 
+## 2026-04-09 — Institutional Liquidity Router + KYC/AML + Stripe Webhook Hardening
+- Institutional Liquidity Router: multi-venue aggregation (Kraken, MEXC, Internal, DEX)
+- MEXC Connector aggiunto e connesso (BTC live @ $70,983)
+- Best Execution Engine: scoring netto, order splitting > €5k, slippage guard 2%
+- Custom Token Fallback Matrix: 4 strategie (CEX → DEX → intermediate → RFQ)
+- KYC/AML Provider: Sumsub ready + AI document verification fallback
+- Stripe Webhook URL registrato su portal, signature enforcement attivato
+- 21/22 test backend passati (iteration_44) + Frontend 100%
+
 ## 2026-04-09 — Autonomous Financial Pipeline E2E Validated
 - Pipeline Finanziario Autonomo: deposit → fee extraction → auto-payout SEPA
 - Stripe Live: PaymentIntents, Webhooks (5 event types), Auto-Payout Engine

@@ -12,9 +12,15 @@
 - [x] Wallet Segregation Engine (CLIENT/TREASURY/REVENUE)
 - [x] Auto-Operation Loop (autonomous, fail-safe, real mode)
 - [x] Autonomous Financial Pipeline (zero-click money loop, Stripe Live)
-- [x] Stripe Webhooks (payment_intent.succeeded, payout.paid/failed, balance.available)
+- [x] Stripe Webhooks with signature enforcement
 - [x] Card Issuing Engine + Growth Domination Engine
 - [x] Idempotency + safeFetch + Revenue Withdrawal
+- [x] Institutional Liquidity Router (Kraken, MEXC, Internal, DEX)
+- [x] MEXC Connector (live connected)
+- [x] Best Execution Engine (multi-venue scoring, order splitting)
+- [x] Custom Token Fallback Matrix (4 strategies)
+- [x] KYC/AML Provider Integration (Sumsub ready + AI fallback)
+- [x] Stripe Webhook URL registered on Stripe portal
 
 ## P1 — PROSSIMI
 - [ ] NIUM fiat rail activation (blocked on templateId)

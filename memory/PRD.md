@@ -1,11 +1,11 @@
 # NeoNoble Ramp — Product Requirements Document
 
 ## Problema Originale
-Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banking con esecuzione reale su blockchain (BSC/PancakeSwap), Circle USDC, Stripe SEPA. Obiettivo: Full Money Loop + Real Cards + Profit Engine + Mass User Growth + Pipeline Finanziario Autonomo.
+Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banking con esecuzione reale su blockchain (BSC/PancakeSwap), Circle USDC, Stripe SEPA. Obiettivo: Full Money Loop + Real Cards + Profit Engine + Mass User Growth + Pipeline Finanziario Autonomo + Institutional Liquidity Routing.
 
 ## Utenti
-- **Admin**: Gestione treasury, revenue withdrawal, growth analytics, monetization monitoring, pipeline autonomo
-- **Trader**: Compra/vendi/swap NENO e altri asset con cashback dinamico
+- **Admin**: Gestione treasury, revenue withdrawal, growth analytics, monetization monitoring, pipeline autonomo, liquidity routing
+- **Trader**: Compra/vendi/swap NENO e altri asset con cashback dinamico, best execution multi-venue
 - **Utente Banking**: IBAN virtuale, carte (issue/reveal/spend), bonifici SEPA
 - **Referrer**: Guadagni passivi da network di invitati
 
@@ -14,9 +14,10 @@ Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banki
 - Frontend: React + Tailwind + Shadcn
 - Blockchain: Web3.py (BSC), PancakeSwap V2
 - Wallets: Circle USDC (Client/Treasury/Revenue segregation)
-- Payments: Stripe SEPA (LIVE)
+- Payments: Stripe SEPA (LIVE) + Autonomous Pipeline
 - Card Issuing: Abstraction layer (Marqeta/NIUM/Adyen/Stripe/Internal)
-- Pipeline: Autonomous Financial Pipeline (zero-click money loop)
+- Liquidity: Institutional Router (Binance/Kraken/MEXC/DEX/Internal)
+- KYC/AML: Sumsub (ready) + AI Document Verification (fallback)
 
 ## Fasi Completate
 
@@ -47,60 +48,80 @@ Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banki
 - Incentive Engine (cashback 5 tier, bonus primo top-up)
 - Referral Viral Loop (network volume, viral multiplier)
 - Growth Analytics Engine (funnel 8 step, retention, ARPU)
-- Admin Dashboard (Growth/Monetization/Revenue/Pipeline tabs)
 - Card Reveal UI (PCI-compliant 2FA con OTP)
 
 ### Phase 8: Autonomous Financial Pipeline (2026-04-09)
 - Stripe Live PaymentIntents per user EUR deposits
 - Fee extraction automatica (2% platform fee)
 - Auto-payout SEPA quando balance >= threshold (10 EUR)
-- Stripe Webhooks (payment_intent.succeeded, payout.paid, balance.available, payout.failed, charge.succeeded)
-- Background loop autonomo (check ogni 120s)
-- Auto-fund da revenue ledger a Stripe
-- Pipeline status in Admin Dashboard (ATTIVO, Stripe balance, cicli, depositi, payouts)
-- E2E Testing: 23/23 backend tests passati (iteration_43)
+- Stripe Webhooks con signature enforcement
+- Background loop autonomo (120s check interval)
+- 23/23 test passati (iteration_43)
+
+### Phase 9: Institutional Liquidity + KYC/AML (2026-04-09)
+- **Stripe Webhook URL** registrato su Stripe portal (endpoint live)
+- **Institutional Liquidity Router** — Multi-venue aggregation engine:
+  - Quote parallele da 5 venue (Internal, PancakeSwap, Binance, Kraken, MEXC)
+  - Best execution scoring (prezzo netto, fee, slippage, latenza, profondità)
+  - Order splitting automatico per ordini > €5,000
+  - Slippage guard 2%
+  - Audit trail completo su ogni routing decision
+- **MEXC Connector** — Nuovo adapter CEX (API key configurata, connesso)
+- **Custom Token Fallback Matrix** — 4 strategie:
+  1. Direct CEX listing (MEXC lista molti micro-cap)
+  2. DEX direct swap (PancakeSwap V2)
+  3. Intermediate pair routing (TOKEN→WBNB→USDT)
+  4. Internal RFQ / market maker inventory
+- **KYC/AML Provider** — Sumsub integration ready:
+  - Creazione applicant, verification URL, status check
+  - Webhook receiver per aggiornamenti stato
+  - AI document verification come fallback
+- **Risk Controls** — Pre-check fondi, venue availability, slippage guard, retry/failover
+- 21/22 test passati (iteration_44, 1 skippato per fixture scope)
 
 ## Endpoint API Chiave
 
+### Institutional Liquidity Router
+- `GET /api/router/status` — Stato venue, routing decisions, split threshold
+- `POST /api/router/quote` — Best execution quote multi-venue
+- `POST /api/router/execute` — Esecuzione ordine instradato
+- `GET /api/router/venues` — Connettività venue real-time
+- `GET /api/router/fallback-matrix` — Standard pairs + custom token strategies
+
+### KYC/AML Provider
+- `POST /api/kyc-provider/applicant` — Crea applicant KYC
+- `GET /api/kyc-provider/status` — Stato verifica utente
+- `GET /api/kyc-provider/verification-url` — URL SDK Sumsub / istruzioni AI
+- `GET /api/kyc-provider/provider-status` — Configurazione provider (admin)
+- `POST /api/kyc-provider/webhook` — Webhook Sumsub
+
 ### Autonomous Pipeline
-- `GET /api/pipeline/status` — Stato pipeline (running, cycle_count, deposits, payouts, stripe_balance)
-- `POST /api/pipeline/deposit` — Crea deposit Stripe PaymentIntent (auth required)
-- `GET /api/pipeline/deposits` — Storico depositi utente
-- `GET /api/pipeline/payouts` — Storico payouts auto (admin only)
-- `POST /api/pipeline/auto-payout-check` — Trigger manuale auto-payout (admin)
-- `POST /api/pipeline/auto-fund` — Trigger auto-fund da revenue (admin)
-- `POST /api/stripe/webhook` — Webhook Stripe (tutti gli eventi)
+- `GET /api/pipeline/status` — Stato pipeline
+- `POST /api/pipeline/deposit` — Deposit Stripe PaymentIntent
+- `POST /api/stripe/webhook` — Webhook Stripe (signature enforced)
 
 ### Card Engine
 - `POST /api/card-engine/issue` — Emissione carta
 - `POST /api/card-engine/reveal` — Reveal PCI (2FA)
-- `POST /api/card-engine/authorize` — Autorizzazione transazione
-- `POST /api/card-engine/settlement` — Settlement
-- `GET /api/card-engine/monetization` — Stats revenue (admin)
 
 ### Growth Engine
 - `GET /api/growth/dashboard` — Dashboard completo (admin)
-- `GET /api/growth/revenue` — Breakdown revenue per fonte
-- `GET /api/growth/revenue/daily` — Grafico revenue giornaliero
-- `GET /api/growth/my-tier` — Tier cashback utente
-- `GET /api/growth/my-rewards` — Sommario premi utente
-- `POST /api/growth/claim-topup-bonus` — Reclama bonus primo top-up
 
-### Referral
-- `GET /api/referral/viral-stats` — Network volume, viral multiplier
+## Venue Connectivity (Production)
+| Venue | Status | Note |
+|-------|--------|------|
+| NeoNoble Internal | ONLINE | Market maker, treasury liquidity |
+| Kraken | ONLINE | BTC/ETH/SOL/XRP trading |
+| MEXC | ONLINE | Micro-cap friendly, BTC/ETH + many altcoins |
+| Coinbase | ONLINE | Limited trading pairs |
+| Binance | OFFLINE | HTTP 451 geo-blocked (infrastruttura) |
+| PancakeSwap V2 | AVAILABLE | DEX on-chain per token custom |
 
-### Cashout
-- `POST /api/cashout/revenue-withdraw` — Prelievo revenue (admin SEPA/SWIFT/Crypto)
-- `GET /api/cashout/revenue-history` — Storico prelievi
-
-## Backlog (P1/P2)
+## Backlog
+- [ ] Sumsub API keys (SUMSUB_APP_TOKEN, SUMSUB_SECRET_KEY) per KYC reale
 - [ ] NIUM fiat rail activation (blocked on templateId)
 - [ ] Microservices Architecture (splitting monolite)
-- [ ] KYC/AML provider reale (Sumsub/Onfido)
 - [ ] Dynamic NENO pricing (order book reale)
 - [ ] Visa/Mastercard BIN sponsor integration
 - [ ] Multi-country/multi-currency scaling
-- [ ] SWIFT gpi real integration
-- [ ] External auditor integration (Big 4)
 - [ ] Marqeta API keys per card issuing reale
-- [ ] TOTP vero per card reveal (produzione)
