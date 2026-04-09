@@ -224,6 +224,9 @@ from routes.card_issuing_routes import router as card_issuing_router
 # Import Growth & Analytics routes
 from routes.growth_routes import router as growth_router
 
+# Import Pipeline & Webhook routes
+from routes.pipeline_routes import router as pipeline_router
+
 # Import Advanced Analytics routes
 from routes.advanced_analytics_routes import router as advanced_analytics_router
 
@@ -745,6 +748,15 @@ async def _background_init():
     except Exception as e:
         logger.warning(f"[INIT] Idempotency index creation failed: {e}")
 
+    # Start Autonomous Financial Pipeline
+    try:
+        from services.auto_financial_pipeline import AutonomousFinancialPipeline
+        pipeline = AutonomousFinancialPipeline.get_instance()
+        asyncio.create_task(pipeline.start_background_loop())
+        logger.info("[INIT] Autonomous Financial Pipeline started")
+    except Exception as e:
+        logger.warning(f"[INIT] Pipeline start failed: {e}")
+
     # Initialize Circle USDC Wallet Service
     try:
         from services.circle_wallet_service import CircleWalletService
@@ -896,6 +908,9 @@ api_router.include_router(card_issuing_router)
 
 # Growth & Analytics Engine
 api_router.include_router(growth_router)
+
+# Autonomous Pipeline & Stripe Webhooks
+api_router.include_router(pipeline_router)
 
 # Infrastructure API
 from routes.infra_routes import router as infra_router

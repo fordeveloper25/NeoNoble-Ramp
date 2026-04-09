@@ -25,6 +25,100 @@ const StatCard = ({ label, value, sub, icon: Icon, color = 'emerald' }) => (
   </div>
 );
 
+function PipelineStatusPanel() {
+  const [status, setStatus] = useState(null);
+  const [fundResult, setFundResult] = useState(null);
+  const [payoutCheckResult, setPayoutCheckResult] = useState(null);
+  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
+
+  const fetchStatus = useCallback(async () => {
+    const data = await xhrFetch(`${API}/api/pipeline/status`, { headers: hdrs });
+    if (data.running !== undefined) setStatus(data);
+  }, []);
+
+  useEffect(() => { fetchStatus(); const iv = setInterval(fetchStatus, 30000); return () => clearInterval(iv); }, [fetchStatus]);
+
+  const triggerAutoFund = async () => {
+    setFundResult(null);
+    const data = await xhrFetch(`${API}/api/pipeline/auto-fund`, { method: 'POST', headers: hdrs });
+    setFundResult(data);
+    fetchStatus();
+  };
+
+  const triggerPayoutCheck = async () => {
+    setPayoutCheckResult(null);
+    const data = await xhrFetch(`${API}/api/pipeline/auto-payout-check`, { method: 'POST', headers: hdrs });
+    setPayoutCheckResult(data);
+    fetchStatus();
+  };
+
+  if (!status) return null;
+
+  return (
+    <div className="bg-zinc-900/80 border border-purple-500/20 rounded-xl p-5" data-testid="pipeline-panel">
+      <h3 className="text-sm font-bold text-purple-400 mb-3 flex items-center gap-1.5">
+        <Zap className="w-4 h-4" /> Autonomous Financial Pipeline
+        <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full ${status.running ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+          {status.running ? 'ATTIVO' : 'FERMO'}
+        </span>
+      </h3>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3 text-xs">
+        <div className="bg-zinc-800/50 rounded-lg p-2">
+          <div className="text-zinc-500">Stripe EUR</div>
+          <div className="text-sm font-bold text-emerald-400 font-mono">{status.stripe_balance_eur?.toFixed(2)}</div>
+        </div>
+        <div className="bg-zinc-800/50 rounded-lg p-2">
+          <div className="text-zinc-500">Cicli</div>
+          <div className="text-sm font-bold text-white">{status.cycle_count}</div>
+        </div>
+        <div className="bg-zinc-800/50 rounded-lg p-2">
+          <div className="text-zinc-500">Depositi</div>
+          <div className="text-sm font-bold text-cyan-400">{status.deposits?.total || 0}</div>
+        </div>
+        <div className="bg-zinc-800/50 rounded-lg p-2">
+          <div className="text-zinc-500">Payouts Auto</div>
+          <div className="text-sm font-bold text-amber-400">{status.payouts?.total || 0}</div>
+        </div>
+        <div className="bg-zinc-800/50 rounded-lg p-2">
+          <div className="text-zinc-500">Threshold</div>
+          <div className="text-sm font-bold text-zinc-300">{status.auto_payout_threshold_eur} EUR</div>
+        </div>
+      </div>
+      <div className="flex gap-2 mb-3">
+        <button onClick={triggerAutoFund}
+          data-testid="auto-fund-btn"
+          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded-lg font-bold transition">
+          Auto-Fund
+        </button>
+        <button onClick={triggerPayoutCheck}
+          data-testid="auto-payout-btn"
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg font-bold transition">
+          Check & Auto-Payout
+        </button>
+        <button onClick={fetchStatus}
+          className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded-lg transition flex items-center gap-1">
+          <RefreshCw className="w-3 h-3" /> Refresh
+        </button>
+      </div>
+      {fundResult && (
+        <div className={`mb-2 p-2 rounded text-[10px] ${fundResult.funded ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
+          {fundResult.funded ? `Funded: ${fundResult.amount_eur} EUR via ${fundResult.method}` : fundResult.reason || fundResult.action || 'Nessuna revenue da finanziare'}
+        </div>
+      )}
+      {payoutCheckResult && (
+        <div className={`p-2 rounded text-[10px] ${payoutCheckResult.executed ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+          {payoutCheckResult.executed
+            ? `Payout eseguito: ${payoutCheckResult.payout_id} | ${payoutCheckResult.amount_eur} EUR`
+            : `${payoutCheckResult.reason}: Balance ${payoutCheckResult.balance_eur?.toFixed(2) || '0'} EUR < Threshold ${status.auto_payout_threshold_eur} EUR`}
+        </div>
+      )}
+      <div className="text-[9px] text-zinc-600 mt-2">
+        Pipeline: UI → Deposit (Stripe) → Fee Extraction → Revenue → Auto-Payout (SEPA) | Webhook: payment_intent.succeeded + payout.paid + balance.available
+      </div>
+    </div>
+  );
+}
+
 function GrowthDashboardPanel() {
   const [data, setData] = useState(null);
   const [revenue, setRevenue] = useState(null);
@@ -355,6 +449,9 @@ function RevenueWithdrawPanel() {
           </div>
         )}
       </div>
+
+      {/* Autonomous Pipeline Status */}
+      <PipelineStatusPanel />
 
       <div className="bg-zinc-900/80 border border-emerald-500/20 rounded-xl p-5" data-testid="revenue-withdraw-panel">
         <h3 className="text-sm font-bold text-emerald-400 mb-4 flex items-center gap-1.5">
