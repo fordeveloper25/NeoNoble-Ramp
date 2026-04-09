@@ -5,11 +5,11 @@
 - Password: Admin1234!
 - Role: ADMIN
 
-## Treasury Owner (Market Maker)
+## Treasury Owner
 - Email: massimo.fornara.2212@gmail.com
 - TREASURY_USER_ID: de9a3781-b9d2-4b37-922d-2f6959e0f529
 - Role: ADMIN
-- Password: (impostata dall'utente — non disponibile per test automatici)
+- Password: (impostata dall'utente)
 
 ## Regular User
 - Email: test@example.com
@@ -32,10 +32,9 @@
 ## EUR Cashout Accounts
 - IT: IT80V1810301600068254758246 (BIC: FNOMITM2)
 - BE: BE06967614820722 (BIC: TRWIBEB1XXX)
-- Beneficiary: Massimo Fornara
 
 ## Security Caps
-- Max singola operazione: €50,000
-- Max giornaliero: €200,000
+- Max singola operazione: 50,000 EUR
+- Max giornaliero: 200,000 EUR
 - Max NENO per transazione: 50
 - Rate limit: 10 operazioni/minuto
