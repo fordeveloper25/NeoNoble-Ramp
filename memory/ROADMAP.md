@@ -6,11 +6,15 @@
 - [x] Security hardening (caps, rate limit, reentrancy)
 - [x] Real on-chain execution (proven with tx hashes)
 - [x] Stripe SEPA fiat payout
-- [x] Admin Command Center dashboard (7 tabs)
+- [x] Admin Command Center dashboard (7+ tabs)
 - [x] IPO-ready corporate structure
 - [x] Circle USDC Programmable Wallets (3 wallet segregati)
 - [x] Wallet Segregation Engine (CLIENT/TREASURY/REVENUE)
 - [x] Auto-Operation Loop (autonomous, fail-safe, real mode)
+- [x] Autonomous Financial Pipeline (zero-click money loop, Stripe Live)
+- [x] Stripe Webhooks (payment_intent.succeeded, payout.paid/failed, balance.available)
+- [x] Card Issuing Engine + Growth Domination Engine
+- [x] Idempotency + safeFetch + Revenue Withdrawal
 
 ## P1 — PROSSIMI
 - [ ] NIUM fiat rail activation (blocked on templateId)

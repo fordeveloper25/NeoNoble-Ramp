@@ -1,10 +1,10 @@
 # NeoNoble Ramp — Product Requirements Document
 
 ## Problema Originale
-Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banking con esecuzione reale su blockchain (BSC/PancakeSwap), Circle USDC, Stripe SEPA. Obiettivo: Full Money Loop + Real Cards + Profit Engine + Mass User Growth.
+Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banking con esecuzione reale su blockchain (BSC/PancakeSwap), Circle USDC, Stripe SEPA. Obiettivo: Full Money Loop + Real Cards + Profit Engine + Mass User Growth + Pipeline Finanziario Autonomo.
 
 ## Utenti
-- **Admin**: Gestione treasury, revenue withdrawal, growth analytics, monetization monitoring
+- **Admin**: Gestione treasury, revenue withdrawal, growth analytics, monetization monitoring, pipeline autonomo
 - **Trader**: Compra/vendi/swap NENO e altri asset con cashback dinamico
 - **Utente Banking**: IBAN virtuale, carte (issue/reveal/spend), bonifici SEPA
 - **Referrer**: Guadagni passivi da network di invitati
@@ -14,12 +14,13 @@ Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banki
 - Frontend: React + Tailwind + Shadcn
 - Blockchain: Web3.py (BSC), PancakeSwap V2
 - Wallets: Circle USDC (Client/Treasury/Revenue segregation)
-- Payments: Stripe SEPA
+- Payments: Stripe SEPA (LIVE)
 - Card Issuing: Abstraction layer (Marqeta/NIUM/Adyen/Stripe/Internal)
+- Pipeline: Autonomous Financial Pipeline (zero-click money loop)
 
 ## Fasi Completate
 
-### Phase 1-4: Foundation → Advanced Features
+### Phase 1-4: Foundation to Advanced Features
 - Auth JWT + Ruoli (USER/DEVELOPER/ADMIN)
 - NENO Exchange (buy/sell/swap/offramp)
 - Multichain Wallet + Banking
@@ -37,24 +38,39 @@ Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banki
 ### Phase 6: Production Hardening (2026-04-08)
 - Idempotency keys su tutte le operazioni finanziarie
 - Safe transaction logging (upsert)
-- Universal xhrFetch wrapper
+- Universal xhrFetch wrapper (safeFetch)
 - Revenue Withdrawal endpoint + Admin Dashboard
 
 ### Phase 7: Card Issuing + Growth Domination (2026-04-09)
-- **Card Issuing Engine** — Abstraction layer multi-provider (Marqeta/NIUM/Adyen/Stripe)
-  - `/api/card-engine/issue` — Emissione carte virtuali/fisiche
-  - `/api/card-engine/reveal` — PCI-compliant con 2FA (OTP 6 cifre, sessione 60s)
-  - `/api/card-engine/authorize` — Check balance + limiti + interchange fees
-  - `/api/card-engine/settlement` — Settlement transazioni
-  - `/api/card-engine/monetization` — Statistiche revenue carte (admin)
-- **Monetization Engine** — Tracking revenue: interchange (1.5%), FX spread (0.5%), trading spread, card fees
-- **Incentive Engine** — Cashback dinamico a 5 tier (Base 1% → Diamond 5%), bonus primo top-up 5 EUR
-- **Referral Viral Loop** — Network volume tracking, viral multiplier, cashback 0.5% su spesa referred users
-- **Growth Analytics Engine** — Funnel (8 step), retention (DAU/MAU), ARPU, revenue breakdown
-- **Admin Dashboard** — Nuovi tab: Growth (funnel + retention + revenue), Monetization (card stats + ARPU)
-- **Card Reveal UI** — Modal con input OTP, PAN/CVV/scadenza con countdown 60s
+- Card Issuing Engine (multi-provider abstraction)
+- Monetization Engine (interchange, FX, trading spread, card fees)
+- Incentive Engine (cashback 5 tier, bonus primo top-up)
+- Referral Viral Loop (network volume, viral multiplier)
+- Growth Analytics Engine (funnel 8 step, retention, ARPU)
+- Admin Dashboard (Growth/Monetization/Revenue/Pipeline tabs)
+- Card Reveal UI (PCI-compliant 2FA con OTP)
+
+### Phase 8: Autonomous Financial Pipeline (2026-04-09)
+- Stripe Live PaymentIntents per user EUR deposits
+- Fee extraction automatica (2% platform fee)
+- Auto-payout SEPA quando balance >= threshold (10 EUR)
+- Stripe Webhooks (payment_intent.succeeded, payout.paid, balance.available, payout.failed, charge.succeeded)
+- Background loop autonomo (check ogni 120s)
+- Auto-fund da revenue ledger a Stripe
+- Pipeline status in Admin Dashboard (ATTIVO, Stripe balance, cicli, depositi, payouts)
+- E2E Testing: 23/23 backend tests passati (iteration_43)
 
 ## Endpoint API Chiave
+
+### Autonomous Pipeline
+- `GET /api/pipeline/status` — Stato pipeline (running, cycle_count, deposits, payouts, stripe_balance)
+- `POST /api/pipeline/deposit` — Crea deposit Stripe PaymentIntent (auth required)
+- `GET /api/pipeline/deposits` — Storico depositi utente
+- `GET /api/pipeline/payouts` — Storico payouts auto (admin only)
+- `POST /api/pipeline/auto-payout-check` — Trigger manuale auto-payout (admin)
+- `POST /api/pipeline/auto-fund` — Trigger auto-fund da revenue (admin)
+- `POST /api/stripe/webhook` — Webhook Stripe (tutti gli eventi)
+
 ### Card Engine
 - `POST /api/card-engine/issue` — Emissione carta
 - `POST /api/card-engine/reveal` — Reveal PCI (2FA)
@@ -77,12 +93,14 @@ Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banki
 - `POST /api/cashout/revenue-withdraw` — Prelievo revenue (admin SEPA/SWIFT/Crypto)
 - `GET /api/cashout/revenue-history` — Storico prelievi
 
-## Backlog (P2+)
+## Backlog (P1/P2)
+- [ ] NIUM fiat rail activation (blocked on templateId)
 - [ ] Microservices Architecture (splitting monolite)
 - [ ] KYC/AML provider reale (Sumsub/Onfido)
-- [ ] Visa/Mastercard BIN sponsor attivazione
+- [ ] Dynamic NENO pricing (order book reale)
+- [ ] Visa/Mastercard BIN sponsor integration
 - [ ] Multi-country/multi-currency scaling
-- [ ] Pricing NENO dinamico (order book reale)
-- [ ] GA4 + Meta Pixel integration (chiavi necessarie)
+- [ ] SWIFT gpi real integration
+- [ ] External auditor integration (Big 4)
 - [ ] Marqeta API keys per card issuing reale
 - [ ] TOTP vero per card reveal (produzione)

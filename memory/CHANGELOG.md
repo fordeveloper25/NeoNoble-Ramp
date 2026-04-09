@@ -1,5 +1,13 @@
 # NeoNoble Ramp — CHANGELOG
 
+## 2026-04-09 — Autonomous Financial Pipeline E2E Validated
+- Pipeline Finanziario Autonomo: deposit → fee extraction → auto-payout SEPA
+- Stripe Live: PaymentIntents, Webhooks (5 event types), Auto-Payout Engine
+- Background loop autonomo (120s check interval, threshold 10 EUR)
+- Admin Dashboard Pipeline panel con status real-time
+- Fix xhrFetch error handling per PipelineStatusPanel
+- 23/23 test backend passati (iteration_43) + Frontend 100% verificato
+
 ## 2026-04-08 — Full Real Money System Activation
 - FIX: Wallet & Banking "body stream already read" → safeFetch wrapper con response.clone()
 - Hybrid Liquidity Engine: user matching → market maker → DEX fallback
