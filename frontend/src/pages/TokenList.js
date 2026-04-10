@@ -5,15 +5,7 @@ import {
   Coins, Plus, Search, Loader2, ChevronRight,
   ListChecks, Check, Clock, X, AlertCircle
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-
-function getAuthHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${localStorage.getItem('token')}`
-  };
-}
+import { xhrGet, xhrPost, BACKEND_URL } from '../utils/safeFetch';
 
 const STATUS_BADGES = {
   pending: { color: 'bg-yellow-500/20 text-yellow-400', label: 'In Attesa' },
@@ -24,11 +16,8 @@ const STATUS_BADGES = {
 };
 
 const CHAIN_LABELS = {
-  ethereum: 'Ethereum',
-  bsc: 'BNB Chain',
-  polygon: 'Polygon',
-  arbitrum: 'Arbitrum',
-  base: 'Base',
+  ethereum: 'Ethereum', bsc: 'BNB Chain', polygon: 'Polygon',
+  arbitrum: 'Arbitrum', base: 'Base',
 };
 
 export default function TokenList() {
@@ -50,36 +39,21 @@ export default function TokenList() {
       let url = `${BACKEND_URL}/api/tokens/list?page_size=50`;
       if (filter === 'my') url += `&creator_id=${user?.id}`;
       else if (filter !== 'all') url += `&status=${filter}`;
-
-      const res = await fetch(url, { headers: getAuthHeaders() });
-      const data = await res.json();
+      const data = await xhrGet(url);
       setTokens(data.tokens || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [filter, user?.id]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchTokens(); }, [filter]);
 
   const handleRequestListing = async (tokenId, listingType) => {
-    setListingLoading(true);
-    setListingError('');
-    setListingSuccess('');
+    setListingLoading(true); setListingError(''); setListingSuccess('');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/tokens/listings/create`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          token_id: tokenId,
-          listing_type: listingType,
-          requested_pairs: ['EUR', 'USD', 'USDT']
-        })
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/tokens/listings/create`, {
+        token_id: tokenId, listing_type: listingType, requested_pairs: ['EUR', 'USD', 'USDT'],
       });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Errore nella richiesta listing');
-      }
-      const data = await res.json();
+      if (!ok) throw new Error(data.detail || 'Errore nella richiesta listing');
       setListingSuccess(`Listing richiesto con successo! Fee: €${data.listing_fee}`);
       setTimeout(() => { setListingModal(null); setListingSuccess(''); }, 2000);
     } catch (e) {

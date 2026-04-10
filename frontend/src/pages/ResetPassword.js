@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, ArrowLeft, Loader2, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+import { xhrPost, BACKEND_URL } from '../utils/safeFetch';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -19,7 +18,6 @@ export default function ResetPassword() {
   const [tokenValid, setTokenValid] = useState(false);
   const [tokenEmail, setTokenEmail] = useState('');
 
-  // Verify token on mount
   useEffect(() => {
     const verifyToken = async () => {
       if (!token) {
@@ -27,19 +25,10 @@ export default function ResetPassword() {
         setVerifying(false);
         return;
       }
-
       try {
-        const response = await fetch(`${BACKEND_URL}/api/password/verify-token`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ token }),
-        });
+        const { ok, data } = await xhrPost(`${BACKEND_URL}/api/password/verify-token`, { token });
 
-        const data = await response.json();
-
-        if (response.ok) {
+        if (ok) {
           setTokenValid(true);
           setTokenEmail(data.email);
         } else {
@@ -57,40 +46,14 @@ export default function ResetPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (password !== confirmPassword) {
-      setError('Le password non coincidono');
-      return;
-    }
-
-    if (password.length < 8) {
-      setError('La password deve essere di almeno 8 caratteri');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
+    if (password !== confirmPassword) { setError('Le password non coincidono'); return; }
+    if (password.length < 8) { setError('La password deve essere di almeno 8 caratteri'); return; }
+    setLoading(true); setError('');
     try {
-      const response = await fetch(`${BACKEND_URL}/api/password/reset`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          token,
-          new_password: password 
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/password/reset`, { token, new_password: password });
+      if (ok) {
         setStatus('success');
-        // Redirect to login after 3 seconds
-        setTimeout(() => {
-          navigate('/login');
-        }, 3000);
+        setTimeout(() => navigate('/login'), 3000);
       } else {
         setError(data.detail || 'Si è verificato un errore');
       }

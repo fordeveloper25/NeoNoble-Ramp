@@ -4,8 +4,7 @@ import {
   TrendingUp, TrendingDown, Search, Loader2, ArrowLeft,
   BarChart3, RefreshCw, Globe, ArrowUpRight
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+import { xhrGet, BACKEND_URL } from '../utils/safeFetch';
 
 function formatNumber(n) {
   if (!n && n !== 0) return '-';
@@ -52,8 +51,7 @@ export default function MarketData() {
     if (showRefresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/market-data/coins?vs_currency=eur&per_page=32`);
-      const data = await res.json();
+      const data = await xhrGet(`${BACKEND_URL}/api/market-data/coins?vs_currency=eur&per_page=32`);
       setCoins(data.coins || []);
       setLastUpdated(new Date());
     } catch (e) { console.error(e); }

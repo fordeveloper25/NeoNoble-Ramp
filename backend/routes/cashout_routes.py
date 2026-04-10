@@ -133,7 +133,7 @@ async def revenue_withdraw(req: RevenueWithdrawRequest, current_user: dict = Dep
     """
     Manual revenue withdrawal — Admin only.
     Withdraws from the REVENUE wallet to configured EUR accounts or crypto wallets.
-    Full audit trail.
+    Full audit trail + idempotency.
     """
     if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin only — accesso negato")
@@ -148,6 +148,13 @@ async def revenue_withdraw(req: RevenueWithdrawRequest, current_user: dict = Dep
     db = get_database()
     withdraw_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
+
+    # Idempotency check
+    from services.idempotency_service import check_idempotency, mark_idempotency
+    idem_key = f"revenue_withdraw_{current_user['user_id']}_{req.amount}_{req.method}"
+    existing = await check_idempotency(idem_key, "revenue_withdraw")
+    if existing:
+        return existing
 
     # Validate revenue balance
     engine = CashoutEngine.get_instance()

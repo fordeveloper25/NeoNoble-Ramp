@@ -5,9 +5,7 @@ import {
   Shield, Activity, Clock, AlertTriangle, Users,
   CreditCard, BarChart3, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+import { xhrGet, getAuthHeaders, BACKEND_URL } from '../utils/safeFetch';
 
 export default function AuditLog() {
   const navigate = useNavigate();
@@ -26,9 +24,7 @@ export default function AuditLog() {
       let url = `${BACKEND_URL}/api/admin/audit/logs?page=${page}&page_size=30`;
       if (filterEmail) url += `&user_email=${encodeURIComponent(filterEmail)}`;
       if (filterType) url += `&event_type=${encodeURIComponent(filterType)}`;
-      const res = await fetch(url, { headers: headers() });
-      if (!res.ok) throw new Error('Accesso negato');
-      const data = await res.json();
+      const data = await xhrGet(url);
       setLogs(data.logs || []);
       setTotal(data.total || 0);
     } catch (e) { console.error(e); }
@@ -37,8 +33,8 @@ export default function AuditLog() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/audit/stats`, { headers: headers() });
-      if (res.ok) setStats(await res.json());
+      const data = await xhrGet(`${BACKEND_URL}/api/admin/audit/stats`);
+      if (data && !data.detail) setStats(data);
     } catch (e) { console.error(e); }
   }, []);
 
@@ -46,7 +42,7 @@ export default function AuditLog() {
 
   const handleExport = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/audit/export/csv?days=30`, { headers: headers() });
+      const res = await fetch(`${BACKEND_URL}/api/admin/audit/export/csv?days=30`, { headers: getAuthHeaders() });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'audit_export.csv'; a.click();

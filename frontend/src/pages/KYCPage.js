@@ -6,9 +6,7 @@ import {
   CheckCircle, XCircle, Clock, AlertTriangle, FileText,
   User, MapPin, CreditCard, Send, Eye, Ban
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+import { xhrGet, xhrPost, BACKEND_URL } from '../utils/safeFetch';
 
 const TIER_COLORS = {
   0: { bg: 'bg-zinc-500/20', text: 'text-zinc-400', border: 'border-zinc-500/30' },
@@ -42,8 +40,8 @@ export default function KYCPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/kyc/status`, { headers: headers() });
-      setKycStatus(await res.json());
+      const data = await xhrGet(`${BACKEND_URL}/api/kyc/status`);
+      setKycStatus(data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
@@ -51,12 +49,11 @@ export default function KYCPage() {
   const fetchAdmin = useCallback(async () => {
     if (!isAdmin) return;
     try {
-      const [pRes, aRes, sRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/kyc/admin/pending`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/kyc/aml/alerts?status=open`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/kyc/aml/stats`, { headers: headers() }),
+      const [pData, aData, sData] = await Promise.all([
+        xhrGet(`${BACKEND_URL}/api/kyc/admin/pending`),
+        xhrGet(`${BACKEND_URL}/api/kyc/aml/alerts?status=open`),
+        xhrGet(`${BACKEND_URL}/api/kyc/aml/stats`),
       ]);
-      const [pData, aData, sData] = await Promise.all([pRes.json(), aRes.json(), sRes.json()]);
       setPendingList(pData.pending || []);
       setAmlAlerts(aData.alerts || []);
       setAmlStats(sData);
@@ -69,11 +66,8 @@ export default function KYCPage() {
     e.preventDefault();
     setSubmitting(true); setResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/kyc/submit`, {
-        method: 'POST', headers: headers(), body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/kyc/submit`, form);
+      if (!ok) throw new Error(data.detail || 'Errore invio KYC');
       setResult({ ok: true, msg: data.message });
       fetchStatus();
       setTab('status');
@@ -83,21 +77,14 @@ export default function KYCPage() {
 
   const handleReview = async (userId, action, tier) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/kyc/admin/review`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ user_id: userId, action, new_tier: tier }),
-      });
-      await res.json();
+      await xhrPost(`${BACKEND_URL}/api/kyc/admin/review`, { user_id: userId, action, new_tier: tier });
       fetchAdmin(); fetchStatus();
     } catch (e) { console.error(e); }
   };
 
   const handleAmlAction = async (alertId, action) => {
     try {
-      await fetch(`${BACKEND_URL}/api/kyc/aml/review`, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ alert_id: alertId, action }),
-      });
+      await xhrPost(`${BACKEND_URL}/api/kyc/aml/review`, { alert_id: alertId, action });
       fetchAdmin();
     } catch (e) { console.error(e); }
   };

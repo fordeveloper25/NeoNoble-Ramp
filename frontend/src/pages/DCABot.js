@@ -4,9 +4,7 @@ import {
   ArrowLeft, Loader2, Plus, Pause, Play, Trash2, RefreshCw,
   TrendingUp, Clock, DollarSign, BarChart3, FileDown
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+import { xhrGet, xhrPost, BACKEND_URL } from '../utils/safeFetch';
 
 const ASSETS = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'NENO', 'AVAX', 'DOT', 'LINK'];
 const INTERVALS = [
@@ -35,11 +33,10 @@ export default function DCABot() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pRes, hRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/dca/plans`, { headers: headers() }),
-        fetch(`${BACKEND_URL}/api/dca/history?limit=50`, { headers: headers() }),
+      const [pData, hData] = await Promise.all([
+        xhrGet(`${BACKEND_URL}/api/dca/plans`),
+        xhrGet(`${BACKEND_URL}/api/dca/history?limit=50`),
       ]);
-      const [pData, hData] = await Promise.all([pRes.json(), hRes.json()]);
       setPlans(pData.plans || []);
       setHistory(hData.executions || []);
     } catch (e) { console.error(e); }
@@ -53,9 +50,8 @@ export default function DCABot() {
     try {
       const body = { asset, amount_eur: parseFloat(amount), interval };
       if (maxExec) body.max_executions = parseInt(maxExec);
-      const res = await fetch(`${BACKEND_URL}/api/dca/create`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/dca/create`, body);
+      if (!ok) throw new Error(data.detail || 'Errore creazione DCA');
       setResult({ ok: true, msg: data.message });
       setShowCreate(false); setAmount(''); setMaxExec('');
       fetchData();
@@ -65,16 +61,16 @@ export default function DCABot() {
 
   const handlePause = async (id) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dca/pause`, { method: 'POST', headers: headers(), body: JSON.stringify({ plan_id: id }) });
-      if (!res.ok) throw new Error((await res.json()).detail);
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/dca/pause`, { plan_id: id });
+      if (!ok) throw new Error(data.detail || 'Errore');
       fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
   };
 
   const handleResume = async (id) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dca/resume`, { method: 'POST', headers: headers(), body: JSON.stringify({ plan_id: id }) });
-      if (!res.ok) throw new Error((await res.json()).detail);
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/dca/resume`, { plan_id: id });
+      if (!ok) throw new Error(data.detail || 'Errore');
       fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
   };
@@ -82,8 +78,8 @@ export default function DCABot() {
   const handleCancel = async (id) => {
     if (!window.confirm('Vuoi cancellare questo piano DCA?')) return;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/dca/plans/${id}`, { method: 'DELETE', headers: headers() });
-      if (!res.ok) throw new Error((await res.json()).detail);
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/dca/cancel`, { plan_id: id });
+      if (!ok) throw new Error(data.detail || 'Errore cancellazione');
       fetchData();
     } catch (e) { setResult({ ok: false, msg: e.message }); }
   };

@@ -5,32 +5,16 @@ import {
   Check, Crown, Zap, Code, Building, Loader2,
   ArrowRight, Star, Shield, AlertCircle, ArrowLeft
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-
-function getAuthHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${localStorage.getItem('token')}`
-  };
-}
+import { xhrGet, xhrPost, BACKEND_URL } from '../utils/safeFetch';
 
 const PLAN_ICONS = {
-  free: Zap,
-  pro_trader: Crown,
-  premium: Star,
-  developer_basic: Code,
-  developer_pro: Code,
-  enterprise: Building,
+  free: Zap, pro_trader: Crown, premium: Star,
+  developer_basic: Code, developer_pro: Code, enterprise: Building,
 };
-
 const PLAN_GRADIENTS = {
-  free: 'from-gray-600 to-gray-700',
-  pro_trader: 'from-blue-500 to-cyan-500',
-  premium: 'from-purple-500 to-pink-500',
-  developer_basic: 'from-green-500 to-emerald-500',
-  developer_pro: 'from-orange-500 to-amber-500',
-  enterprise: 'from-red-500 to-rose-500',
+  free: 'from-gray-600 to-gray-700', pro_trader: 'from-blue-500 to-cyan-500',
+  premium: 'from-purple-500 to-pink-500', developer_basic: 'from-green-500 to-emerald-500',
+  developer_pro: 'from-orange-500 to-amber-500', enterprise: 'from-red-500 to-rose-500',
 };
 
 export default function SubscriptionPlans() {
@@ -44,58 +28,37 @@ export default function SubscriptionPlans() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const headers = getAuthHeaders();
-      const [plansRes, subRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/subscriptions/plans/list`, { headers }),
-        fetch(`${BACKEND_URL}/api/subscriptions/my-subscription`, { headers })
+      const [plansData, subData] = await Promise.all([
+        xhrGet(`${BACKEND_URL}/api/subscriptions/plans/list`),
+        xhrGet(`${BACKEND_URL}/api/subscriptions/my-subscription`),
       ]);
-      const plansData = await plansRes.json();
       setPlans(plansData.plans || []);
-
-      if (subRes.ok) {
-        const subData = await subRes.json();
-        setCurrentSub(subData);
-      }
+      if (subData && !subData.detail) setCurrentSub(subData);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
 
   const handleSubscribe = async (planId) => {
-    setSubscribing(planId);
-    setError('');
-    setSuccess('');
+    setSubscribing(planId); setError(''); setSuccess('');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/subscriptions/subscribe`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ plan_id: planId, billing_cycle: billingCycle })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Errore nella sottoscrizione');
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/subscriptions/subscribe`, { plan_id: planId, billing_cycle: billingCycle });
+      if (!ok) throw new Error(data.detail || 'Errore nella sottoscrizione');
       setSuccess(`Sottoscrizione a ${data.plan_name} attivata con successo!`);
       await fetchData();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSubscribing(null);
-    }
+    } catch (e) { setError(e.message); }
+    finally { setSubscribing(null); }
   };
 
   const handleCancel = async () => {
     if (!window.confirm('Sei sicuro di voler cancellare il tuo abbonamento?')) return;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/subscriptions/cancel`, {
-        method: 'POST', headers: getAuthHeaders()
-      });
-      if (res.ok) {
+      const { ok } = await xhrPost(`${BACKEND_URL}/api/subscriptions/cancel`, {});
+      if (ok) {
         setSuccess('Abbonamento cancellato. Manterrai l\'accesso fino alla fine del periodo.');
         await fetchData();
       }

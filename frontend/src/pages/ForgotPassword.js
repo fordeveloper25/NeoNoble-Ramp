@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, ArrowLeft, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+import { xhrPost, BACKEND_URL } from '../utils/safeFetch';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -12,22 +11,10 @@ export default function ForgotPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    setStatus(null);
-
+    setLoading(true); setError(''); setStatus(null);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/password/forgot`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/password/forgot`, { email });
+      if (ok) {
         setStatus('success');
       } else {
         setError(data.detail || 'Si è verificato un errore');

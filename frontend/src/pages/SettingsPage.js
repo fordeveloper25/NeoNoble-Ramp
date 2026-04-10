@@ -5,9 +5,7 @@ import {
   ArrowLeft, Loader2, Shield, ShieldCheck, Globe, Bell,
   Smartphone, Key, Copy, Check, Eye, EyeOff, Languages
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+import { xhrGet, xhrPost, BACKEND_URL } from '../utils/safeFetch';
 
 const LANGUAGES = [
   { code: 'it', label: 'Italiano', flag: 'IT' },
@@ -41,17 +39,14 @@ export default function SettingsPage() {
 
   // Notification preferences
   const [notifPrefs, setNotifPrefs] = useState({
-    trade_alerts: true,
-    margin_alerts: true,
-    kyc_updates: true,
-    security_alerts: true,
-    system_updates: false,
+    trade_alerts: true, margin_alerts: true, kyc_updates: true,
+    security_alerts: true, system_updates: false,
   });
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/2fa/status`, { headers: headers() });
-      setTwoFaStatus(await res.json());
+      const data = await xhrGet(`${BACKEND_URL}/api/auth/2fa/status`);
+      setTwoFaStatus(data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
@@ -61,9 +56,8 @@ export default function SettingsPage() {
   const handleSetup2FA = async () => {
     setResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/2fa/setup`, { method: 'POST', headers: headers() });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/auth/2fa/setup`, {});
+      if (!ok) throw new Error(data.detail || 'Errore setup 2FA');
       setSetupData(data);
     } catch (e) { setResult({ ok: false, msg: e.message }); }
   };
@@ -71,14 +65,10 @@ export default function SettingsPage() {
   const handleVerify2FA = async () => {
     setResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/2fa/verify`, {
-        method: 'POST', headers: headers(), body: JSON.stringify({ code: totpCode }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/auth/2fa/verify`, { code: totpCode });
+      if (!ok) throw new Error(data.detail || 'Codice non valido');
       setBackupCodes(data.backup_codes);
-      setSetupData(null);
-      setTotpCode('');
+      setSetupData(null); setTotpCode('');
       fetchStatus();
       setResult({ ok: true, msg: data.message });
     } catch (e) { setResult({ ok: false, msg: e.message }); }
@@ -88,13 +78,9 @@ export default function SettingsPage() {
     if (!totpCode) { setResult({ ok: false, msg: 'Inserisci il codice TOTP' }); return; }
     setResult(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/2fa/disable`, {
-        method: 'POST', headers: headers(), body: JSON.stringify({ code: totpCode, password: '' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      setTotpCode('');
-      fetchStatus();
+      const { ok, data } = await xhrPost(`${BACKEND_URL}/api/auth/2fa/disable`, { code: totpCode, password: '' });
+      if (!ok) throw new Error(data.detail || 'Errore disabilitazione');
+      setTotpCode(''); fetchStatus();
       setResult({ ok: true, msg: data.message });
     } catch (e) { setResult({ ok: false, msg: e.message }); }
   };
