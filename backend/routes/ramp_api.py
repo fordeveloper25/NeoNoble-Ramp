@@ -347,6 +347,65 @@ async def process_deposit_por(request: DepositProcessRequest, http_request: Requ
         tx_hash=request.tx_hash,
         amount=request.amount
     )
+
+    # 1. PROCESS DEPOSIT (già fatto)
+quote, error = await por_engine.process_deposit(
+    quote_id=request.quote_id,
+    tx_hash=request.tx_hash,
+    amount=request.amount
+)
+
+if error:
+    raise HTTPException(status_code=400, detail=error)
+
+# 2. EXECUTION (SWAP REALE)
+execution = await routing_service.execute_trade(
+    from_asset=quote.crypto_currency,
+    to_asset="EUR",
+    amount=quote.crypto_amount
+)
+
+if not execution or not execution.get("success"):
+    raise HTTPException(
+        status_code=500,
+        detail=f"Trade execution failed: {execution}"
+    )
+
+# 3. PAYOUT (FIAT REALE)
+iban = quote.metadata.get("bank_account")
+
+if not iban:
+    raise HTTPException(
+        status_code=400,
+        detail="Missing IBAN for payout"
+    )
+
+payout = await real_payout_service.execute_payout(
+    user_id=quote.metadata.get("user_id"),
+    amount_eur=execution.get("amount_eur") or quote.fiat_amount,
+    iban=iban
+)
+
+if not payout or not payout.get("success"):
+    raise HTTPException(
+        status_code=500,
+        detail=f"Payout failed: {payout}"
+    )
+
+# 4. SETTLEMENT (CHIUSURA TRANSAZIONE)
+await settlement_service.settle_transaction(
+    quote_id=quote.quote_id,
+    execution=execution,
+    payout=payout
+)
+
+# 5. RESPONSE
+response = por_quote_to_response(quote)
+response["execution"] = execution
+response["payout"] = payout
+
+return response
+
     
     if error:
         raise HTTPException(status_code=400, detail=error)
