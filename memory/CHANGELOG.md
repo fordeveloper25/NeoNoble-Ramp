@@ -1,5 +1,13 @@
 # NeoNoble Ramp — CHANGELOG
 
+## 2026-04-10 — FINAL Production Hardening (CTO Execution)
+- safeFetch migration: ALL 18 frontend pages migrated from bare fetch() to xhrGet/xhrPost
+- Idempotency: Added to revenue-withdraw (cashout_routes.py)
+- Stripe webhook: Signature enforcement active (400 without valid stripe-signature)
+- Stripe webhook URL: Registered on Stripe portal (we_1TKCyHFg0ne9PIQaSp8gpuqB)
+- Frontend syntax fixes: ResetPassword.js, TokenList.js (testing agent auto-fix)
+- 30/30 backend tests PASSED + Frontend 100% verified (iteration_45)
+
 ## 2026-04-09 — Institutional Liquidity Router + KYC/AML + Stripe Webhook Hardening
 - Institutional Liquidity Router: multi-venue aggregation (Kraken, MEXC, Internal, DEX)
 - MEXC Connector aggiunto e connesso (BTC live @ $70,983)

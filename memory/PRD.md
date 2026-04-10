@@ -19,109 +19,98 @@ Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banki
 - Liquidity: Institutional Router (Binance/Kraken/MEXC/DEX/Internal)
 - KYC/AML: Sumsub (ready) + AI Document Verification (fallback)
 
-## Fasi Completate
+## Production Hardening Status: COMPLETE
 
-### Phase 1-4: Foundation to Advanced Features
-- Auth JWT + Ruoli (USER/DEVELOPER/ADMIN)
-- NENO Exchange (buy/sell/swap/offramp)
-- Multichain Wallet + Banking
-- Card Management + KYC/AML
-- Margin Trading + Order Book
-- DCA Trading Bot + PDF Compliance + SMS/Push Notifications
+### safeFetch Migration (Body Stream Fix)
+ALL frontend pages migrated from bare `fetch()` to `xhrGet`/`xhrPost` wrapper:
+- AuditLog.js, DCABot.js, ForgotPassword.js, KYCPage.js, MarketData.js
+- ResetPassword.js, SettingsPage.js, SubscriptionPlans.js, TokenList.js
+- WalletPage.js (has own safeFetch with clone())
+- AdminDashboard.js, CardManagement.js, Dashboard.js, ExchangePage.js
+- MarginTrading.js, NenoExchange.js, ReferralPage.js, TradingPage.js
 
-### Phase 5: Real Money Activation
-- Circle USDC Programmable Wallets
-- Wallet Segregation (Client/Treasury/Revenue)
-- Autonomous Profit Extraction Engine
-- PancakeSwap V2 DEX (real swaps)
-- Real-time Sync + EventBus
+### Idempotency
+Applied to: NENO buy, NENO sell, NENO swap, NENO offramp, Revenue Withdraw
 
-### Phase 6: Production Hardening (2026-04-08)
-- Idempotency keys su tutte le operazioni finanziarie
-- Safe transaction logging (upsert)
-- Universal xhrFetch wrapper (safeFetch)
-- Revenue Withdrawal endpoint + Admin Dashboard
-
-### Phase 7: Card Issuing + Growth Domination (2026-04-09)
-- Card Issuing Engine (multi-provider abstraction)
-- Monetization Engine (interchange, FX, trading spread, card fees)
-- Incentive Engine (cashback 5 tier, bonus primo top-up)
-- Referral Viral Loop (network volume, viral multiplier)
-- Growth Analytics Engine (funnel 8 step, retention, ARPU)
-- Card Reveal UI (PCI-compliant 2FA con OTP)
-
-### Phase 8: Autonomous Financial Pipeline (2026-04-09)
-- Stripe Live PaymentIntents per user EUR deposits
-- Fee extraction automatica (2% platform fee)
-- Auto-payout SEPA quando balance >= threshold (10 EUR)
-- Stripe Webhooks con signature enforcement
-- Background loop autonomo (120s check interval)
-- 23/23 test passati (iteration_43)
-
-### Phase 9: Institutional Liquidity + KYC/AML (2026-04-09)
-- **Stripe Webhook URL** registrato su Stripe portal (endpoint live)
-- **Institutional Liquidity Router** — Multi-venue aggregation engine:
-  - Quote parallele da 5 venue (Internal, PancakeSwap, Binance, Kraken, MEXC)
-  - Best execution scoring (prezzo netto, fee, slippage, latenza, profondità)
-  - Order splitting automatico per ordini > €5,000
-  - Slippage guard 2%
-  - Audit trail completo su ogni routing decision
-- **MEXC Connector** — Nuovo adapter CEX (API key configurata, connesso)
-- **Custom Token Fallback Matrix** — 4 strategie:
-  1. Direct CEX listing (MEXC lista molti micro-cap)
-  2. DEX direct swap (PancakeSwap V2)
-  3. Intermediate pair routing (TOKEN→WBNB→USDT)
-  4. Internal RFQ / market maker inventory
-- **KYC/AML Provider** — Sumsub integration ready:
-  - Creazione applicant, verification URL, status check
-  - Webhook receiver per aggiornamenti stato
-  - AI document verification come fallback
-- **Risk Controls** — Pre-check fondi, venue availability, slippage guard, retry/failover
-- 21/22 test passati (iteration_44, 1 skippato per fixture scope)
-
-## Endpoint API Chiave
+### Stripe Webhook Signature Enforcement
+- Webhook URL registered on Stripe portal
+- Signature verification active (400 without valid `stripe-signature` header)
 
 ### Institutional Liquidity Router
-- `GET /api/router/status` — Stato venue, routing decisions, split threshold
-- `POST /api/router/quote` — Best execution quote multi-venue
-- `POST /api/router/execute` — Esecuzione ordine instradato
-- `GET /api/router/venues` — Connettività venue real-time
-- `GET /api/router/fallback-matrix` — Standard pairs + custom token strategies
+- 5 venues: Internal, PancakeSwap, Binance, Kraken, MEXC
+- Best execution scoring: net price, fee, slippage, latency, depth
+- Order splitting for orders > €5,000
+- Custom token fallback: CEX direct → DEX → intermediate routing → RFQ
 
 ### KYC/AML Provider
-- `POST /api/kyc-provider/applicant` — Crea applicant KYC
-- `GET /api/kyc-provider/status` — Stato verifica utente
-- `GET /api/kyc-provider/verification-url` — URL SDK Sumsub / istruzioni AI
-- `GET /api/kyc-provider/provider-status` — Configurazione provider (admin)
-- `POST /api/kyc-provider/webhook` — Webhook Sumsub
+- Sumsub integration ready (awaiting API keys)
+- AI document verification fallback active
+
+## Endpoint API Completi
+
+### Auth
+- `POST /api/auth/login` | `POST /api/auth/register` | `GET /api/auth/me`
+- `POST /api/auth/2fa/setup` | `POST /api/auth/2fa/verify` | `POST /api/auth/2fa/disable`
+- `POST /api/password/forgot` | `POST /api/password/reset` | `POST /api/password/verify-token`
+
+### Wallet & Banking
+- `GET /api/wallet/balances` | `POST /api/wallet/deposit` | `POST /api/wallet/withdraw`
+- `GET /api/banking/accounts` | `POST /api/banking/transfer`
+
+### NENO Exchange (Idempotent)
+- `GET /api/neno/pricing` | `POST /api/neno/buy` | `POST /api/neno/sell`
+- `POST /api/neno/swap` | `POST /api/neno/off-ramp` | `GET /api/neno/quote`
+
+### Institutional Liquidity Router
+- `GET /api/router/status` | `POST /api/router/quote` | `POST /api/router/execute`
+- `GET /api/router/venues` | `GET /api/router/fallback-matrix`
 
 ### Autonomous Pipeline
-- `GET /api/pipeline/status` — Stato pipeline
-- `POST /api/pipeline/deposit` — Deposit Stripe PaymentIntent
-- `POST /api/stripe/webhook` — Webhook Stripe (signature enforced)
+- `GET /api/pipeline/status` | `POST /api/pipeline/deposit`
+- `GET /api/pipeline/deposits` | `GET /api/pipeline/payouts`
+- `POST /api/pipeline/auto-payout-check` | `POST /api/pipeline/auto-fund`
+- `POST /api/stripe/webhook` (signature enforced)
 
 ### Card Engine
-- `POST /api/card-engine/issue` — Emissione carta
-- `POST /api/card-engine/reveal` — Reveal PCI (2FA)
+- `POST /api/card-engine/issue` | `POST /api/card-engine/reveal` (2FA)
+- `POST /api/card-engine/authorize` | `POST /api/card-engine/settlement`
 
-### Growth Engine
-- `GET /api/growth/dashboard` — Dashboard completo (admin)
+### Growth & Revenue
+- `GET /api/growth/dashboard` | `GET /api/growth/revenue` | `GET /api/growth/revenue/daily`
+- `GET /api/growth/my-tier` | `GET /api/growth/my-rewards`
+- `POST /api/cashout/revenue-withdraw` (idempotent) | `GET /api/cashout/report`
+
+### KYC/AML
+- `POST /api/kyc-provider/applicant` | `GET /api/kyc-provider/status`
+- `GET /api/kyc-provider/verification-url` | `GET /api/kyc-provider/provider-status`
+- `POST /api/kyc-provider/webhook` | `POST /api/kyc/submit` | `GET /api/kyc/status`
+
+### Admin
+- `GET /api/admin/audit/logs` | `GET /api/admin/audit/stats`
+- `GET /api/admin/audit/export/csv`
+
+## Testing History
+| Iteration | Scope | Result |
+|-----------|-------|--------|
+| 41 | Idempotency / UI fixes | 100% PASS |
+| 42 | Card / Growth Engine | 100% PASS |
+| 43 | Autonomous Pipeline | 23/23 PASS |
+| 44 | Liquidity Router / KYC | 21/22 PASS |
+| 45 | FINAL Production Hardening | 30/30 PASS |
 
 ## Venue Connectivity (Production)
 | Venue | Status | Note |
 |-------|--------|------|
-| NeoNoble Internal | ONLINE | Market maker, treasury liquidity |
-| Kraken | ONLINE | BTC/ETH/SOL/XRP trading |
-| MEXC | ONLINE | Micro-cap friendly, BTC/ETH + many altcoins |
-| Coinbase | ONLINE | Limited trading pairs |
-| Binance | OFFLINE | HTTP 451 geo-blocked (infrastruttura) |
-| PancakeSwap V2 | AVAILABLE | DEX on-chain per token custom |
+| NeoNoble Internal | ONLINE | Market maker, treasury |
+| Kraken | ONLINE | Major pairs |
+| MEXC | ONLINE | Wide altcoin coverage |
+| Coinbase | ONLINE | Limited pairs |
+| Binance | OFFLINE | HTTP 451 geo-blocked |
+| PancakeSwap V2 | AVAILABLE | DEX for custom tokens |
 
 ## Backlog
-- [ ] Sumsub API keys (SUMSUB_APP_TOKEN, SUMSUB_SECRET_KEY) per KYC reale
-- [ ] NIUM fiat rail activation (blocked on templateId)
-- [ ] Microservices Architecture (splitting monolite)
-- [ ] Dynamic NENO pricing (order book reale)
-- [ ] Visa/Mastercard BIN sponsor integration
-- [ ] Multi-country/multi-currency scaling
-- [ ] Marqeta API keys per card issuing reale
+- [ ] Sumsub API keys per KYC reale
+- [ ] NIUM fiat rail (templateId)
+- [ ] Microservices split
+- [ ] Dynamic NENO pricing
+- [ ] Multi-currency scaling
