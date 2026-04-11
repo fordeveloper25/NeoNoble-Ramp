@@ -27,20 +27,46 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Developer Ramp API"])
 
 # Services will be set by main app
+# Services will be set by main app
 ramp_service: RampService = None
 por_engine: InternalPoRProvider = None
 hmac_middleware: HMACAuthMiddleware = None
 
+# Real execution services
+routing_service = None
+real_payout_service: RealPayoutService = None
+settlement_service: SettlementService = None
+wallet_service: WalletService = None
+dex_service: DEXService = None
+connector_manager: ConnectorManager = None
 
 def set_services(ramp: RampService, api_key_service: PlatformApiKeyService):
     global ramp_service, hmac_middleware
     ramp_service = ramp
     hmac_middleware = HMACAuthMiddleware(api_key_service)
 
-
 def set_por_engine(engine: InternalPoRProvider):
     global por_engine
     por_engine = engine
+
+def set_execution_services(
+    routing,
+    payout: RealPayoutService,
+    settlement: SettlementService,
+    wallet: WalletService,
+    dex: DEXService,
+    connectors: ConnectorManager
+):
+    global routing_service, real_payout_service, settlement_service
+    global wallet_service, dex_service, connector_manager
+
+    routing_service = routing
+    real_payout_service = payout
+    settlement_service = settlement
+    wallet_service = wallet
+    dex_service = dex
+    connector_manager = connectors
+
 
 
 # ========================
