@@ -593,20 +593,17 @@ execution = await routing_service.execute_trade(
 payout_result = await real_payout_service.create_payout(
     quote_id=quote.quote_id,
     transaction_id=quote.quote_id,
-    amount_eur=quote.fiat_amount,
+    amount_eur=amount_eur,
     reference=f"NENO-{quote.quote_id[:8]}",
     metadata=quote.metadata
 )
 
 # 3. SETTLEMENT
-await settlement_service.settle_transaction(
+await settlement_service.create_settlement(
     quote_id=quote.quote_id,
-    execution=execution,
-    payout={
-        "success": payout_result.success,
-        "payout_id": payout_result.payout_id,
-        "status": payout_result.status.value if payout_result.status else None
-    }
+    amount_eur=amount_eur,
+    fee_eur=quote.fee_amount,
+    bank_account=quote.metadata.get("bank_account")
 )
 
 # =========================
@@ -615,11 +612,15 @@ await settlement_service.settle_transaction(
 
 response = por_quote_to_response(quote)
 
-response["execution"] = execution
+response["execution"] = {
+    "status": getattr(execution, "status", None),
+    "tx_hash": getattr(execution, "tx_hash", None)
+}
+
 response["payout"] = {
-    "success": payout_result.success,
+    "status": payout_result.status.value if payout_result.status else None,
     "payout_id": payout_result.payout_id,
-    "status": payout_result.status.value if payout_result.status else None
+    "reference": payout_result.provider_reference
 }
 
 return response
