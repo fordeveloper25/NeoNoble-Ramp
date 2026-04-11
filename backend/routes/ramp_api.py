@@ -9,6 +9,8 @@ Authentication:
 - X-TIMESTAMP: Unix timestamp in seconds  
 - X-SIGNATURE: HMAC-SHA256(timestamp + bodyJson, apiSecret)
 """
+from services.dex import get_dex_service
+from services.exchange import get_connector_manager
 
 from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel, Field
