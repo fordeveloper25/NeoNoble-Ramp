@@ -819,6 +819,15 @@ async def _background_init():
 
 # Create the main app
 app = FastAPI(
+    # 🔴 AGGIUNGI QUI
+from services.exchanges.connector_manager import get_connector_manager
+
+manager = get_connector_manager()
+
+@app.on_event("startup")
+async def startup():
+    await manager.enable_live_trading(user_id="system")
+
     title="NeoNoble Ramp API",
     description="Crypto on/off-ramp platform with HMAC-secured API access and BSC blockchain integration",
     version="2.0.0",
