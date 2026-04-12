@@ -230,8 +230,8 @@ class MarketRoutingService:
         if config_doc:
             return RoutingConfig(
                 shadow_mode=False
-                enabled_venues=[RoutingVenue(v) for v in config_doc.get("enabled_venues", ["shadow"])],
-                primary_venue=RoutingVenue(config_doc.get("primary_venue", "shadow")),
+                enabled_venues=[RoutingVenue.CEX]
+                primary_venue=RoutingVenue.CEX
                 neno_conversion_path=config_doc.get("neno_conversion_path", ["NENO", "BNB", "USDT", "EUR"]),
                 max_slippage_pct=config_doc.get("max_slippage_pct", 1.0),
                 max_retries=config_doc.get("max_retries", 3),
