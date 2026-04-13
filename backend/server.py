@@ -1,3 +1,4 @@
+from services.exchanges.connector_manager import get_connector_manager
 from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
