@@ -20,9 +20,9 @@ class RealVenueConnector(BaseConnector):
 
     async def execute_order(self, symbol, side, quantity):
         order, error = await manager.execute_order(
-            symbol=symbol,
-            side=side,
-            quantity=quantity
+            symbol=f"{source_currency} {destination_currency}",
+            side="sell",
+            quantity=amount
         )
 
         if error:
