@@ -827,8 +827,10 @@ manager = get_connector_manager()
 
 @app.on_event("startup")
 async def startup():
+    manager = get_connector_manager()
+    
     await manager.enable_live_trading(user_id="system")
-
+print("🚀 SYSTEM LIVE TRADING ENABLED")
     title="NeoNoble Ramp API",
     description="Crypto on/off-ramp platform with HMAC-secured API access and BSC blockchain integration",
     version="2.0.0",
