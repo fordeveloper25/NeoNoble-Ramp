@@ -59,10 +59,28 @@ class ConnectorManager:
         # NENO Virtual Exchange
         self._neno_exchange: NenoVirtualExchange = get_neno_exchange()
     
-    async def initialize(self):
-        """Initialize the connector manager."""
-        if self._initialized:
-            return
+    async def initialize_connectors(self):
+    from services.exchanges.binance_connector import BinanceConnector
+    from services.exchanges.coinbase_connector import CoinbaseConnector
+
+    binance_key = os.getenv("BINANCE_API_KEY")
+    binance_secret = os.getenv("BINANCE_API_SECRET")
+
+    coinbase_key = os.getenv("COINBASE_API_KEY")
+    coinbase_secret = os.getenv("COINBASE_API_SECRET")
+
+    if binance_key and binance_secret:
+        self._connectors["BINANCE"] = BinanceConnector(
+            api_key=binance_key,
+            api_secret=binance_secret
+        )
+
+    if coinbase_key and coinbase_secret:
+        self._connectors["COINBASE"] = CoinbaseConnector(
+            api_key=coinbase_key,
+            api_secret=coinbase_secret
+        )
+
         
         # Create indexes
         await self.orders_collection.create_index("order_id", unique=True)
