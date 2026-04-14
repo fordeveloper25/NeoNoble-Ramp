@@ -1,4 +1,5 @@
 from services.exchanges.connector_manager import get_connector_manager
+from services.liquidity.routing_service import MarketRoutingService,set_routing_service
 from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -8,6 +9,8 @@ import logging
 import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
+
+app = FastAPI()
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -830,7 +833,11 @@ async def startup():
     manager = get_connector_manager()
     
     await manager.enable_live_trading(user_id="system")
-print("🚀 SYSTEM LIVE TRADING ENABLED")
+
+    await routing_service.initialize()
+    set_routing_service(routing_service)
+    
+print("🚀 SYSTEM LIVE: REAL TRADING ENABLED")
     title="NeoNoble Ramp API",
     description="Crypto on/off-ramp platform with HMAC-secured API access and BSC blockchain integration",
     version="2.0.0",
