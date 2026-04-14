@@ -9,8 +9,10 @@ Provides:
 - NENO virtual exchange integration
 """
 
+
 import os
 import logging
+from services.exchanges.neno_virtual_exchange import neno_exchange
 from typing import Optional, Dict, List, Tuple
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -24,7 +26,7 @@ from .base_connector import (
     ExchangeBalance,
     MarketTicker
 )
-from .binance_connector import BinanceConnector
+from  services.exchange.binance_connector import BinanceConnector
 from .kraken_connector import KrakenConnector
 from .coinbase_connector import CoinbaseConnector
 from .mexc_connector import MexcConnector
@@ -55,6 +57,47 @@ class ConnectorManager:
         self._fallback_venue = "kraken"
         self._enabled = False
         self._shadow_mode = True  # Start in shadow mode
+
+        self.binance = BinanceConnector()
+
+        async def enable_live_trading(self, user_id="system"):
+        self._enabled = True
+        self._shadow_mode = False
+
+    def _is_internal_symbol(self, symbol: str) -> bool:
+        up = symbol.upper()
+        return "NENO" in up or up.startswith("TKN")
+
+    async def execute_order(self, symbol, side, quantity, user_id="system"):
+        if self._is_internal_symbol(symbol):
+            return await self._execute_internal(symbol, side, quantity, user_id)
+
+        return await self._execute_cex(symbol, side, quantity)
+
+    async def _execute_internal(self, symbol, side, quantity, user_id):
+        order = await neno_exchange.place_market_order(
+            user_id=user_id,
+            symbol=symbol,
+            side=side,
+            quantity=quantity
+        )
+        return order, None
+
+    async def _execute_cex(self, symbol, side, quantity):
+        return await self.binance.place_market_order(symbol, side, quantity)
+
+    async def get_best_price(self, symbol):
+        if self._is_internal_symbol(symbol):
+            ticker = await neno_exchange.get_ticker(symbol)
+            return ticker, "neno_exchange"
+
+        return await self.binance.get_ticker(symbol)
+
+manager = ConnectorManager()
+
+def get_connector_manager():
+    return manager
+
         
         # NENO Virtual Exchange
         self._neno_exchange: NenoVirtualExchange = get_neno_exchange()
