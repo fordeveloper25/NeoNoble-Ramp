@@ -15,6 +15,7 @@ import hmac
 import hashlib
 import time
 import aiohttp
+
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -28,6 +29,37 @@ from .base_connector import (
     ExchangeBalance,
     MarketTicker
 )
+
+from binance.client import Client
+
+class BinanceConnector:
+
+    def __init__(self):
+        self.client = Client(
+            os.getenv("BINANCE_API_KEY"),
+            os.getenv("BINANCE_API_SECRET")
+        )
+
+    async def place_market_order(self, symbol, side, quantity):
+        order = self.client.create_order(
+            symbol=symbol,
+            side=side.upper(),
+            type="MARKET",
+            quantity=quantity
+        )
+
+        return type("Order", (), {
+            "order_id": order["orderId"],
+            "average_price": float(order["fills"][0]["price"]),
+            "filled_quantity": float(order["executedQty"])
+        }), None
+
+    async def get_ticker(self, symbol):
+        ticker = self.client.get_symbol_ticker(symbol=symbol)
+        return type("Ticker", (), {
+            "last": float(ticker["price"])
+        }), "binance"
+
 
 logger = logging.getLogger(__name__)
 
