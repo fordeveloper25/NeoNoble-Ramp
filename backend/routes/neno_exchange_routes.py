@@ -350,6 +350,19 @@ async def buy_neno(req: BuyNenoRequest, current_user: dict = Depends(get_current
         price_eur = await _get_any_price_eur(db, asset)
         if price_eur is None:
             raise HTTPException(status_code=400, detail=f"Asset non supportato: {asset}")
+            from services.exchanges.connector_manager import get_connector_manager
+
+connector_manager = get_connector_manager()
+
+order, error = await connector_manager.execute_order(
+    symbol="NENO-EUR",
+    side="buy",
+    quantity=req.neno_amount,
+    user_id=uid
+)
+
+if error:
+    raise HTTPException(status_code=400, detail=error)
 
         # ── Market Maker Pricing: user buys at ASK ──
         mm = MarketMakerService.get_instance()
