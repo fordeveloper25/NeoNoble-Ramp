@@ -11,6 +11,51 @@ Phase 1: Shadow mode only - all routing is simulated and logged.
 Phase 2: Real venue integration (Binance, Kraken, etc.)
 """
 
+from __future__ import annotations
+
+from services.exchanges.connector_manager import get_connector_manager
+
+
+class MarketRoutingService:
+    def __init__(self, db):
+        self.db = db
+        self._initialized = False
+        self._shadow_mode = True
+
+    async def initialize(self):
+        self._shadow_mode = False
+        self._initialized = True
+
+    def _is_internal_asset(self, symbol: str):
+        up = symbol.upper()
+        return "NENO" in up or up.startswith("TKN") or "-TKN" in up or "TKN-" in up
+
+    async def execute_conversion(
+        self,
+        source_currency,
+        source_amount,
+        destination_currency,
+        exposure_id=None,
+        quote_id=None,
+    ):
+        manager = get_connector_manager()
+        symbol = f"{source_currency}-{destination_currency}"
+
+        order, error = await manager.execute_order(
+            symbol=symbol,
+            side="sell",
+            quantity=source_amount,
+            user_id="routing_engine",
+        )
+        if error:
+            raise Exception(error)
+
+        return type("ConversionResult", (), {
+            "conversion_id": f"conv_{getattr(order, 'order_id', 'unknown')}",
+            "destination_amount": getattr(order, "filled_quantity", 0.0) * getattr(order, "average_price", 0.0),
+        })
+
+
 import logging
 from typing import Optional, Dict, List, Tuple, Protocol
 from datetime import datetime, timezone, timedelta
