@@ -28,6 +28,28 @@ from typing import Dict, Optional, Tuple, List
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from fastapi import FastAPI
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from services.exchanges.connector_manager import get_connector_manager
+from services.liquidity.routing_service import MarketRoutingService
+
+app = FastAPI()
+
+mongo = AsyncIOMotorClient("mongodb://localhost:27017")
+db = mongo["neonoble"]
+
+routing_service = MarketRoutingService(db)
+
+@app.on_event("startup")
+async def startup():
+    manager = get_connector_manager()
+    await manager.enable_live_trading(user_id="system")
+
+    await routing_service.initialize()
+
+    print("🚀 STEP B LIVE: MARKET MAKER + TREASURY + REAL EXECUTION")
+
 
 from services.provider_interface import (
     BaseProvider,
