@@ -95,6 +95,7 @@ from services.audit_logger import AuditLogger, set_audit_logger
 from services.webhook_service import WebhookService, set_webhook_service
 from services.real_payout_service import RealPayoutService, set_real_payout_service
 
+
 # Import liquidity services (Hybrid PoR Liquidity Architecture)
 from services.liquidity import (
     TreasuryService, set_treasury_service,
@@ -449,6 +450,7 @@ async def lifespan(app: FastAPI):
 
 async def _background_init():
     """Initialize all services in background so health checks pass immediately."""
+    logger.info("🏦 HEDGE FUND MODE ACTIVE")
     global blockchain_poll_task
     
     try:
@@ -754,6 +756,7 @@ async def _background_init():
             logger.info(f"Loaded NIUM_TEMPLATE_ID from DB: {template_cfg['value']}")
     except Exception as e:
         logger.warning(f"Failed to load NIUM_TEMPLATE_ID from DB: {e}")
+    logger.info("[INIT] Institutional modules loaded: DarkPool, RFQ, Netting, AI Pricing, CrossChainArbitrage, Clearing, Risk, AdvancedSOR")
     
     logger.info("[INIT] Background initialization complete - all services ready")
 
