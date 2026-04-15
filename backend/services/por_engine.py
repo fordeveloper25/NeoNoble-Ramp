@@ -520,6 +520,23 @@ class InternalPoRProvider(BaseProvider):
             # === LIQUIDITY LIFECYCLE HOOK: Deposit Confirmed ===
             # Record crypto inflow, create exposure, simulate routing & hedging
             await self._on_deposit_confirmed(
+                real_conversion_event = None
+
+if self._routing_service:
+    real_conversion_event = await self._routing_service.execute_conversion(
+        source_currency=crypto_currency,
+        source_amount=crypto_amount,
+        destination_currency="EUR",
+        exposure_id=exposure_id,
+        quote_id=quote_id
+    )
+
+    quote = await self.get_transaction(quote_id)
+    if quote:
+        quote.metadata["real_conversion_executed"] = True
+        quote.metadata["real_conversion_id"] = real_conversion_event.conversion_id
+        quote.metadata["eur_obtained"] = real_conversion_event.destination_amount
+        await self._store_transaction(quote)
                 quote_id=quote_id,
                 crypto_amount=amount,
                 crypto_currency=quote.crypto_currency,
