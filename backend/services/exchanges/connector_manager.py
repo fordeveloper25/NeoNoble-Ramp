@@ -13,6 +13,7 @@ Provides:
 import os
 import logging
 from services.exchanges.neno_virtual_exchange import neno_exchange
+
 from typing import Optional, Dict, List, Tuple
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -32,11 +33,76 @@ from .coinbase_connector import CoinbaseConnector
 from .mexc_connector import MexcConnector
 from .neno_virtual_exchange import get_neno_exchange, NenoVirtualExchange
 
-logger = logging.getLogger(__name__)
+from __future__ import annotations
+
+from services.exchanges.neno_virtual_exchange import neno_exchange
+from services.exchanges.binance_connector import BinanceConnector
+from services.risk.trade_risk_engine import TradeRiskEngine
 
 
 class ConnectorManager:
-    """
+    def __init__(self):
+        self._enabled = False
+        self._shadow_mode = True
+        self.binance = BinanceConnector()
+        self.risk_engine = TradeRiskEngine()
+
+    async def enable_live_trading(self, user_id="system"):
+        self._enabled = True
+        self._shadow_mode = False
+
+    def _is_internal_symbol(self, symbol: str) -> bool:
+        up = symbol.upper()
+        return "NENO" in up or up.startswith("TKN") or "-TKN" in up or "TKN-" in up
+
+    async def execute_order(self, symbol, side, quantity, user_id="system"):
+        if not self._enabled:
+            return None, "Trading not enabled"
+
+        if self._is_internal_symbol(symbol):
+            ticker, _ = await self.get_best_price(symbol)
+            ref_price = ticker.last if ticker else 0.0
+            notional = quantity * ref_price
+            allowed, reason = await self.risk_engine.validate_notional(notional)
+            if not allowed:
+                return None, reason
+
+            order = await neno_exchange.place_market_order(
+                user_id=user_id,
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+            )
+            return order, None
+
+        return await self._execute_cex_order(symbol, side, quantity)
+
+    async def _execute_cex_order(self, symbol, side, quantity):
+        return await self.binance.place_market_order(symbol, side, quantity)
+
+    async def get_best_price(self, symbol):
+        if self._is_internal_symbol(symbol):
+            ticker = await neno_exchange.get_ticker(symbol)
+            return ticker, "neno_exchange"
+        return await self.binance.get_ticker(symbol)
+
+    async def get_aggregated_balance(self, currency: str):
+        if currency.upper() == "NENO":
+            return await neno_exchange.get_balance(currency)
+        return await self.binance.get_balance(currency)
+
+
+manager = ConnectorManager()
+
+
+def get_connector_manager():
+    return manager
+
+
+logger = logging.getLogger(__name__)
+
+
+"""
     Manages multiple exchange connectors with automatic failover.
     
     Features:
