@@ -13,6 +13,9 @@ Features:
 
 import os
 import logging
+from services.profit.ai_pricing_engine
+import AIPricingEngine
+ai_pricing = AIPricingEngine()
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
@@ -81,7 +84,8 @@ class NenoExchange:
         return {"currency": currency.upper(), "available": available}
 
     async def place_market_order(self, user_id, symbol, side, quantity):
-        base, quote = self._split_symbol(symbol)
+        base_price = self._get_price(symbol)
+        price = ai_pricing.compute_price(base_price,quantity)
         result = self.engine.place_market_order(user_id, symbol, side, quantity)
 
         filled = result["filled_quantity"]
