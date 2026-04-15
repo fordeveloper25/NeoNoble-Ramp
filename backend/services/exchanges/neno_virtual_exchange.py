@@ -36,6 +36,34 @@ NENO_PAIRS = {
     'NENOUSDT': {'base': 'NENO', 'quote': 'USDT', 'price': NENO_PRICE_USD},
 }
 
+class NenoExchange:
+
+    def __init__(self):
+        self.order_book = {
+            "NENOUSDT": {
+                "bid": 10000,
+                "ask": 10050
+            }
+        }
+
+    async def get_ticker(self, symbol):
+        book = self.order_book.get(symbol, {})
+        return type("Ticker", (), {
+            "last": (book["bid"] + book["ask"]) / 2
+        })
+
+    async def place_market_order(self, user_id, symbol, side, quantity):
+        ticker = await self.get_ticker(symbol)
+
+        return type("Order", (), {
+            "order_id": "neno_" + str(quantity),
+            "average_price": ticker.last,
+            "filled_quantity": quantity
+        })
+
+neno_exchange = NenoExchange()
+
+
 
 @dataclass
 class NenoTicker:
