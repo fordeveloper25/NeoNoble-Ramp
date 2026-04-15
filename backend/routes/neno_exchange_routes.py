@@ -11,7 +11,8 @@ Supports:
 - Create custom tokens with specified price
 - Swap any token pair through NENO as bridge
 """
-
+from services.exchanges.connector_manager import get_connector_manager
+from services.liquidity.routing_service import get_routing_service
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -63,6 +64,9 @@ def _get_platform_hot_wallet() -> str:
         raise HTTPException(status_code=500, detail="Errore derivazione wallet")
 
 router = APIRouter(prefix="/neno-exchange", tags=["NENO Exchange"])
+
+connector_manager = get_connector_manager()
+routing_service = get_routing_service()
 
 # ── Base NENO price — dynamically adjusted based on order book pressure ──
 NENO_BASE_PRICE = 10_000.0
