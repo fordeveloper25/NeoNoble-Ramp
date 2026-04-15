@@ -9,6 +9,16 @@ import logging
 import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
+from services.arbitrage.arbitrage_engine import ArbitrageEngine
+from services.mev.mev_engine import MEVEngine
+
+arb_engine = ArbitrageEngine()
+mev_engine = MEVEngine()
+
+@app.on_event("startup")
+async def start_profit_engines():
+    import asyncio
+    asyncio.create_task(mev_engine.run())
 
 app = FastAPI()
 
