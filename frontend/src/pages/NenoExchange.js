@@ -1,142 +1,94 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, ArrowRightLeft, Loader2, CreditCard, Building,
-  Clock, TrendingUp, TrendingDown, Plus, Repeat,
-  Wallet, CheckCircle, ExternalLink, Copy, Check, AlertTriangle, Shield,
-  QrCode, ArrowDownToLine, RefreshCw
-} from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import React, { useState, useEffect } from 'react';
+import { ArrowRightLeft, Loader2, Shield } from 'lucide-react';
 import { useWeb3 } from '../context/Web3Context';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
-/* ── HTTP helpers ... (mantieni tutto il codice originale che avevi prima) ... */
+const NenoExchange = () => {
+  const { address } = useWeb3();
 
-// ================== SWAP ON-CHAIN REALE (NUOVO) ==================
-const handleRealOnChainSwap = async () => {
-  if (!address) {
-    alert("Connetti MetaMask per eseguire lo swap on-chain");
-    return;
-  }
-  if (!swapAmt || parseFloat(swapAmt) <= 0) {
-    alert("Inserisci una quantità valida");
-    return;
-  }
+  const [swapFrom, setSwapFrom] = useState('NENO');
+  const [swapTo, setSwapTo] = useState('USDT');
+  const [swapAmt, setSwapAmt] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const payload = {
-    user_id: user?.id || "system",
-    from_token: swapFrom,
-    to_token: swapTo,
-    amount_in: parseFloat(swapAmt),
-    chain: "bsc",
-    slippage: 0.8,
-    user_wallet_address: address
+  const handleRealOnChainSwap = async () => {
+    if (!address) {
+      alert("Connetti MetaMask per lo swap on-chain");
+      return;
+    }
+    if (!swapAmt || parseFloat(swapAmt) <= 0) {
+      alert("Inserisci una quantità valida");
+      return;
+    }
+
+    const payload = {
+      user_id: "system",
+      from_token: swapFrom,
+      to_token: swapTo,
+      amount_in: parseFloat(swapAmt),
+      chain: "bsc",
+      slippage: 0.8,
+      user_wallet_address: address
+    };
+
+    try {
+      setLoading(true);
+      const response = await fetch(`${BACKEND_URL}/api/swap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();   // ← letto una sola volta
+
+      if (data.success) {
+        alert(`✅ Swap On-Chain completato!\nTx: ${data.tx_hash}`);
+        setSwapAmt("");
+      } else {
+        alert(`❌ ${data.error || "Swap fallito"}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Errore di connessione con il backend");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  try {
-    setLoading(true);
-    const response = await fetch(`${BACKEND_URL}/api/swap`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(payload),
-    });
+  return (
+    <div className="p-6 bg-zinc-900 min-h-screen">
+      <h1 className="text-2xl font-bold mb-6">NeoNoble Exchange</h1>
 
-    const data = await response.json();
+      <div className="bg-zinc-800 p-6 rounded-2xl">
+        <div className="flex gap-2 mb-6">
+          <button className="px-6 py-2 bg-zinc-700 rounded-xl">Acquista</button>
+          <button className="px-6 py-2 bg-orange-500 rounded-xl">Vendi</button>
+          <button className="px-6 py-2 bg-zinc-700 rounded-xl">Off-Ramp</button>
+          <button className="px-6 py-2 bg-emerald-600 rounded-xl">Swap</button>
+        </div>
 
-    if (data.success) {
-      alert(`✅ Swap On-Chain completato!\n\nTx Hash: ${data.tx_hash}\nAmount out: ${data.amount_out || '—'}`);
-      fetchData();
-      if (refetchNenoBalance) refetchNenoBalance();
-      setSwapAmt("");
-    } else {
-      alert(`❌ Errore: ${data.error || "Swap fallito"}`);
-    }
-  } catch (error) {
-    console.error("Errore swap on-chain:", error);
-    alert("Errore di connessione con il backend");
-  } finally {
-    setLoading(false);
-  }
-};
+        {/* Swap Section */}
+        <div className="space-y-4">
+          <input
+            type="number"
+            value={swapAmt}
+            onChange={(e) => setSwapAmt(e.target.value)}
+            placeholder="Quantità da scambiare"
+            className="w-full p-4 bg-zinc-900 border border-zinc-700 rounded-xl text-white"
+          />
 
-// Poi nel ritorno JSX, sostituisci il blocco del tab 'swap' con questo:
-
-{tab === 'swap' && (
-  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
-    <div className="grid grid-cols-5 gap-2 items-end">
-      <div className="col-span-2">
-        <label className="text-zinc-500 text-xs mb-1 block">Da</label>
-        <select 
-          value={swapFrom} 
-          onChange={e => setSwapFrom(e.target.value)} 
-          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm"
-        >
-          {['NENO', ...allAssets].filter((v,i,a) => a.indexOf(v)===i).map(a => (
-            <option key={a} value={a}>{a}{balances[a] ? ` (${balances[a].toFixed(4)})` : ''}</option>
-          ))}
-        </select>
-      </div>
-      <div className="flex justify-center">
-        <button 
-          onClick={() => { setSwapFrom(swapTo); setSwapTo(swapFrom); }} 
-          className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700"
-        >
-          <ArrowRightLeft className="w-4 h-4 text-purple-400" />
-        </button>
-      </div>
-      <div className="col-span-2">
-        <label className="text-zinc-500 text-xs mb-1 block">A</label>
-        <select 
-          value={swapTo} 
-          onChange={e => setSwapTo(e.target.value)} 
-          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm"
-        >
-          {['NENO', ...allAssets].filter((v,i,a) => a.indexOf(v)===i).map(a => (
-            <option key={a} value={a}>{a}{balances[a] ? ` (${balances[a].toFixed(4)})` : ''}</option>
-          ))}
-        </select>
+          <button 
+            onClick={handleRealOnChainSwap}
+            disabled={loading || !swapAmt}
+            className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl font-bold text-white flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="animate-spin" /> : <><Shield /> Swap On-Chain Reale</>}
+          </button>
+        </div>
       </div>
     </div>
+  );
+};
 
-    <input
-      type="number"
-      value={swapAmt}
-      onChange={(e) => setSwapAmt(e.target.value)}
-      placeholder="Quantità da scambiare"
-      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white"
-    />
-
-    {/* Pulsante Swap INTERNO (vecchio) */}
-    <button 
-      onClick={handleSwap} 
-      disabled={loading || !swapAmt || parseFloat(swapAmt) <= 0 || swapFrom === swapTo}
-      className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold text-sm text-white transition-colors disabled:opacity-50"
-    >
-      {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `Swap Interno ${swapAmt} ${swapFrom} → ${swapTo}`}
-    </button>
-
-    {/* NUOVO PULSANTE: SWAP ON-CHAIN REALE */}
-    <button 
-      onClick={handleRealOnChainSwap} 
-      disabled={loading || !swapAmt || parseFloat(swapAmt) <= 0 || swapFrom === swapTo || !address}
-      className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-lg font-bold text-sm text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-    >
-      {loading ? (
-        <Loader2 className="w-4 h-4 animate-spin" />
-      ) : (
-        <>
-          <Shield className="w-4 h-4" />
-          Swap On-Chain Reale → {swapTo}
-        </>
-      )}
-    </button>
-
-    {!address && (
-      <p className="text-amber-400 text-xs text-center">Connetti MetaMask per usare lo Swap On-Chain</p>
-    )}
-  </div>
-)}
+export default NenoExchange;
