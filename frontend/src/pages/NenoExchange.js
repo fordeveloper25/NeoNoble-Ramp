@@ -355,7 +355,58 @@ export default function NenoExchange() {
   const handleCreateToken = () => exec('/api/neno-exchange/create-token', {
     symbol: newSym, name: newName, price_usd: parseFloat(newPrice), total_supply: parseFloat(newSupply) || 1000000,
   });
+  // ================== SWAP ON-CHAIN REALE (NUOVO ENDPOINT) ==================
+const handleRealOnChainSwap = async () => {
+  if (!address) {
+    alert("Connetti MetaMask per eseguire lo swap on-chain");
+    return;
+  }
+  if (!swapAmt || parseFloat(swapAmt) <= 0) {
+    alert("Inserisci una quantità valida");
+    return;
+  }
 
+  const payload = {
+    user_id: user?.id || "system",
+    from_token: swapFrom,
+    to_token: swapTo,
+    amount_in: parseFloat(swapAmt),
+    chain: "bsc",
+    slippage: 0.8,
+    user_wallet_address: address   // ← Indirizzo che riceve i token
+  };
+
+  try {
+    setLoading(true);
+
+    const response = await fetch(`${BACKEND_URL}/api/swap`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      alert(`✅ Swap On-Chain completato!\n\nTx Hash: ${data.tx_hash}\nAmount out: ${data.amount_out || '—'}`);
+      
+      // Aggiorna tutto
+      fetchData();
+      if (refetchNenoBalance) refetchNenoBalance();
+      setSwapAmt("");
+    } else {
+      alert(`❌ Errore: ${data.error || "Swap fallito"}`);
+    }
+  } catch (error) {
+    console.error("Errore swap on-chain:", error);
+    alert("Errore di connessione con il backend");
+  } finally {
+    setLoading(false);
+  }
+};
   const handleForceSync = async () => {
     if (!syncTxHash.trim()) return;
     setSyncing(true);
