@@ -17,7 +17,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://multi-chain-wallet-14.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://neno-swap-live.preview.emergentagent.com").rstrip("/")
 
 # Test credentials
 ADMIN_EMAIL = "admin@neonobleramp.com"

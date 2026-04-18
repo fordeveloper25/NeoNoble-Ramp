@@ -8,7 +8,7 @@ Performs comprehensive end-to-end testing of:
 - REGRESSION: Existing Services (DEX, Transak, Liquidity)
 
 Test Environment:
-- Backend URL: https://multi-chain-wallet-14.preview.emergentagent.com/api
+- Backend URL: https://neno-swap-live.preview.emergentagent.com/api
 - NENO Token: Fixed price €10,000 per token
 - Fee: 1.5%
 
@@ -48,7 +48,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://multi-chain-wallet-14.preview.emergentagent.com/api"
+BACKEND_URL = "https://neno-swap-live.preview.emergentagent.com/api"
 
 class Phase2Phase3Tester:
     def __init__(self):

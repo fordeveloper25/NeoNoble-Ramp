@@ -24,7 +24,7 @@
   },
   "test_credentials": {
     "admin": "admin@neonobleramp.com / Admin1234!",
-    "treasury_owner": "massimo.fornara.2212@gmail.com (TREASURY_USER_ID=de9a3781-b9d2-4b37-922d-2f6959e0f529)"
+    "treasury_owner": "massimo.fornara.2212@gmail.com (TREASURY_USER_ID=neno-swap-live)"
   },
   "seed_data_creation": "None - used existing data",
   "retest_needed": false,

@@ -21,7 +21,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://multi-chain-wallet-14.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://neno-swap-live.preview.emergentagent.com').rstrip('/')
 NENO_CONTRACT = "0xeF3F5C1892A8d7A3304E4A15959E124402d69974"
 TEST_WALLET = "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18"
 

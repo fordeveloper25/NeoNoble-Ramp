@@ -15,7 +15,7 @@ import hashlib
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-BACKEND_URL = "https://multi-chain-wallet-14.preview.emergentagent.com/api"
+BACKEND_URL = "https://neno-swap-live.preview.emergentagent.com/api"
 
 async def run_comprehensive_consolidation_test():
     """Run comprehensive consolidation test"""

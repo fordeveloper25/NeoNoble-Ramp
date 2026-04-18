@@ -15,7 +15,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://multi-chain-wallet-14.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://neno-swap-live.preview.emergentagent.com')
 
 class TestNenoExchangePublicEndpoints:
     """Test public NENO Exchange endpoints (no auth required)"""

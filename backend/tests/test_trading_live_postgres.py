@@ -18,7 +18,7 @@ from datetime import datetime
 # Get backend URL from environment
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://multi-chain-wallet-14.preview.emergentagent.com"
+    BASE_URL = "https://neno-swap-live.preview.emergentagent.com"
 
 
 class TestHealthCheck:

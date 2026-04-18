@@ -13,7 +13,7 @@ import json
 import time
 import sys
 
-API_URL = sys.argv[1] if len(sys.argv) > 1 else "https://multi-chain-wallet-14.preview.emergentagent.com"
+API_URL = sys.argv[1] if len(sys.argv) > 1 else "https://neno-swap-live.preview.emergentagent.com"
 ADMIN_EMAIL = "admin@neonobleramp.com"
 ADMIN_PASS = "Admin1234!"
 
