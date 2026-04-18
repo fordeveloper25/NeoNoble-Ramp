@@ -180,6 +180,62 @@ export default function NenoTradingWidget({ compact = false }) {
       setStatus({ type: 'error', message: 'Inserisci una quantità valida' });
       return;
     }
+    // ================== SWAP ON-CHAIN REALE DAL WIDGET ==================
+const handleRealOnChainSwap = async () => {
+  if (!quantity || parseFloat(quantity) <= 0) {
+    toast.error("Inserisci una quantità valida");
+    return;
+  }
+
+  if (!user?.id) {
+    toast.error("Devi essere loggato per eseguire lo swap");
+    return;
+  }
+
+  const payload = {
+    user_id: user.id,
+    from_token: "NENO",                    // puoi renderlo dinamico se vuoi
+    to_token: selectedPair.symbol.includes("USDT") 
+      ? "0x55d398326f99059fF775485246999027B3197955"   // USDT su BSC
+      : "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c", // BTCB di default
+    amount_in: parseFloat(quantity),
+    chain: "bsc",
+    slippage: 0.8,
+    user_wallet_address: address || ""     // usa l'indirizzo dal Web3Context se disponibile
+  };
+
+  try {
+    setLoading(true);
+
+    const response = await fetch(`${BACKEND_URL}/api/swap`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      toast.success(`✅ Swap On-Chain completato!\nTx: ${data.tx_hash}`);
+      
+      // Aggiorna dati
+      fetchOrders();
+      fetchBalance();
+      setQuantity("");
+    } else {
+      toast.error(data.error || "Swap fallito");
+    }
+  } catch (error) {
+    console.error("Errore swap on-chain:", error);
+    toast.error("Errore di connessione con il backend");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
     setLoading(true);
     setStatus(null);
@@ -518,6 +574,28 @@ export default function NenoTradingWidget({ compact = false }) {
             </>
           )}
         </button>
+
+        {/* Nuovo pulsante: Swap On-Chain Reale */}
+        <button
+          onClick={handleRealOnChainSwap}
+          disabled={loading || !quantity || !address}
+          className="w-full py-3 mt-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl font-bold text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <RefreshCw className="w-5 h-5 animate-spin" />
+          ) : (
+            <>
+              <Shield className="w-5 h-5" />
+              Swap On-Chain Reale
+            </>
+          )}
+        </button>
+
+        {!address && (
+          <p className="text-amber-400 text-xs text-center mt-1">
+            Connetti MetaMask per usare lo Swap On-Chain
+          </p>
+        )}
 
         {/* Recent Orders */}
         <div className="border-t border-gray-800 pt-4 space-y-3">
