@@ -8,4 +8,4 @@ cmds = ["yarn install"]
 cmds = ["yarn build"]
 
 [start]
-cmd = "yarn start"
+cmd = "npx serve -s build -l $PORT"
