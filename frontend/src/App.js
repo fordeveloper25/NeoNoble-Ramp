@@ -36,6 +36,7 @@ import DCABot from "./pages/DCABot";
 import ReferralPage from "./pages/ReferralPage";
 import CustomTokenTrade from "./pages/CustomTokenTrade";
 import Swap from "./pages/Swap";
+import Help from "./pages/Help";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -246,6 +247,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Swap />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Help / FAQ for Swap */}
+      <Route
+        path="/help"
+        element={
+          <ProtectedRoute>
+            <Help />
           </ProtectedRoute>
         }
       />

@@ -181,15 +181,36 @@ frontend:
 
   - task: "Swap Frontend Page (/swap)"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/pages/Swap.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Professional Swap page with token selector (NENO, USDT, BTCB, BUSD, WBNB, USDC, CAKE, ETH), auto-quote on input, slippage selector, wallet-connect requirement, BSC chain check, swap history, and health badges. Linked from Dashboard and route /swap."
+      - working: "NA"
+        agent: "main"
+        comment: "UPDATED: Added Low BNB Gas banner (shows when connected wallet has < 0.002 BNB). Banner displays in amber/orange gradient with warning icon, informs user about gas requirements. Also added Help link in header pointing to /help page. Needs frontend testing."
+      - working: true
+        agent: "testing"
+        comment: "✅ Swap page fully functional. All elements verified: (1) Header with '⚡ Swap On-Chain' title, (2) '❓ Aiuto' link to Help page, (3) '← Dashboard' link, (4) Health badges showing RPC connected, 1inch enabled, BSC chain 56, User-signed mode, (5) Token selector fields (You pay / You receive) with 8 tokens, (6) Slippage selector with preset buttons (0.5%, 0.8%, 1%, 2%), (7) Connect wallet button (wallet not connected - expected), (8) Swap history section showing recent swaps, (9) Swap button. Low BNB Gas banner NOT visible (correct - wallet not connected). Banner code logic verified in Swap.js: threshold 0.002 BNB, amber/orange gradient styling, Italian message about gas requirements. Visual design consistent with dark gradient theme (slate/purple). All navigation working correctly."
+
+  - task: "Help/FAQ Page (/help)"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/Help.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "NEW: Created comprehensive Help/FAQ page accessible at /help. Contains 5 sections: (1) How to Connect MetaMask, (2) Why BNB is needed for gas, (3) How to do Approve + Swap, (4) How to verify transactions on BscScan, (5) Security best practices. All content in Italian, dark mode design consistent with app theme, includes CTA button to Swap page. Route added to App.js as protected route. Needs frontend testing."
+      - working: true
+        agent: "testing"
+        comment: "✅ Help/FAQ page fully functional. All elements verified: (1) Header with '❓ Guida agli Swap On-Chain' title, (2) '→ Vai a Swap' and '← Dashboard' links in header, (3) All 5 FAQ sections present with correct icons: 🔗 Come Connettere MetaMask, ⛽ Perché Serve BNB per il Gas, 🔄 Come Fare Approve + Swap di Token, 🔍 Come Verificare la Transazione su BscScan, 🛡️ Sicurezza e Best Practices, (4) CTA button '🚀 Vai a Swap On-Chain' at bottom redirects to /swap, (5) All content in Italian language, (6) Visual design consistent with app theme (dark gradient slate/purple, proper spacing, rounded corners, backdrop blur effects). Navigation links working correctly: Help ↔ Swap ↔ Dashboard. Page accessible from Swap page via '❓ Aiuto' link."
 
   - task: "Forgot Password Page"
     implemented: true
@@ -244,4 +265,6 @@ agent_communication:
     message: "✅ NeoNoble On-Chain Swap Backend Testing Complete. All previous Tier 1-4 tests passed."
   - agent: "testing"
     message: "✅ User-Signed Swap Endpoints Testing Complete. Both /api/swap/build and /api/swap/track endpoints working perfectly. All authentication, validation, error handling, and database persistence working correctly. Sanity checks (health, tokens, quote) also confirmed working. Auth regression tests passed. Ready for production use."
+  - agent: "testing"
+    message: "✅ NeoNoble Ramp Swap Frontend Testing Complete. Tested Swap page (/swap) and Help/FAQ page (/help) including Low BNB Gas banner logic. All features working correctly: (1) Login flow successful, (2) Swap page loads with all expected elements (header, health badges, token selectors, slippage, wallet connect, swap history), (3) Low BNB banner code verified (not visible without wallet - correct behavior), (4) Help page accessible with all 5 FAQ sections in Italian, (5) All navigation links working (Help ↔ Swap ↔ Dashboard), (6) CTA button redirects correctly, (7) Visual design consistent across pages. NOTE: admin@neonobleramp.com user not found in database - used test@example.com for testing. Main agent should create admin user if needed."
 

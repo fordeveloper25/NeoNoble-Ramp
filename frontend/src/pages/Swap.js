@@ -4,8 +4,10 @@ import { useAccount, useChainId, useSwitchChain, useSendTransaction, useWaitForT
 import { useAuth } from '../context/AuthContext';
 import { useWeb3 } from '../context/Web3Context';
 import { swapApi } from '../api/swap';
+import { parseUnits } from 'viem';
 
 const BSC_CHAIN_ID = 56;
+const LOW_GAS_THRESHOLD = parseUnits('0.002', 18); // 0.002 BNB in wei
 
 function explorerTx(hash) {
   return hash ? `https://bscscan.com/tx/${hash}` : null;
@@ -13,7 +15,7 @@ function explorerTx(hash) {
 
 export default function Swap() {
   const { user } = useAuth();
-  const { openWalletModal, formatAddress } = useWeb3();
+  const { openWalletModal, formatAddress, balance } = useWeb3();
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
@@ -234,6 +236,9 @@ export default function Swap() {
     isSending ||
     waitingReceipt;
 
+  // Check if user has low BNB balance for gas
+  const hasLowGas = isConnected && balance?.value && BigInt(balance.value) < LOW_GAS_THRESHOLD;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 text-white">
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -247,10 +252,41 @@ export default function Swap() {
               Real user-signed swaps on BSC • 1inch + PancakeSwap • funds go straight to your wallet
             </p>
           </div>
-          <Link to="/dashboard" className="text-sm text-slate-300 hover:text-white underline">
-            ← Dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link to="/help" className="text-sm text-slate-300 hover:text-white underline">
+              ❓ Aiuto
+            </Link>
+            <Link to="/dashboard" className="text-sm text-slate-300 hover:text-white underline">
+              ← Dashboard
+            </Link>
+          </div>
         </div>
+
+        {/* Low BNB Gas Warning Banner */}
+        {hasLowGas && (
+          <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-amber-900/40 to-orange-900/40 border border-amber-600/50 backdrop-blur">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div className="flex-1">
+                <h3 className="font-semibold text-amber-200 mb-1">
+                  Saldo BNB Basso
+                </h3>
+                <p className="text-sm text-amber-100/90 leading-relaxed">
+                  Il tuo wallet ha meno di 0.002 BNB. Hai bisogno di BNB per pagare le commissioni gas delle transazioni su BSC.
+                  {' '}
+                  <span className="font-medium">
+                    Ti consigliamo di aggiungere almeno 0.005-0.01 BNB
+                  </span>
+                  {' '}
+                  al tuo wallet prima di effettuare swap.
+                </p>
+                <p className="text-xs text-amber-200/70 mt-2">
+                  💡 Saldo attuale: {balance?.formatted ? `${parseFloat(balance.formatted).toFixed(6)} ${balance.symbol}` : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Health badges */}
         {health && (
