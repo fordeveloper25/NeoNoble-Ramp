@@ -1,0 +1,64 @@
+# Railway Ignore File - Evita confusione nella root
+
+# Node modules
+node_modules/
+**/node_modules/
+
+# Next.js (se presente per errore)
+.next/
+out/
+*.next
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# Environment files
+.env.local
+.env.*.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Test files
+test_*.py
+*_test.py
+tests/
+test_reports/
+
+# Documentation
+*.md
+docs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Files nella ROOT che non servono per deployment
+/app/
+/components/
+/config/
+/hooks/
+/lib/
+/scripts/
+/workers/
+/components.json
+/jsconfig.json
+/postcss.config.js
+/tailwind.config.js
+*.old
+*.backup
