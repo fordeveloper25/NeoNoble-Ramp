@@ -113,14 +113,27 @@ class CexLiquidityProvider:
     ) -> Dict:
         """
         Provide liquidity using:
-        1. On-chain hot wallet transfer (PRIORITY - REAL)
-        2. CEX withdrawal (fallback)
+        1. CEX withdrawal (PRIORITY - from your exchange balance)
+        2. On-chain hot wallet transfer (fallback)
         3. Mock mode (demo)
         """
-        # PRIORITY: Use on-chain transfer if available
+        # PRIORITY: Use CEX withdrawal if configured
+        if self.exchanges and not self.mock_mode:
+            try:
+                logger.info(f"🎯 Using CEX withdrawal for {amount_out} {to_token}")
+                result = await self._provide_liquidity_cex(to_token, amount_out, user_wallet, chain)
+                
+                if result["success"]:
+                    return result
+                    
+                logger.warning(f"CEX withdrawal failed: {result.get('error')}")
+            except Exception as e:
+                logger.warning(f"CEX withdrawal error: {e}")
+        
+        # FALLBACK: Use on-chain transfer if CEX fails
         if self.onchain_service and self.onchain_service.enabled:
             try:
-                logger.info(f"Using on-chain transfer for {amount_out} {to_token}")
+                logger.info(f"Fallback: using on-chain transfer for {amount_out} {to_token}")
                 result = await self.onchain_service.transfer_tokens(
                     token_symbol=to_token,
                     amount=amount_out,
@@ -129,14 +142,8 @@ class CexLiquidityProvider:
                 
                 if result["success"]:
                     return result
-                    
-                logger.warning(f"On-chain transfer failed: {result.get('error')}")
             except Exception as e:
                 logger.warning(f"On-chain transfer error: {e}")
-        
-        # FALLBACK: Try CEX if configured
-        if self.exchanges:
-            return await self._provide_liquidity_cex(to_token, amount_out, user_wallet, chain)
         
         # LAST RESORT: Mock mode
         return await self._provide_liquidity_mock(to_token, amount_out, user_wallet, chain)
