@@ -4,30 +4,30 @@ import axios from 'axios';
 const getBackendURL = () => {
   // 1. Use explicit environment variable if set
   if (process.env.REACT_APP_BACKEND_URL) {
+    console.log('🎯 Using REACT_APP_BACKEND_URL:', process.env.REACT_APP_BACKEND_URL);
     return process.env.REACT_APP_BACKEND_URL;
   }
   
-  // 2. Auto-detect Railway backend from frontend URL
+  // 2. Check if running on Railway
   const hostname = window.location.hostname;
+  console.log('🌐 Current hostname:', hostname);
+  
   if (hostname.includes('railway.app')) {
-    // Railway pattern: frontend-xyz.railway.app → backend-xyz.railway.app
-    // Try to derive backend URL from frontend URL
-    const parts = hostname.split('.');
-    if (parts[0].includes('production') || parts[0].includes('frontend')) {
-      // Replace 'production' or 'frontend' with 'backend'
-      const backendHost = hostname.replace(/production|frontend/, 'backend');
-      return `https://${backendHost}`;
-    }
+    // If on Railway, always use Emergent backend (most reliable)
+    console.log('🚂 Railway detected → using Emergent backend');
+    return 'https://neno-swap-live.preview.emergentagent.com';
   }
   
-  // 3. Fallback to Emergent preview (always works)
+  // 3. Default fallback to Emergent preview (always works)
+  console.log('✅ Using Emergent preview backend');
   return 'https://neno-swap-live.preview.emergentagent.com';
 };
 
 const BACKEND_URL = getBackendURL();
 const API_BASE = `${BACKEND_URL}/api`;
 
-console.log('🚀 Backend URL:', BACKEND_URL);
+console.log('🚀 Final Backend URL:', BACKEND_URL);
+console.log('🎯 Final API Base:', API_BASE);
 
 // Create axios instance with default config
 const api = axios.create({
