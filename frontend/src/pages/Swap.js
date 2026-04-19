@@ -157,10 +157,6 @@ export default function Swap() {
       setError('Please log in first.');
       return;
     }
-    if (!isConnected || !address) {
-      openWalletModal();
-      return;
-    }
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) {
       setError('Enter a valid amount.');
@@ -168,21 +164,42 @@ export default function Swap() {
     }
 
     try {
-      await ensureBsc();
-
-      // 1) Build calldata from backend (using hybrid routing)
+      // 1) Build swap from backend (using hybrid routing)
       setFlow('building');
       setFlowMessage('Fetching best route…');
       const built = await swapApi.hybrid.build({
         fromToken,
         toToken,
         amountIn: amt,
-        userWalletAddress: address,
+        userWalletAddress: address || '0x0000000000000000000000000000000000000000',
         slippage: Number(slippage),
       });
       setLastSwap(built);
 
-      // 2) If ERC-20 approval is required, ask the user to sign it first
+      // 2) Check execution mode
+      const executionMode = built.execution_mode;
+
+      if (executionMode === 'platform' || executionMode === 'platform_cex') {
+        // Platform-executed swap (Market Maker or CEX)
+        setFlow('done');
+        const source = built.source === 'market_maker' ? 'Market Maker' : `CEX ${built.exchange || ''}`;
+        setFlowMessage(
+          `✅ Swap submitted to ${source}! Your ${built.estimated_amount_out?.toFixed(4) || '?'} ${toToken} will arrive in your wallet within 2-5 minutes.`
+        );
+        // Refresh history after a delay
+        setTimeout(() => refreshHistory(), 3000);
+        return;
+      }
+
+      // 3) User-signed mode (DEX swap) - require wallet connection
+      if (!isConnected || !address) {
+        openWalletModal();
+        return;
+      }
+
+      await ensureBsc();
+
+      // 4) If ERC-20 approval is required, ask the user to sign it first
       if (built.needs_approve && built.approve_calldata) {
         setFlow('approving');
         setFlowMessage(`Sign the approval for ${built.from_token} in your wallet…`);
@@ -191,13 +208,11 @@ export default function Swap() {
           data: built.approve_calldata.data,
           value: BigInt(built.approve_calldata.value || '0x0'),
         });
-        // We don't strictly need to wait here — most RPCs will surface the
-        // updated allowance quickly.  Give it 3s for safety.
         await new Promise((r) => setTimeout(r, 3000));
         setFlowMessage(`Approval sent (${approveHash.slice(0, 10)}…). Now sign the swap…`);
       }
 
-      // 3) Send the actual swap tx
+      // 5) Send the actual swap tx
       setFlow('swapping');
       setFlowMessage('Sign the swap transaction in your wallet…');
       const hash = await sendTransactionAsync({
@@ -436,8 +451,6 @@ export default function Swap() {
               >
                 {!user
                   ? 'Login to swap'
-                  : !isConnected
-                  ? 'Connect wallet to swap'
                   : flow === 'building'
                   ? 'Fetching best route…'
                   : flow === 'approving'
@@ -446,6 +459,10 @@ export default function Swap() {
                   ? 'Waiting for swap signature…'
                   : flow === 'tracking' || waitingReceipt
                   ? 'Confirming on-chain…'
+                  : quoteSource === 'market_maker'
+                  ? `🏦 Swap ${fromToken} → ${toToken} (Market Maker)`
+                  : !isConnected
+                  ? 'Connect wallet to swap'
                   : `Swap ${fromToken} → ${toToken}`}
               </button>
 
