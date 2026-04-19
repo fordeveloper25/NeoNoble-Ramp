@@ -1,6 +1,5 @@
 /**
- * NeoNoble Swap API client.
- * Talks to the /api/swap/* endpoints.
+ * NeoNoble Swap API client (USER-SIGNED mode).
  */
 import axios from 'axios';
 
@@ -29,14 +28,18 @@ export const swapApi = {
     });
     return data;
   },
-  execute: async ({ fromToken, toToken, amountIn, userWalletAddress, slippage }) => {
-    const { data } = await swap.post('/execute', {
+  build: async ({ fromToken, toToken, amountIn, userWalletAddress, slippage }) => {
+    const { data } = await swap.post('/build', {
       from_token: fromToken,
       to_token: toToken,
       amount_in: amountIn,
       user_wallet_address: userWalletAddress,
-      ...(slippage ? { slippage } : {}),
+      ...(slippage != null ? { slippage: Number(slippage) } : {}),
     });
+    return data;
+  },
+  track: async (swapId, txHash) => {
+    const { data } = await swap.post('/track', { swap_id: swapId, tx_hash: txHash });
     return data;
   },
   history: async (limit = 50) => (await swap.get(`/history?limit=${limit}`)).data,

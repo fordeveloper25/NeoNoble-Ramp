@@ -1,22 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useAccount, useChainId, useSwitchChain, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
 import { useAuth } from '../context/AuthContext';
 import { useWeb3 } from '../context/Web3Context';
 import { swapApi } from '../api/swap';
 
-const TIER_STYLES = {
-  tier1: 'bg-emerald-600',
-  tier2: 'bg-blue-600',
-  tier3: 'bg-amber-600',
-  tier4: 'bg-purple-600',
-};
-
-const TIER_HINT = {
-  tier1: 'Best price via 1inch aggregator',
-  tier2: 'On-chain via PancakeSwap V2',
-  tier3: 'Direct transfer from platform reserves',
-  tier4: 'Queued for on-chain delivery when liquidity is available',
-};
+const BSC_CHAIN_ID = 56;
 
 function explorerTx(hash) {
   return hash ? `https://bscscan.com/tx/${hash}` : null;
@@ -24,14 +13,16 @@ function explorerTx(hash) {
 
 export default function Swap() {
   const { user } = useAuth();
+  const { openWalletModal, formatAddress } = useWeb3();
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+
   const {
-    address,
-    isConnected,
-    openWalletModal,
-    formatAddress,
-    chainId,
-    refetchNenoBalance,
-  } = useWeb3();
+    sendTransactionAsync,
+    isPending: isSending,
+    reset: resetSend,
+  } = useSendTransaction();
 
   const [tokens, setTokens] = useState([]);
   const [fromToken, setFromToken] = useState('NENO');
@@ -43,14 +34,23 @@ export default function Swap() {
   const [loadingQuote, setLoadingQuote] = useState(false);
   const [quoteError, setQuoteError] = useState(null);
 
-  const [executing, setExecuting] = useState(false);
-  const [lastResult, setLastResult] = useState(null);
-  const [executeError, setExecuteError] = useState(null);
+  // flow state machine: idle | building | approving | swapping | tracking | done | error
+  const [flow, setFlow] = useState('idle');
+  const [flowMessage, setFlowMessage] = useState('');
+  const [lastSwap, setLastSwap] = useState(null);
+  const [txHash, setTxHash] = useState(null);
+  const [error, setError] = useState(null);
 
   const [history, setHistory] = useState([]);
   const [health, setHealth] = useState(null);
 
-  // Bootstrap: load tokens, health, history
+  // Wait for the swap tx receipt when we have a hash
+  const { data: receipt, isLoading: waitingReceipt } = useWaitForTransactionReceipt({
+    hash: txHash,
+    query: { enabled: !!txHash },
+  });
+
+  // --- load tokens + health -----------------------------------------------
   useEffect(() => {
     (async () => {
       try {
@@ -63,6 +63,7 @@ export default function Swap() {
     })();
   }, []);
 
+  // --- history ------------------------------------------------------------
   const refreshHistory = useCallback(async () => {
     if (!user) return;
     try {
@@ -70,12 +71,9 @@ export default function Swap() {
       setHistory(h.history || []);
     } catch (_) {}
   }, [user]);
+  useEffect(() => { refreshHistory(); }, [refreshHistory]);
 
-  useEffect(() => {
-    refreshHistory();
-  }, [refreshHistory]);
-
-  // Auto-quote as user types (debounced)
+  // --- auto-quote ---------------------------------------------------------
   useEffect(() => {
     const amt = parseFloat(amount);
     if (!fromToken || !toToken || fromToken === toToken || !amt || amt <= 0) {
@@ -99,52 +97,122 @@ export default function Swap() {
     return () => clearTimeout(h);
   }, [fromToken, toToken, amount]);
 
+  // --- when receipt arrives, finalize the swap ----------------------------
+  useEffect(() => {
+    if (!receipt || !lastSwap) return;
+    (async () => {
+      try {
+        setFlow('tracking');
+        setFlowMessage('Confirming on BscScan…');
+        const tracked = await swapApi.track(lastSwap.swap_id, receipt.transactionHash);
+        setFlow(tracked.status === 'success' ? 'done' : 'error');
+        setFlowMessage(
+          tracked.status === 'success'
+            ? '✔ Swap confirmed on-chain.'
+            : '✗ Transaction reverted on-chain.'
+        );
+        refreshHistory();
+      } catch (err) {
+        setFlow('error');
+        setError(err?.response?.data?.detail || err.message);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receipt]);
+
+  // --- the real action ----------------------------------------------------
   const swapDirection = () => {
     setFromToken(toToken);
     setToToken(fromToken);
     setQuote(null);
+    setTxHash(null);
+    setLastSwap(null);
+    setFlow('idle');
+    setFlowMessage('');
+    setError(null);
+    resetSend && resetSend();
   };
 
-  const handleExecute = async () => {
-    setExecuteError(null);
-    setLastResult(null);
+  const ensureBsc = async () => {
+    if (chainId !== BSC_CHAIN_ID) {
+      try {
+        await switchChain({ chainId: BSC_CHAIN_ID });
+      } catch (err) {
+        throw new Error('Please switch your wallet to BSC Mainnet.');
+      }
+    }
+  };
+
+  const handleSwap = async () => {
+    setError(null);
+    setTxHash(null);
+    setLastSwap(null);
+    setFlow('idle');
+    setFlowMessage('');
 
     if (!user) {
-      setExecuteError('Devi essere loggato per effettuare uno swap.');
+      setError('Please log in first.');
       return;
     }
     if (!isConnected || !address) {
       openWalletModal();
       return;
     }
-    if (chainId !== 56) {
-      setExecuteError('Passa al network BSC Mainnet (chain 56) nel tuo wallet.');
-      return;
-    }
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) {
-      setExecuteError('Inserisci un importo valido.');
+      setError('Enter a valid amount.');
       return;
     }
 
-    setExecuting(true);
     try {
-      const res = await swapApi.execute({
+      await ensureBsc();
+
+      // 1) Build calldata from backend
+      setFlow('building');
+      setFlowMessage('Fetching best route…');
+      const built = await swapApi.build({
         fromToken,
         toToken,
         amountIn: amt,
         userWalletAddress: address,
         slippage: Number(slippage),
       });
-      setLastResult(res);
-      if (!res.success) setExecuteError(res.error || res.message || 'Swap failed');
-      // Refresh balances + history
-      refetchNenoBalance && refetchNenoBalance();
-      refreshHistory();
+      setLastSwap(built);
+
+      // 2) If ERC-20 approval is required, ask the user to sign it first
+      if (built.needs_approve && built.approve_calldata) {
+        setFlow('approving');
+        setFlowMessage(`Sign the approval for ${built.from_token} in your wallet…`);
+        const approveHash = await sendTransactionAsync({
+          to: built.approve_calldata.to,
+          data: built.approve_calldata.data,
+          value: BigInt(built.approve_calldata.value || '0x0'),
+        });
+        // We don't strictly need to wait here — most RPCs will surface the
+        // updated allowance quickly.  Give it 3s for safety.
+        await new Promise((r) => setTimeout(r, 3000));
+        setFlowMessage(`Approval sent (${approveHash.slice(0, 10)}…). Now sign the swap…`);
+      }
+
+      // 3) Send the actual swap tx
+      setFlow('swapping');
+      setFlowMessage('Sign the swap transaction in your wallet…');
+      const hash = await sendTransactionAsync({
+        to: built.to,
+        data: built.data,
+        value: BigInt(built.value || '0x0'),
+      });
+      setTxHash(hash);
+      setFlowMessage('Swap submitted. Waiting for confirmation…');
+      // The useWaitForTransactionReceipt effect above will handle tracking.
     } catch (err) {
-      setExecuteError(err?.response?.data?.detail || err.message);
-    } finally {
-      setExecuting(false);
+      const msg =
+        err?.shortMessage ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        'Unknown error';
+      setError(msg);
+      setFlow('error');
     }
   };
 
@@ -155,6 +223,16 @@ export default function Swap() {
 
   const estimatedOut = quote?.estimated_amount_out;
   const quoteSource = quote?.source;
+  const buttonDisabled =
+    !amount ||
+    parseFloat(amount) <= 0 ||
+    fromToken === toToken ||
+    flow === 'building' ||
+    flow === 'approving' ||
+    flow === 'swapping' ||
+    flow === 'tracking' ||
+    isSending ||
+    waitingReceipt;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 text-white">
@@ -166,31 +244,28 @@ export default function Swap() {
               <span>⚡</span> Swap On-Chain
             </h1>
             <p className="text-slate-400 mt-1">
-              Real BSC swaps • 1inch + PancakeSwap + platform reserves fallback
+              Real user-signed swaps on BSC • 1inch + PancakeSwap • funds go straight to your wallet
             </p>
           </div>
-          <Link
-            to="/dashboard"
-            className="text-sm text-slate-300 hover:text-white underline"
-          >
+          <Link to="/dashboard" className="text-sm text-slate-300 hover:text-white underline">
             ← Dashboard
           </Link>
         </div>
 
-        {/* Health badge */}
+        {/* Health badges */}
         {health && (
           <div className="mb-6 flex flex-wrap gap-2 text-xs">
             <Badge ok={health.rpc_connected}>
               RPC {health.rpc_connected ? 'connected' : 'down'}
             </Badge>
-            <Badge ok={health.hot_wallet_configured}>
-              Hot wallet {health.hot_wallet_configured ? 'ready' : 'missing'}
-            </Badge>
             <Badge ok={health.oneinch_configured}>
               1inch {health.oneinch_configured ? 'enabled' : 'disabled'}
             </Badge>
             <span className="px-2 py-1 rounded bg-slate-800 text-slate-300">
-              Max {health.max_neno_per_tx} NENO/tx • {health.max_slippage_pct}% slippage max
+              BSC chain {health.chain_id} • max {health.max_slippage_pct}% slippage
+            </span>
+            <span className="px-2 py-1 rounded bg-slate-800 text-slate-300">
+              User-signed mode (you pay gas)
             </span>
           </div>
         )}
@@ -199,12 +274,12 @@ export default function Swap() {
           {/* Swap card */}
           <div className="lg:col-span-3">
             <div className="bg-slate-900/70 backdrop-blur border border-slate-800 rounded-2xl p-6 shadow-2xl">
-              {/* Wallet status */}
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold">Swap</h2>
                 {isConnected ? (
                   <span className="text-xs px-3 py-1 rounded-full bg-emerald-900/60 text-emerald-300">
-                    {formatAddress(address)} {chainId === 56 ? '• BSC' : `• chain ${chainId}`}
+                    {formatAddress ? formatAddress(address) : address}
+                    {chainId === BSC_CHAIN_ID ? ' • BSC' : ` • chain ${chainId}`}
                   </span>
                 ) : (
                   <button
@@ -216,7 +291,6 @@ export default function Swap() {
                 )}
               </div>
 
-              {/* FROM */}
               <TokenField
                 label="You pay"
                 tokens={sortedTokens}
@@ -236,9 +310,8 @@ export default function Swap() {
                 </button>
               </div>
 
-              {/* TO */}
               <TokenField
-                label="You receive"
+                label="You receive (estimated)"
                 tokens={sortedTokens}
                 token={toToken}
                 onTokenChange={setToToken}
@@ -246,38 +319,26 @@ export default function Swap() {
                   loadingQuote
                     ? '…'
                     : estimatedOut != null
-                    ? Number(estimatedOut).toLocaleString(undefined, {
-                        maximumFractionDigits: 8,
-                      })
+                    ? Number(estimatedOut).toLocaleString(undefined, { maximumFractionDigits: 8 })
                     : ''
                 }
                 readOnly
               />
 
-              {/* Quote info */}
               <div className="mt-4 min-h-[52px]">
-                {quoteError && (
-                  <div className="text-sm text-rose-400">⚠ {quoteError}</div>
-                )}
+                {quoteError && <div className="text-sm text-rose-400">⚠ {quoteError}</div>}
                 {quote && (
                   <div className="text-xs text-slate-400 space-y-1">
                     <div>
                       Rate: 1 {fromToken} ≈{' '}
                       <span className="text-slate-200">
-                        {Number(quote.rate).toLocaleString(undefined, {
-                          maximumFractionDigits: 8,
-                        })}{' '}
+                        {Number(quote.rate).toLocaleString(undefined, { maximumFractionDigits: 8 })}{' '}
                         {toToken}
                       </span>
                     </div>
                     <div>
-                      Source:{' '}
-                      <span className="text-slate-200 uppercase">
-                        {quoteSource}
-                      </span>
-                      {quote.note && (
-                        <span className="ml-2 text-amber-400">({quote.note})</span>
-                      )}
+                      Route: <span className="text-slate-200 uppercase">{quoteSource}</span>
+                      {quote.note && <span className="ml-2 text-amber-400">({quote.note})</span>}
                     </div>
                   </div>
                 )}
@@ -312,72 +373,67 @@ export default function Swap() {
 
               {/* Action */}
               <button
-                onClick={handleExecute}
-                disabled={
-                  executing ||
-                  !amount ||
-                  parseFloat(amount) <= 0 ||
-                  fromToken === toToken
-                }
+                onClick={handleSwap}
+                disabled={buttonDisabled}
                 className="mt-6 w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 {!user
                   ? 'Login to swap'
                   : !isConnected
                   ? 'Connect wallet to swap'
-                  : executing
-                  ? 'Processing on-chain…'
+                  : flow === 'building'
+                  ? 'Fetching best route…'
+                  : flow === 'approving'
+                  ? 'Waiting for approval signature…'
+                  : flow === 'swapping'
+                  ? 'Waiting for swap signature…'
+                  : flow === 'tracking' || waitingReceipt
+                  ? 'Confirming on-chain…'
                   : `Swap ${fromToken} → ${toToken}`}
               </button>
 
-              {executeError && (
-                <div className="mt-4 p-3 rounded bg-rose-950/50 border border-rose-800 text-sm text-rose-300">
-                  ⚠ {executeError}
+              {/* Flow status */}
+              {flowMessage && flow !== 'done' && (
+                <div className="mt-4 p-3 rounded bg-slate-800/70 border border-slate-700 text-sm text-slate-200 flex items-center gap-2">
+                  <Spinner /> {flowMessage}
                 </div>
               )}
 
-              {lastResult && lastResult.success && (
-                <div className="mt-4 p-4 rounded bg-emerald-950/40 border border-emerald-700 text-sm space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block text-[10px] px-2 py-0.5 rounded ${
-                        TIER_STYLES[lastResult.tier] || 'bg-slate-700'
-                      }`}
-                    >
-                      {lastResult.tier_label}
-                    </span>
-                    <span className="text-emerald-300">✔ Swap confirmed</span>
-                  </div>
-                  <div className="text-slate-200">
-                    {lastResult.amount_in} {lastResult.from_token} →{' '}
-                    <strong>
-                      {Number(lastResult.amount_out).toLocaleString(undefined, {
-                        maximumFractionDigits: 8,
-                      })}{' '}
-                      {lastResult.to_token}
-                    </strong>
-                  </div>
-                  {lastResult.tx_hash && (
-                    <a
-                      href={explorerTx(lastResult.tx_hash)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block text-emerald-400 underline text-xs break-all"
-                    >
-                      View on BscScan ↗ {lastResult.tx_hash}
-                    </a>
-                  )}
-                  {lastResult.queued && (
-                    <div className="text-amber-300 text-xs">
-                      ⏳ On-chain delivery queued — your platform balance has been
-                      credited instantly.
-                    </div>
-                  )}
-                  <div className="text-xs text-slate-400">
-                    {TIER_HINT[lastResult.tier]}
-                  </div>
+              {/* Error */}
+              {error && (
+                <div className="mt-4 p-3 rounded bg-rose-950/50 border border-rose-800 text-sm text-rose-300">
+                  ⚠ {error}
                 </div>
               )}
+
+              {/* Success */}
+              {flow === 'done' && receipt && (
+                <div className="mt-4 p-4 rounded bg-emerald-950/40 border border-emerald-700 text-sm space-y-2">
+                  <div className="text-emerald-300 font-medium">✔ Swap confirmed on BSC</div>
+                  <div className="text-slate-200">
+                    {lastSwap?.amount_in_human} {lastSwap?.from_token} →{' '}
+                    <strong>
+                      ≈{' '}
+                      {Number(lastSwap?.estimated_amount_out_human).toLocaleString(undefined, {
+                        maximumFractionDigits: 8,
+                      })}{' '}
+                      {lastSwap?.to_token}
+                    </strong>
+                  </div>
+                  <a
+                    href={explorerTx(receipt.transactionHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-emerald-400 underline text-xs break-all"
+                  >
+                    View on BscScan ↗ {receipt.transactionHash}
+                  </a>
+                </div>
+              )}
+
+              <p className="mt-4 text-xs text-slate-500">
+                ℹ You sign the transaction with your own wallet; output tokens arrive directly in your wallet. You need a small amount of BNB for gas.
+              </p>
             </div>
           </div>
 
@@ -386,18 +442,11 @@ export default function Swap() {
             <div className="bg-slate-900/70 backdrop-blur border border-slate-800 rounded-2xl p-6 shadow-xl h-full">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold">Recent swaps</h2>
-                <button
-                  onClick={refreshHistory}
-                  className="text-xs text-slate-400 hover:text-white"
-                >
+                <button onClick={refreshHistory} className="text-xs text-slate-400 hover:text-white">
                   Refresh
                 </button>
               </div>
-              {!user && (
-                <p className="text-sm text-slate-400">
-                  Login to view your swap history.
-                </p>
-              )}
+              {!user && <p className="text-sm text-slate-400">Login to view your swap history.</p>}
               {user && history.length === 0 && (
                 <p className="text-sm text-slate-400">
                   No swaps yet. Your transactions will appear here.
@@ -413,16 +462,17 @@ export default function Swap() {
                       <span className="font-mono text-slate-300">
                         {h.from_token} → {h.to_token}
                       </span>
-                      <StatusBadge status={h.status} tier={h.tier} />
+                      <StatusBadge status={h.status} source={h.source} />
                     </div>
                     <div className="text-slate-400">
                       {h.amount_in} {h.from_token}
-                      {h.amount_out && (
+                      {h.amount_out_estimate && (
                         <>
                           {' '}
                           →{' '}
                           <span className="text-slate-200">
-                            {Number(h.amount_out).toLocaleString(undefined, {
+                            ≈{' '}
+                            {Number(h.amount_out_estimate).toLocaleString(undefined, {
                               maximumFractionDigits: 6,
                             })}{' '}
                             {h.to_token}
@@ -458,9 +508,7 @@ function TokenField({ label, tokens, token, onTokenChange, amount, onAmountChang
   return (
     <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-slate-400 uppercase tracking-wide">
-          {label}
-        </span>
+        <span className="text-xs text-slate-400 uppercase tracking-wide">{label}</span>
       </div>
       <div className="flex items-center gap-3">
         <input
@@ -493,9 +541,7 @@ function Badge({ ok, children }) {
   return (
     <span
       className={`px-2 py-1 rounded ${
-        ok
-          ? 'bg-emerald-900/50 text-emerald-300'
-          : 'bg-rose-900/50 text-rose-300'
+        ok ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'
       }`}
     >
       {ok ? '●' : '○'} {children}
@@ -503,10 +549,16 @@ function Badge({ ok, children }) {
   );
 }
 
-function StatusBadge({ status, tier }) {
+function Spinner() {
+  return (
+    <span className="inline-block w-3 h-3 border-2 border-slate-500 border-t-white rounded-full animate-spin" />
+  );
+}
+
+function StatusBadge({ status, source }) {
   const map = {
-    completed: 'bg-emerald-700',
-    queued: 'bg-amber-700',
+    success: 'bg-emerald-700',
+    built: 'bg-blue-700',
     pending: 'bg-slate-600',
     failed: 'bg-rose-700',
   };
@@ -514,7 +566,7 @@ function StatusBadge({ status, tier }) {
   return (
     <span className={`text-[10px] px-2 py-0.5 rounded ${cls}`}>
       {status}
-      {tier ? ` • ${tier}` : ''}
+      {source ? ` • ${source}` : ''}
     </span>
   );
 }
