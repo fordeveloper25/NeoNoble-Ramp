@@ -66,6 +66,12 @@ export const swapApi = {
       });
       return data;
     },
+    execute: async (swapBuild) => {
+      const { data } = await swap.post('/hybrid/execute', {
+        swap_build: swapBuild,
+      });
+      return data;
+    },
   },
 };
 

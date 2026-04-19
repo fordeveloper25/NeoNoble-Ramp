@@ -39,6 +39,7 @@ router = APIRouter(prefix="/swap", tags=["Swap"])
 
 _engine: Optional[SwapEngineV2] = None
 _hybrid_engine: Optional[HybridSwapEngine] = None
+_db_configured = False
 
 
 def get_engine() -> SwapEngineV2:
@@ -49,23 +50,27 @@ def get_engine() -> SwapEngineV2:
 
 
 def get_hybrid_engine() -> HybridSwapEngine:
-    global _hybrid_engine
-    if _hybrid_engine is None:
-        _hybrid_engine = HybridSwapEngine(None)  # DB will be set later
+    global _hybrid_engine, _db_configured
+    if _hybrid_engine is None or not _db_configured:
+        raise RuntimeError("HybridSwapEngine not initialized. Call set_swap_db first.")
     return _hybrid_engine
 
 
 def set_swap_db(db):
     """Called from server.py at startup to wire the DB."""
-    get_engine().set_db(db)
-    # Also initialize hybrid engine with DB
-    global _hybrid_engine
-    if _hybrid_engine is None:
-        _hybrid_engine = HybridSwapEngine(db)
-    else:
-        _hybrid_engine.db = db
-        _hybrid_engine.swap_engine.set_db(db)
-        _hybrid_engine.market_maker.db = db
+    global _engine, _hybrid_engine, _db_configured
+    
+    # Initialize standard engine
+    if _engine is None:
+        _engine = SwapEngineV2()
+    _engine.set_db(db)
+    
+    # Force re-create hybrid engine with proper DB
+    logger.info("Initializing HybridSwapEngine with DB...")
+    _hybrid_engine = HybridSwapEngine(db)
+    _db_configured = True
+    
+    logger.info("✅ Hybrid Swap Engine configured with DB")
 
 
 # ---------------------------------------------------------------------------
@@ -270,3 +275,51 @@ async def hybrid_swap_build(
     except Exception as e:
         logger.exception("hybrid_swap_build failed")
         raise HTTPException(status_code=500, detail=f"build error: {e}")
+
+
+@router.post("/hybrid/execute")
+async def hybrid_swap_execute(
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Execute a platform swap (Market Maker or CEX).
+    Only for platform-executed swaps, not user-signed DEX swaps.
+    """
+    user_id = current_user.get("user_id") or "unknown"
+    
+    try:
+        swap_build = body.get("swap_build")
+        if not swap_build:
+            raise HTTPException(status_code=400, detail="swap_build required")
+        
+        execution_mode = swap_build.get("execution_mode")
+        
+        if execution_mode not in ["platform", "platform_cex"]:
+            raise HTTPException(
+                status_code=400, 
+                detail="This endpoint is only for platform-executed swaps"
+            )
+        
+        # Execute the swap
+        success, swap_id, details = await get_hybrid_engine().execute_hybrid_swap(
+            swap_build,
+            user_id
+        )
+        
+        if not success:
+            raise HTTPException(status_code=500, detail=details.get("error", "Execution failed"))
+        
+        return {
+            "success": True,
+            "swap_id": swap_id,
+            "status": details.get("status", "pending"),
+            "message": details.get("note", "Swap submitted successfully"),
+            "estimated_delivery_minutes": details.get("execution_eta_minutes", 5)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("hybrid_swap_execute failed")
+        raise HTTPException(status_code=500, detail=f"execution error: {e}")

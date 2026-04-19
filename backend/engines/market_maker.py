@@ -119,6 +119,11 @@ class MarketMaker:
             (success, tx_hash, details)
         """
         try:
+            # Check if DB is configured
+            if self.db is None:
+                logger.error("MarketMaker DB not configured")
+                return False, None, {"error": "Database not configured"}
+            
             # Get price quote
             quote = await self.get_price(from_token, to_token, amount_in)
             if not quote:
@@ -156,7 +161,7 @@ class MarketMaker:
                 "swap_id": swap_id,
                 "status": "pending",
                 "amount_out": quote["amount_out"],
-                "note": "Market maker swap pending execution",
+                "note": "Market maker swap pending execution. Platform will transfer tokens to your wallet soon.",
                 "execution_eta_minutes": 2
             }
             

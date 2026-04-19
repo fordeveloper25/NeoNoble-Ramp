@@ -181,10 +181,15 @@ export default function Swap() {
 
       if (executionMode === 'platform' || executionMode === 'platform_cex') {
         // Platform-executed swap (Market Maker or CEX)
+        setFlow('swapping');
+        setFlowMessage('Submitting swap to platform...');
+        
+        const execResult = await swapApi.hybrid.execute(built);
+        
         setFlow('done');
         const source = built.source === 'market_maker' ? 'Market Maker' : `CEX ${built.exchange || ''}`;
         setFlowMessage(
-          `✅ Swap submitted to ${source}! Your ${built.estimated_amount_out?.toFixed(4) || '?'} ${toToken} will arrive in your wallet within 2-5 minutes.`
+          `✅ Swap submitted to ${source}!\n\nSwap ID: ${execResult.swap_id}\n\nYour ${built.estimated_amount_out?.toFixed(4) || '?'} ${toToken} will arrive in your wallet within ${execResult.estimated_delivery_minutes || 5} minutes.\n\nYou can track this swap in your history.`
         );
         // Refresh history after a delay
         setTimeout(() => refreshHistory(), 3000);
