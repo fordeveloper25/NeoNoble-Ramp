@@ -1,0 +1,81 @@
+═══════════════════════════════════════════════════════════════════
+⚠️  RAILWAY: ERRORE "Nixpacks unable to generate build plan"
+═══════════════════════════════════════════════════════════════════
+
+PROBLEMA:
+Stai cercando di deployare dalla ROOT del repository!
+
+Railway sta vedendo:
+- _old_files/, workers/, app/, backend/, frontend/, etc.
+- E dice: "Non so che tipo di app è questa!"
+
+═══════════════════════════════════════════════════════════════════
+✅ SOLUZIONE: Specifica ROOT DIRECTORY su Railway!
+═══════════════════════════════════════════════════════════════════
+
+DEVI CREARE 2 SERVIZI SEPARATI:
+
+════════════════════════════════════════════════════════════════
+📌 SERVIZIO 1: BACKEND
+════════════════════════════════════════════════════════════════
+
+1. Railway → New Service → GitHub Repo → neonobleramp
+2. Settings → General:
+   ⚠️ ROOT DIRECTORY: /backend   ← IMPORTANTE!!!
+3. Settings → Deploy:
+   - Builder: Nixpacks
+   - Start Command: uvicorn server:app --host 0.0.0.0 --port $PORT
+4. Region: Europe West
+5. Variables:
+   MONGO_URL=<tuo_mongodb>
+   BINANCE_API_KEY=<tua_key>
+   BINANCE_API_SECRET=<tuo_secret>
+
+════════════════════════════════════════════════════════════════
+📌 SERVIZIO 2: FRONTEND
+════════════════════════════════════════════════════════════════
+
+1. Railway → + New Service → GitHub Repo → neonobleramp
+2. Settings → General:
+   ⚠️ ROOT DIRECTORY: /frontend   ← IMPORTANTE!!!
+3. Settings → Deploy:
+   - Builder: Nixpacks
+   - Start Command: yarn start
+4. Region: Europe West
+5. Variables:
+   REACT_APP_BACKEND_URL=https://backend-production-xxx.railway.app
+
+════════════════════════════════════════════════════════════════
+⚠️ NON DEPLOYARE DALLA ROOT!
+════════════════════════════════════════════════════════════════
+
+Questo è un MONOREPO:
+- Root = solo file di configurazione
+- /backend = Python FastAPI
+- /frontend = React
+
+Railway DEVE deployare ciascun servizio SEPARATAMENTE!
+
+════════════════════════════════════════════════════════════════
+✅ RISULTATO ATTESO
+════════════════════════════════════════════════════════════════
+
+Backend Build:
+✅ Nixpacks detected: Python
+✅ Installing requirements.txt
+✅ Start: uvicorn server:app
+
+Frontend Build:
+✅ Nixpacks detected: Node.js (yarn)
+✅ Installing dependencies
+✅ Build: yarn build
+✅ Start: yarn start
+
+════════════════════════════════════════════════════════════════
+📄 GUIDE COMPLETE
+════════════════════════════════════════════════════════════════
+
+Leggi: GUIDA_RAILWAY_DEFINITIVA.md
+      PUSH_GITHUB_E_DEPLOY.md
+
+════════════════════════════════════════════════════════════════

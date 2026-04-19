@@ -1,0 +1,14 @@
+# Nixpacks Configuration
+# This is a MONOREPO - DO NOT build from root!
+# 
+# Services are in:
+# - /backend (Python FastAPI)
+# - /frontend (React)
+#
+# Railway MUST deploy each service with correct Root Directory:
+# Backend: Root Directory = /backend
+# Frontend: Root Directory = /frontend
+
+[phases.setup]
+# This file prevents root builds
+nixPkgs = []
