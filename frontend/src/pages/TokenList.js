@@ -45,7 +45,7 @@ export default function TokenList() {
     finally { setLoading(false); }
   }, [filter, user?.id]);
 
-  useEffect(() => { fetchTokens(); }, [filter]);
+  useEffect(() => { fetchTokens(); }, [fetchTokens, filter]);
 
   const handleRequestListing = async (tokenId, listingType) => {
     setListingLoading(true); setListingError(''); setListingSuccess('');

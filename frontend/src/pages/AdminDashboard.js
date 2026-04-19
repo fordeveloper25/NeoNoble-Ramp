@@ -29,9 +29,9 @@ function PipelineStatusPanel() {
   const [status, setStatus] = useState(null);
   const [fundResult, setFundResult] = useState(null);
   const [payoutCheckResult, setPayoutCheckResult] = useState(null);
-  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
 
   const fetchStatus = useCallback(async () => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     const data = await xhrFetch(`${API}/api/pipeline/status`, { headers: hdrs });
     if (data.running !== undefined) setStatus(data);
   }, []);
@@ -39,6 +39,7 @@ function PipelineStatusPanel() {
   useEffect(() => { fetchStatus(); const iv = setInterval(fetchStatus, 30000); return () => clearInterval(iv); }, [fetchStatus]);
 
   const triggerAutoFund = async () => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     setFundResult(null);
     const data = await xhrFetch(`${API}/api/pipeline/auto-fund`, { method: 'POST', headers: hdrs });
     setFundResult(data);
@@ -46,6 +47,7 @@ function PipelineStatusPanel() {
   };
 
   const triggerPayoutCheck = async () => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     setPayoutCheckResult(null);
     const data = await xhrFetch(`${API}/api/pipeline/auto-payout-check`, { method: 'POST', headers: hdrs });
     setPayoutCheckResult(data);
@@ -123,9 +125,9 @@ function GrowthDashboardPanel() {
   const [data, setData] = useState(null);
   const [revenue, setRevenue] = useState(null);
   const [daily, setDaily] = useState([]);
-  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
 
   useEffect(() => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     Promise.all([
       xhrFetch(`${API}/api/growth/dashboard`, { headers: hdrs }),
       xhrFetch(`${API}/api/growth/revenue`, { headers: hdrs }),
@@ -217,9 +219,9 @@ function GrowthDashboardPanel() {
 function MonetizationPanel() {
   const [cardStats, setCardStats] = useState(null);
   const [arpu, setArpu] = useState(null);
-  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
 
   useEffect(() => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     Promise.all([
       xhrFetch(`${API}/api/card-engine/monetization`, { headers: hdrs }),
       xhrFetch(`${API}/api/growth/arpu`, { headers: hdrs }),
@@ -301,9 +303,8 @@ function RevenueWithdrawPanel() {
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
 
-  const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
-
   const fetchHistory = useCallback(async () => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     try {
       const data = await xhrFetch(`${API}/api/cashout/revenue-history`, { headers: hdrs });
       setHistory(data.withdrawals || []);
@@ -313,6 +314,7 @@ function RevenueWithdrawPanel() {
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   const handleWithdraw = async () => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     setLoading(true); setResult(null);
     try {
       const body = { amount: parseFloat(amount), currency: 'EUR', destination_type: destType };
@@ -339,6 +341,7 @@ function RevenueWithdrawPanel() {
   const [payoutResult, setPayoutResult] = useState(null);
 
   const fetchStripeBalance = useCallback(async () => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     try {
       const data = await xhrFetch(`${API}/api/cashout/stripe-balance`, { headers: hdrs });
       setStripeBalance(data);
@@ -348,6 +351,7 @@ function RevenueWithdrawPanel() {
   useEffect(() => { fetchStripeBalance(); }, [fetchStripeBalance]);
 
   const handleStripeTopup = async () => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     setTopupLoading(true);
     try {
       const data = await xhrFetch(`${API}/api/cashout/stripe-topup`, {
@@ -361,6 +365,7 @@ function RevenueWithdrawPanel() {
   };
 
   const handleSepaPayout = async () => {
+    const hdrs = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` };
     setPayoutLoading(true); setPayoutResult(null);
     try {
       const data = await xhrFetch(`${API}/api/cashout/sepa-payout`, {
