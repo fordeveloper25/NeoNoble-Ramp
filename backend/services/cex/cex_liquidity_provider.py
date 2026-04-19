@@ -42,7 +42,7 @@ class CexLiquidityProvider:
             binance_key = os.getenv('BINANCE_API_KEY')
             binance_secret = os.getenv('BINANCE_API_SECRET')
             
-            if binance_key and binance_secret and binance_key != binance_secret:
+            if binance_key and binance_secret:
                 self.exchanges["binance"] = ccxt.binance({
                     'apiKey': binance_key,
                     'secret': binance_secret,
