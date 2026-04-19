@@ -8,4 +8,4 @@ cmds = ["yarn install"]
 cmds = ["yarn build"]
 
 [start]
-cmd = "npx serve -s build -l $PORT"
+cmd = "node_modules/.bin/http-server build -p $PORT -a 0.0.0.0"

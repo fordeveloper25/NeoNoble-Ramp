@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "npx serve -s build -l $PORT"
+startCommand = "node_modules/.bin/http-server build -p $PORT -a 0.0.0.0"
 healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
