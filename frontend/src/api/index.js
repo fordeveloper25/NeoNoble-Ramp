@@ -1,7 +1,33 @@
 import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// Auto-detect backend URL with intelligent fallback
+const getBackendURL = () => {
+  // 1. Use explicit environment variable if set
+  if (process.env.REACT_APP_BACKEND_URL) {
+    return process.env.REACT_APP_BACKEND_URL;
+  }
+  
+  // 2. Auto-detect Railway backend from frontend URL
+  const hostname = window.location.hostname;
+  if (hostname.includes('railway.app')) {
+    // Railway pattern: frontend-xyz.railway.app → backend-xyz.railway.app
+    // Try to derive backend URL from frontend URL
+    const parts = hostname.split('.');
+    if (parts[0].includes('production') || parts[0].includes('frontend')) {
+      // Replace 'production' or 'frontend' with 'backend'
+      const backendHost = hostname.replace(/production|frontend/, 'backend');
+      return `https://${backendHost}`;
+    }
+  }
+  
+  // 3. Fallback to Emergent preview (always works)
+  return 'https://neno-swap-live.preview.emergentagent.com';
+};
+
+const BACKEND_URL = getBackendURL();
 const API_BASE = `${BACKEND_URL}/api`;
+
+console.log('🚀 Backend URL:', BACKEND_URL);
 
 // Create axios instance with default config
 const api = axios.create({
@@ -9,6 +35,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30 second timeout
 });
 
 // Add token to requests
