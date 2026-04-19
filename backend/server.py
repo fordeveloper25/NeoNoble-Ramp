@@ -54,10 +54,11 @@ logger = logging.getLogger(__name__)
 
 # Validate required environment variables
 def validate_env():
-    required_vars = ['MONGO_URL', 'DB_NAME']
-    missing = [var for var in required_vars if not os.environ.get(var)]
-    if missing:
-        raise ValueError(f"Missing required environment variables: {missing}")
+    # Check for MongoDB URL (Railway may use MONGOURL instead of MONGO_URL)
+    if not os.environ.get('MONGO_URL') and not os.environ.get('MONGOURL'):
+        logger.warning(
+            "⚠️  No MongoDB URL found. Set MONGO_URL or MONGOURL in Railway environment variables."
+        )
     
     # Warn about optional but recommended vars
     if not os.environ.get('API_SECRET_ENCRYPTION_KEY'):
@@ -84,7 +85,12 @@ def validate_env():
 validate_env()
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL')
+if not mongo_url:
+    logger.warning("⚠️  MONGO_URL not set - using Railway development default")
+    # Railway MongoDB format: mongodb://mongo:27017/railway
+    mongo_url = os.environ.get('MONGOURL', 'mongodb://localhost:27017/neonoble_ramp')
+
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'neonoble_ramp')]
 
