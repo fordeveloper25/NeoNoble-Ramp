@@ -11,55 +11,8 @@ Phase 1: Shadow mode only - all routing is simulated and logged.
 Phase 2: Real venue integration (Binance, Kraken, etc.)
 """
 
-from services.institutional.dark_pool import DarkPool
-from services.institutional.rfq_engine import RFQEngine
-from services.profit.advanced_sor import AdvancedSOR
-
 
 from __future__ import annotations
-
-from services.exchanges.connector_manager import get_connector_manager
-
-
-class MarketRoutingService:
-    def __init__(self, db):
-        self.db = db
-        self._initialized = False
-        self._shadow_mode = True
-
-    async def initialize(self):
-        self._shadow_mode = False
-        self._initialized = True
-
-    def _is_internal_asset(self, symbol: str):
-        up = symbol.upper()
-        return "NENO" in up or up.startswith("TKN") or "-TKN" in up or "TKN-" in up
-
-    async def execute_conversion(
-        self,
-        source_currency,
-        source_amount,
-        destination_currency,
-        exposure_id=None,
-        quote_id=None,
-    ):
-        manager = get_connector_manager()
-        symbol = f"{source_currency}-{destination_currency}"
-
-        order, error = await manager.execute_order(
-            symbol=symbol,
-            side="sell",
-            quantity=source_amount,
-            user_id="routing_engine",
-        )
-        if error:
-            raise Exception(error)
-
-        return type("ConversionResult", (), {
-            "conversion_id": f"conv_{getattr(order, 'order_id', 'unknown')}",
-            "destination_amount": getattr(order, "filled_quantity", 0.0) * getattr(order, "average_price", 0.0),
-        })
-
 
 import logging
 from typing import Optional, Dict, List, Tuple, Protocol
@@ -73,61 +26,16 @@ from models.liquidity.routing_models import (
     RoutingStatus,
     ConversionPath,
     MarketConversionEvent,
-    RoutingConfig
+    RoutingConfig,
 )
 
-from services.exchanges.connector_manager import get_connector_manager
+try:
+    from services.exchanges.connector_manager import get_connector_manager
+except Exception:
+    def get_connector_manager():
+        return None
 
-class MarketRoutingService:
-
-    def __init__(self, db):
-        self.dark_pool = DarkPool()
-        self.rfq = RFQEngine()
-        self.sor = AdvancedSOR()
-        self.db = db
-        self._initialized = False
-        self._shadow_mode = True
-
-    async def initialize(self):
-        self._shadow_mode = False
-        self._initialized = True
-
-    def _is_internal_asset(self, symbol: str):
-        up = symbol.upper()
-        return "NENO" in up or up.startswith("TKN")
-
-    async def execute_conversion(
-        self,
-        source_currency,
-        source_amount,
-        destination_currency,
-        exposure_id=None,
-        quote_id=None
-    ):
-        manager = get_connector_manager()
-
-        symbol = f"{source_currency}{destination_currency}"
-
-        if self._is_internal_asset(symbol):
-            order, error = await manager.execute_order(
-                symbol=symbol,
-                side="sell",
-                quantity=source_amount
-            )
-        else:
-            order, error = await manager.execute_order(
-                symbol=symbol,
-                side="sell",
-                quantity=source_amount
-            )
-
-        if error:
-            raise Exception(error)
-
-        return {
-            "conversion_id": "real_" + str(order.order_id),
-            "destination_amount": order.filled_quantity * order.average_price
-        }
+logger = logging.getLogger(__name__)
 
 
 logger = logging.getLogger(__name__)
@@ -318,11 +226,12 @@ class MarketRoutingService:
         
         # Initialize shadow connector (always available)
         self._connectors[RoutingVenue.SHADOW] = ShadowVenueConnector()
-        from services.liquidity.real_venue_connector import RealVenueConnector
+        try:
+            from services.liquidity.real_venue_connector import RealVenueConnector
+            self._connectors[RoutingVenue.CEX] = RealVenueConnector()
+        except Exception as _e:
+            logger.warning("RealVenueConnector unavailable: %s", _e)
 
-self._connectors[RoutingVenue.CEX] = RealVenueConnector()
-
-        
         self._initialized = True
         logger.info(
             f"Market Routing Service initialized:\n"
@@ -337,9 +246,9 @@ self._connectors[RoutingVenue.CEX] = RealVenueConnector()
         
         if config_doc:
             return RoutingConfig(
-                shadow_mode=False
-                enabled_venues=[RoutingVenue.CEX]
-                primary_venue=RoutingVenue.CEX
+                shadow_mode=False,
+                enabled_venues=[RoutingVenue.CEX],
+                primary_venue=RoutingVenue.CEX,
                 neno_conversion_path=config_doc.get("neno_conversion_path", ["NENO", "BNB", "USDT", "EUR"]),
                 max_slippage_pct=config_doc.get("max_slippage_pct", 1.0),
                 max_retries=config_doc.get("max_retries", 3),
@@ -458,13 +367,13 @@ self._connectors[RoutingVenue.CEX] = RealVenueConnector()
             source_currency=source_currency,
             source_amount=source_amount,
             destination_currency=destination_currency,
-            venue=RoutingVenue.CEX
+            venue=RoutingVenue.CEX,
             path=path,
             exposure_id=exposure_id,
             quote_id=quote_id,
             hedge_id=hedge_id,
-            is_shadow=False
-            created_at=now.isoformat()
+            is_shadow=False,
+            created_at=now.isoformat(),
         )
         
         # Get rate snapshot before
@@ -473,53 +382,30 @@ self._connectors[RoutingVenue.CEX] = RealVenueConnector()
         # Execute (shadow or real)
         symbol = f"{source_currency}-{destination_currency}"
 
-# 🔥 1. DARK POOL (ORDINI GRANDI)
-if source_amount > 50000:
-    await self.dark_pool.submit_order("sell", source_amount)
-    match = await self.dark_pool.match()
-    if match["status"] == "matched":
-        event.status = RoutingStatus.COMPLETED
-        event.destination_amount = source_amount
-        return event
+        try:
+            connector = self._connectors.get(self._config.primary_venue)
+            if connector is None:
+                connector = self._connectors.get(RoutingVenue.SHADOW)
+            if connector is not None and hasattr(connector, "execute_conversion"):
+                success, result, error = await connector.execute_conversion(
+                    source_currency, destination_currency, source_amount
+                )
+                if success and result:
+                    event.status = RoutingStatus.COMPLETED
+                    event.destination_amount = result.get("destination_amount", 0.0)
+                    event.executed_rate = result.get("executed_rate", 0.0)
+                    event.venue_order_id = result.get("order_id")
+                    event.completed_at = now.isoformat()
+                else:
+                    event.status = RoutingStatus.FAILED
+                    event.error_message = error or "execution failed"
+            else:
+                event.status = RoutingStatus.FAILED
+                event.error_message = "no connector available"
+        except Exception as exc:
+            event.status = RoutingStatus.FAILED
+            event.error_message = str(exc)
 
-# 🔥 2. RFQ (ISTITUZIONALE)
-if source_amount > 10000:
-    quote = await self.rfq.request_quote(symbol, source_amount)
-    execution = await self.rfq.execute(quote)
-
-    event.status = RoutingStatus.COMPLETED
-    event.destination_amount = source_amount * execution["price"]
-    return event
-
-# 🔥 3. SMART ORDER ROUTING
-venues = [
-    {"venue": "binance", "price": 100},
-    {"venue": "coinbase", "price": 101}
-]
-
-best = await self.sor.route(venues)
-
-connector = self._connectors.get(self._config.primary_venue)
-
-        # 🔥 REAL EXECUTION
-
-success, result, error = await connector.execute_conversion(
-    source_currency,
-    destination_currency,
-    source_amount
-)
-
-if success and result:
-    event.status = RoutingStatus.COMPLETED
-    event.destination_amount = result["destination_amount"]
-    event.executed_rate = result["executed_rate"]
-    event.venue_order_id = result["order_id"]
-    event.completed_at = now.isoformat()
-else:
-    event.status = RoutingStatus.FAILED
-    event.error_message = error
-
-        
         # Get rate snapshot after
         event.rate_snapshot_after = await self._get_rate_snapshot()
         

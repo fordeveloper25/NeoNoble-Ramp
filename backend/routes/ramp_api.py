@@ -9,8 +9,16 @@ Authentication:
 - X-TIMESTAMP: Unix timestamp in seconds  
 - X-SIGNATURE: HMAC-SHA256(timestamp + bodyJson, apiSecret)
 """
-from services.dex import get_dex_service
-from services.exchange import get_connector_manager
+try:
+    from services.dex import get_dex_service
+except Exception:
+    def get_dex_service():
+        return None
+try:
+    from services.exchanges.connector_manager import get_connector_manager
+except Exception:
+    def get_connector_manager():
+        return None
 
 from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel, Field
@@ -44,25 +52,14 @@ hmac_middleware: HMACAuthMiddleware = None
 routing_service = None
 real_payout_service = None
 settlement_service = None
-
-# Real execution services
-routing_service = None
-real_payout_service: RealPayoutService = None
-settlement_service: SettlementService = None
-wallet_service: WalletService = None
-dex_service: DEXService = None
-connector_manager: ConnectorManager = None
+wallet_service = None
+dex_service = None
+connector_manager = None
 
 def set_services(ramp: RampService, api_key_service: PlatformApiKeyService):
     global ramp_service, hmac_middleware
     ramp_service = ramp
     hmac_middleware = HMACAuthMiddleware(api_key_service)
-
-def set_execution_services(routing, payout, settlement):
-    global routing_service, real_payout_service, settlement_service
-    routing_service = routing
-    real_payout_service = payout
-    settlement_service = settlement
 
 def set_por_engine(engine: InternalPoRProvider):
     global por_engine
@@ -70,11 +67,11 @@ def set_por_engine(engine: InternalPoRProvider):
 
 def set_execution_services(
     routing,
-    payout: RealPayoutService,
-    settlement: SettlementService,
-    wallet: WalletService,
-    dex: DEXService,
-    connectors: ConnectorManager
+    payout=None,
+    settlement=None,
+    wallet=None,
+    dex=None,
+    connectors=None,
 ):
     global routing_service, real_payout_service, settlement_service
     global wallet_service, dex_service, connector_manager
@@ -517,120 +514,18 @@ async def process_deposit_por(request: DepositProcessRequest, http_request: Requ
         raise HTTPException(status_code=503, detail="PoR engine not available")
 
     # 1. register confirmed deposit in PoR engine
+    # 1. register confirmed deposit in PoR engine
     quote, error = await por_engine.process_deposit(
-    quote_id=request.quote_id,
-    tx_hash=request.tx_hash,
-    amount=request.amount
-)
-
-# 🔴 REAL EXECUTION WITH FALLBACK
-
-execution = None
-
-# 1. TRY ROUTING SERVICE (internal / smart routing)
-try:
-    execution = await routing_service.execute_trade(
-        from_asset=quote.crypto_currency,
-        to_asset="EUR",
-        amount=quote.crypto_amount
+        quote_id=request.quote_id,
+        tx_hash=request.tx_hash,
+        amount=request.amount,
     )
-except Exception as e:
-    execution = None
-
-# 2. TRY DEX (1inch / PancakeSwap)
-dex_service = get_dex_service()
-
-if dex_service and dex_service.is_enabled():
-    try:
-        dex_result = await dex_service.execute_swap_1inch(
-            source_token=source_token,
-            destination_token=destination_token,
-            amount_wei=int(quote.crypto_amount),
-            min_return=0,
-            quote_id=quote.quote_id
-        )
-
-        if dex_result.status.value == "completed":
-            execution = dex_result
-
-    except Exception as e:
-        execution = None
-
-# 3. TRY CEX CONNECTOR (Binance / Kraken / Coinbase)
-if not execution:
-    connector_manager = get_connector_manager()
-
-    if connector_manager:
-        try:
-            execution = await connector_manager.execute(
-                symbol=f"{quote.crypto_currency}/EUR",
-                side="sell",
-                amount=quote.crypto_amount
-            )
-        except Exception as e:
-            execution = None
-
-# 4. FINAL CHECK
-if not execution:
-    raise Exception("Execution failed across all venues")
-
-
-if error:
-    raise HTTPException(status_code=400, detail=error)
-
-# =========================
-# 🔴 REAL EXECUTION FLOW
-# =========================
-
-# 1. EXECUTION (swap crypto → EUR)
-execution = await routing_service.execute_trade(
-    from_asset=quote.crypto_currency,
-    to_asset="EUR",
-    amount=quote.crypto_amount
-)
-
-# 2. REAL PAYOUT (Stripe)
-payout_result = await real_payout_service.create_payout(
-    quote_id=quote.quote_id,
-    transaction_id=quote.quote_id,
-    amount_eur=amount_eur,
-    reference=f"NENO-{quote.quote_id[:8]}",
-    metadata=quote.metadata
-)
-
-# 3. SETTLEMENT
-await settlement_service.create_settlement(
-    quote_id=quote.quote_id,
-    amount_eur=amount_eur,
-    fee_eur=quote.fee_amount,
-    bank_account=quote.metadata.get("bank_account")
-)
-
-# =========================
-# 🔴 RESPONSE FINALE
-# =========================
-
-response = por_quote_to_response(quote)
-
-response["execution"] = {
-    "status": getattr(execution, "status", None),
-    "tx_hash": getattr(execution, "tx_hash", None)
-}
-
-response["payout"] = {
-    "status": payout_result.status.value if payout_result.status else None,
-    "payout_id": payout_result.payout_id,
-    "reference": payout_result.provider_reference
-}
-
-return response
-
-
-    
     if error:
         raise HTTPException(status_code=400, detail=error)
     
     return por_quote_to_response(quote)
+
+
 
 
 @router.get("/ramp-api-transaction/{quote_id}")

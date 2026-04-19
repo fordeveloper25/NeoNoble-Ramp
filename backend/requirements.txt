@@ -161,3 +161,4 @@ websockets==15.0.1
 yarl==1.22.0
 zipp==3.23.0
 zopfli==0.4.1
+python-binance==1.0.36

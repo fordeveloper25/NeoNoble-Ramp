@@ -35,6 +35,7 @@ import PortfolioTracker from "./pages/PortfolioTracker";
 import DCABot from "./pages/DCABot";
 import ReferralPage from "./pages/ReferralPage";
 import CustomTokenTrade from "./pages/CustomTokenTrade";
+import Swap from "./pages/Swap";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -235,6 +236,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <NenoExchange />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Swap On-Chain (BSC) */}
+      <Route
+        path="/swap"
+        element={
+          <ProtectedRoute>
+            <Swap />
           </ProtectedRoute>
         }
       />

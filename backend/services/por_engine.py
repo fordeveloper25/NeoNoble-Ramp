@@ -542,31 +542,6 @@ class InternalPoRProvider(BaseProvider):
             # === LIQUIDITY LIFECYCLE HOOK: Deposit Confirmed ===
             # Record crypto inflow, create exposure, simulate routing & hedging
             await self._on_deposit_confirmed(
-                real_conversion_event = None
-
-if self._routing_service:
-    real_conversion_event = await self._routing_service.execute_conversion(
-        source_currency=crypto_currency,
-        source_amount=crypto_amount,
-        destination_currency="EUR",
-        exposure_id=exposure_id,
-        quote_id=quote_id
-    )
-
-    quote = await self.get_transaction(quote_id)
-    if quote:
-        quote.metadata["real_conversion_executed"] = True
-        quote.metadata["real_conversion_id"] = real_conversion_event.conversion_id
-        quote.metadata["eur_obtained"] = real_conversion_event.destination_amount
-        from services.clearing.clearing_engine import ClearingEngine
-clearing_engine = ClearingEngine()
-
-clearing_engine.settle({
-    "quote_id": quote_id,
-    "amount": real_conversion_event.destination_amount
-})
-
-        await self._store_transaction(quote)
                 quote_id=quote_id,
                 crypto_amount=amount,
                 crypto_currency=quote.crypto_currency,
@@ -590,20 +565,6 @@ clearing_engine.settle({
             logger.error(f"Error processing deposit: {e}")
             return None, str(e)
 
-    if not quote.metadata.get("real_conversion_executed"):
-    return None, "BLOCKED: No real market execution"
-
-eur_obtained = quote.metadata.get("eur_obtained", 0.0)
-if eur_obtained < quote.net_payout:
-    return None, f"BLOCKED: insufficient converted EUR ({eur_obtained} < {quote.net_payout})"
-
-if self._treasury_service:
-    treasury_summary = await self._treasury_service.get_treasury_summary()
-    eur_available = treasury_summary.get("balances", {}).get("EUR", {}).get("available", 0.0)
-    if eur_available < quote.net_payout:
-        return None, f"Insufficient real EUR liquidity: available={eur_available}, required={quote.net_payout}"
-
-    
     async def execute_settlement(
         self,
         quote_id: str

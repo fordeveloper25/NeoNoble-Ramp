@@ -1,5 +1,3 @@
-from services.exchanges.connector_manager import get_connector_manager
-from services.liquidity.routing_service import MarketRoutingService,set_routing_service
 from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -9,27 +7,40 @@ import logging
 import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
-from services.arbitrage.arbitrage_engine import ArbitrageEngine
-from services.mev.mev_engine import MEVEngine
-from services.institutional.dark_pool import DarkPool
-from services.institutional.rfq_engine import RFQEngine
-from services.treasury.netting_engine import NettingEngine
-from services.profit.ai_pricing_engine import AIPricingEngine
-from services.profit.cross_chain_arbitrage import CrossChainArbitrage
-from services.clearing.clearing_engine import ClearingEngine
-from services.risk.risk_engine import RiskEngine
-from services.profit.advanced_sor import AdvancedSOR
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+_boot_logger = logging.getLogger("boot")
 
 
-arb_engine = ArbitrageEngine()
-mev_engine = MEVEngine()
+def _safe_import(module_path: str, names: list):
+    """Try to import `names` from `module_path`. Returns dict of name→obj (or None)."""
+    out = {n: None for n in names}
+    try:
+        mod = __import__(module_path, fromlist=names)
+        for n in names:
+            out[n] = getattr(mod, n, None)
+    except Exception as e:
+        _boot_logger.warning("[BOOT] optional import failed: %s: %s", module_path, e)
+    return out
 
-@app.on_event("startup")
-async def start_profit_engines():
-    import asyncio
-    asyncio.create_task(mev_engine.run())
 
-app = FastAPI()
+# Heavy profit/trading engines — all OPTIONAL.  If any fails to import we
+# continue so the core product (auth + swap + ramp) stays online.
+_cm = _safe_import("services.exchanges.connector_manager", ["get_connector_manager"])
+get_connector_manager = _cm["get_connector_manager"] or (lambda: None)
+
+_rs = _safe_import("services.liquidity.routing_service", ["MarketRoutingService", "set_routing_service"])
+MarketRoutingService = _rs["MarketRoutingService"]
+set_routing_service = _rs["set_routing_service"] or (lambda *a, **kw: None)
+
+_ae = _safe_import("services.arbitrage.arbitrage_engine", ["ArbitrageEngine"])
+ArbitrageEngine = _ae["ArbitrageEngine"]
+
+_me = _safe_import("services.mev.mev_engine", ["MEVEngine"])
+MEVEngine = _me["MEVEngine"]
+
+arb_engine = ArbitrageEngine() if ArbitrageEngine else None
+mev_engine = MEVEngine() if MEVEngine else None
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -144,7 +155,14 @@ from routes.stripe_payout_routes import (
     set_por_engine as set_stripe_por_engine
 )
 from routes.liquidity_routes import router as liquidity_router
-from routes.swap_routes import router as swap_router
+from routes.swap_routes import router as swap_router, set_swap_db
+
+# Wire DB into the on-chain swap engine (reads secrets from env at runtime)
+try:
+    set_swap_db(db)
+    logger.info("SwapEngine DB wired")
+except Exception as _e:
+    logger.warning("SwapEngine DB wiring failed: %s", _e)
 
 # Import DEX and Transak routes
 from routes.dex_routes import router as dex_router
@@ -846,26 +864,28 @@ async def _background_init():
 
 # Create the main app
 app = FastAPI(
-    # 🔴 AGGIUNGI QUI
+    title="NeoNoble Ramp API",
+    description="Crypto on/off-ramp platform with HMAC-secured API access and BSC blockchain integration",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+# Initialize exchange connector manager (deferred live trading)
 from services.exchanges.connector_manager import get_connector_manager
 
 manager = get_connector_manager()
 
 @app.on_event("startup")
 async def startup():
-    manager = get_connector_manager()
-    
-    await manager.enable_live_trading(user_id="system")
-
-    await routing_service.initialize()
-    set_routing_service(routing_service)
-    
-print("🚀 SYSTEM LIVE: REAL TRADING ENABLED")
-    title="NeoNoble Ramp API",
-    description="Crypto on/off-ramp platform with HMAC-secured API access and BSC blockchain integration",
-    version="2.0.0",
-    lifespan=lifespan
-)
+    try:
+        mgr = get_connector_manager()
+        await mgr.enable_live_trading(user_id="system")
+        await routing_service.initialize()
+        set_routing_service(routing_service)
+        asyncio.create_task(mev_engine.run())
+        logger.info("🚀 SYSTEM LIVE: REAL TRADING ENABLED")
+    except Exception as e:
+        logger.warning(f"[STARTUP] live trading init skipped: {e}")
 
 # Root-level health check for Kubernetes (without /api prefix)
 @app.get("/health")

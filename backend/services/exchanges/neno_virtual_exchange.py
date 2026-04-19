@@ -13,16 +13,13 @@ Features:
 
 import os
 import logging
-from services.profit.ai_pricing_engine
-import AIPricingEngine
+from services.profit.ai_pricing_engine import AIPricingEngine
 ai_pricing = AIPricingEngine()
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from uuid import uuid4
 from decimal import Decimal
-
-from __future__ import annotations
 
 from collections import defaultdict
 from typing import Dict, List
