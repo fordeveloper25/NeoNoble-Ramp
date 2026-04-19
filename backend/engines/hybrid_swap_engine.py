@@ -1,25 +1,30 @@
 """
-Hybrid Swap Engine - Simplified for immediate functionality
-Handles NENO Market Maker @ 10,000€ without DB dependency
+Hybrid Swap Engine - Simplified with CEX Liquidity Integration
+Handles NENO Market Maker @ 10,000€ with real token delivery
 """
 import logging
 from decimal import Decimal
 from typing import Dict, Optional
+
+from services.cex.cex_liquidity_provider import CexLiquidityProvider
 
 logger = logging.getLogger(__name__)
 
 
 class HybridSwapEngine:
     """
-    Simplified Hybrid Swap Engine for NENO Market Maker
-    No DB dependency - works immediately
+    Hybrid Swap Engine for NENO Market Maker with CEX liquidity
     """
     
     def __init__(self):
         self.market_maker_enabled = True
         self.cex_fallback_enabled = True
         self.neno_price_eur = Decimal("10000.0")
-        logger.info(f"✅ HybridSwapEngine initialized (NENO @ {self.neno_price_eur}€)")
+        
+        # Initialize CEX liquidity provider
+        self.cex_provider = CexLiquidityProvider()
+        
+        logger.info(f"✅ HybridSwapEngine initialized (NENO @ {self.neno_price_eur}€) with CEX liquidity")
     
     async def get_quote(
         self,
@@ -109,27 +114,42 @@ class HybridSwapEngine:
         user_id: str
     ) -> tuple[bool, Optional[str], Optional[Dict]]:
         """
-        Execute Market Maker swap
+        Execute Market Maker swap with real CEX liquidity delivery
         Returns: (success, swap_id, details)
         """
         try:
-            quote = await self.get_quote(from_token, to_token, amount_in)
-            
-            if not quote:
-                return False, None, {"error": "Quote unavailable"}
-            
-            # Generate swap ID (simplified - no DB)
+            # Generate swap ID
             import uuid
             swap_id = str(uuid.uuid4())
             
-            logger.info(f"✅ Market Maker swap executed: {swap_id} - {amount_in} {from_token} → {quote['estimated_amount_out']:.4f} {to_token}")
+            logger.info(f"Executing Market Maker swap {swap_id}: {amount_in} {from_token} → {to_token}")
+            
+            # Process swap with CEX liquidity provider
+            result = await self.cex_provider.process_market_maker_swap(
+                amount_in=Decimal(str(amount_in)),
+                from_token=from_token,
+                to_token=to_token,
+                user_wallet=user_wallet,
+                chain="BSC"
+            )
+            
+            if not result["success"]:
+                return False, None, {"error": result.get("error", "Swap execution failed")}
+            
+            logger.info(
+                f"✅ Market Maker swap {swap_id} completed: "
+                f"{amount_in} {from_token} → {result['amount_out']:.4f} {to_token} "
+                f"(mode: {result.get('mode', 'unknown')})"
+            )
             
             return True, swap_id, {
                 "swap_id": swap_id,
-                "status": "pending",
-                "amount_out": quote["estimated_amount_out"],
-                "note": f"Market maker swap pending execution. Tokens will be transferred to {user_wallet} soon.",
-                "execution_eta_minutes": 5
+                "status": "completed" if result.get("mode") == "real" else "simulated",
+                "amount_out": result["amount_out"],
+                "tx_hash": result.get("tx_hash"),
+                "mode": result.get("mode", "unknown"),
+                "note": result.get("note", "Swap processed"),
+                "execution_eta_minutes": 0 if result.get("mode") == "mock" else 30
             }
             
         except Exception as e:

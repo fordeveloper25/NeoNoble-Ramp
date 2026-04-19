@@ -162,3 +162,4 @@ yarl==1.22.0
 zipp==3.23.0
 zopfli==0.4.1
 python-binance==1.0.36
+ccxt==4.2.25
