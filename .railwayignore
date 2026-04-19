@@ -1,5 +1,12 @@
 # Railway Ignore File - Evita confusione nella root
 
+# Docker files (obsoleti, Railway usa Nixpacks)
+Dockerfile
+Dockerfile.*
+.dockerignore
+docker-compose.*
+*.dockerfile
+
 # Node modules
 node_modules/
 **/node_modules/
