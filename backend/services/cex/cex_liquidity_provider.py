@@ -1,6 +1,6 @@
 """
 CEX Liquidity Provider for NeoNoble Ramp
-Handles real token delivery via CEX APIs (Binance, MEXC, Kraken, Coinbase)
+Handles real token delivery via on-chain transfers or CEX APIs
 """
 import os
 import logging
@@ -11,29 +11,53 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# Try to import ccxt (optional)
+# Import on-chain transfer service
+try:
+    from services.onchain_transfer_service import OnChainTransferService
+    ONCHAIN_SERVICE_AVAILABLE = True
+except ImportError:
+    ONCHAIN_SERVICE_AVAILABLE = False
+    logger.warning("OnChainTransferService not available")
+
+# Try to import ccxt (optional for CEX)
 try:
     import ccxt
     CCXT_AVAILABLE = True
 except ImportError:
     CCXT_AVAILABLE = False
-    logger.warning("CCXT not installed. Install with: pip install ccxt")
+    logger.warning("CCXT not installed. CEX fallback disabled.")
 
 
 class CexLiquidityProvider:
     """
-    Provides liquidity for Market Maker swaps via CEX APIs
+    Provides liquidity for Market Maker swaps via on-chain transfers or CEX APIs
+    Priority: On-chain hot wallet → CEX withdrawal → Mock
     """
     
     def __init__(self):
         self.exchanges = {}
         self.neno_price_eur = Decimal("10000.0")
-        self.mock_mode = not CCXT_AVAILABLE
         
-        if CCXT_AVAILABLE:
-            self.load_exchanges()
+        # Initialize on-chain transfer service (PRIORITY)
+        if ONCHAIN_SERVICE_AVAILABLE:
+            self.onchain_service = OnChainTransferService()
+            if self.onchain_service.enabled:
+                logger.info("✅ On-Chain Transfer Service active (REAL MODE)")
+                self.mock_mode = False
+            else:
+                logger.warning("On-Chain Transfer Service not configured")
+                self.mock_mode = True
+                self.onchain_service = None
         else:
-            logger.warning("CEX Liquidity Provider running in MOCK MODE (ccxt not installed)")
+            self.onchain_service = None
+            self.mock_mode = True
+        
+        # Initialize CEX as fallback
+        if CCXT_AVAILABLE and self.mock_mode:
+            self.load_exchanges()
+        
+        if self.mock_mode and not self.exchanges:
+            logger.warning("⚠️  CEX Liquidity Provider running in MOCK MODE")
     
     def load_exchanges(self):
         """Load CEX exchanges from environment variables"""
@@ -88,10 +112,43 @@ class CexLiquidityProvider:
         chain: str = "BSC"
     ) -> Dict:
         """
-        Provide liquidity by withdrawing from CEX to user wallet
+        Provide liquidity using:
+        1. On-chain hot wallet transfer (PRIORITY - REAL)
+        2. CEX withdrawal (fallback)
+        3. Mock mode (demo)
         """
-        if self.mock_mode or not self.exchanges:
-            return await self._provide_liquidity_mock(to_token, amount_out, user_wallet, chain)
+        # PRIORITY: Use on-chain transfer if available
+        if self.onchain_service and self.onchain_service.enabled:
+            try:
+                logger.info(f"Using on-chain transfer for {amount_out} {to_token}")
+                result = await self.onchain_service.transfer_tokens(
+                    token_symbol=to_token,
+                    amount=amount_out,
+                    to_address=user_wallet
+                )
+                
+                if result["success"]:
+                    return result
+                    
+                logger.warning(f"On-chain transfer failed: {result.get('error')}")
+            except Exception as e:
+                logger.warning(f"On-chain transfer error: {e}")
+        
+        # FALLBACK: Try CEX if configured
+        if self.exchanges:
+            return await self._provide_liquidity_cex(to_token, amount_out, user_wallet, chain)
+        
+        # LAST RESORT: Mock mode
+        return await self._provide_liquidity_mock(to_token, amount_out, user_wallet, chain)
+    
+    async def _provide_liquidity_cex(
+        self,
+        to_token: str,
+        amount_out: Decimal,
+        user_wallet: str,
+        chain: str
+    ) -> Dict:
+        """Try CEX withdrawal"""
         
         # Try real CEX withdrawal
         cex_priority = ["binance", "mexc", "kraken"]

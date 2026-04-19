@@ -1,7 +1,8 @@
---extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+aiodns==4.0.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
 aiosignal==1.4.0
+annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.0
 asyncpg==0.31.0
@@ -12,14 +13,17 @@ black==25.12.0
 boto3==1.42.16
 botocore==1.42.16
 brotli==1.2.0
+ccxt==4.2.25
 certifi==2025.11.12
 cffi==2.0.0
 charset-normalizer==3.4.4
 ckzg==2.1.5
 click==8.3.1
+coincurve==21.0.0
 cryptography==46.0.3
 cssselect2==0.9.0
 cytoolz==1.1.0
+dateparser==1.4.0
 distro==1.9.0
 dnspython==2.8.0
 ecdsa==0.19.1
@@ -69,7 +73,7 @@ jq==1.10.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 librt==0.7.4
-litellm>=1.80.0
+litellm==1.80.0
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mccabe==0.7.0
@@ -97,6 +101,7 @@ proto-plus==1.27.2
 protobuf==5.29.6
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
+pycares==5.0.1
 pycodestyle==2.14.0
 pycparser==2.23
 pycryptodome==3.23.0
@@ -115,6 +120,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-jose==3.5.0
 python-multipart==0.0.21
+python_binance==1.0.36
 pytokens==0.3.0
 pytz==2025.2
 pyunormalize==17.0.0
@@ -151,6 +157,7 @@ types-requests==2.32.4.20250913
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 tzdata==2025.3
+tzlocal==5.3.1
 uritemplate==4.2.0
 urllib3==2.6.2
 uvicorn==0.25.0
@@ -162,5 +169,3 @@ websockets==15.0.1
 yarl==1.22.0
 zipp==3.23.0
 zopfli==0.4.1
-python-binance==1.0.36
-ccxt==4.2.25
