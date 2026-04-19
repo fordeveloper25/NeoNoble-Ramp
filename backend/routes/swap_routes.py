@@ -39,7 +39,6 @@ router = APIRouter(prefix="/swap", tags=["Swap"])
 
 _engine: Optional[SwapEngineV2] = None
 _hybrid_engine: Optional[HybridSwapEngine] = None
-_db_configured = False
 
 
 def get_engine() -> SwapEngineV2:
@@ -50,27 +49,19 @@ def get_engine() -> SwapEngineV2:
 
 
 def get_hybrid_engine() -> HybridSwapEngine:
-    global _hybrid_engine, _db_configured
-    if _hybrid_engine is None or not _db_configured:
-        raise RuntimeError("HybridSwapEngine not initialized. Call set_swap_db first.")
+    global _hybrid_engine
+    if _hybrid_engine is None:
+        _hybrid_engine = HybridSwapEngine()  # Simplified - no DB needed
     return _hybrid_engine
 
 
 def set_swap_db(db):
     """Called from server.py at startup to wire the DB."""
-    global _engine, _hybrid_engine, _db_configured
-    
-    # Initialize standard engine
+    global _engine
     if _engine is None:
         _engine = SwapEngineV2()
     _engine.set_db(db)
-    
-    # Force re-create hybrid engine with proper DB
-    logger.info("Initializing HybridSwapEngine with DB...")
-    _hybrid_engine = HybridSwapEngine(db)
-    _db_configured = True
-    
-    logger.info("✅ Hybrid Swap Engine configured with DB")
+    logger.info("✅ Swap engine DB configured")
 
 
 # ---------------------------------------------------------------------------
@@ -301,9 +292,13 @@ async def hybrid_swap_execute(
                 detail="This endpoint is only for platform-executed swaps"
             )
         
-        # Execute the swap
-        success, swap_id, details = await get_hybrid_engine().execute_hybrid_swap(
-            swap_build,
+        # Execute the swap using simplified engine
+        engine = get_hybrid_engine()
+        success, swap_id, details = await engine.execute_swap(
+            swap_build["from_token"],
+            swap_build["to_token"],
+            swap_build["amount_in"],
+            swap_build["user_wallet"],
             user_id
         )
         
