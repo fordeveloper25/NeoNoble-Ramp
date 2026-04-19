@@ -1,4 +1,4 @@
-# Railway Ignore File - Evita confusione nella root
+# Railway Ignore File - Ignora ROOT completamente
 
 # Docker files (obsoleti, Railway usa Nixpacks)
 Dockerfile
@@ -7,14 +7,20 @@ Dockerfile.*
 docker-compose.*
 *.dockerfile
 
-# Node modules
-node_modules/
-**/node_modules/
+# Python files nella ROOT
+*.py
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+pytest.ini
+setup.py
+setup.cfg
 
-# Next.js (se presente per errore)
-.next/
-out/
-*.next
+# Node files nella ROOT (solo in /frontend)
+package.json
+yarn.lock
+package-lock.json
 
 # Build artifacts
 dist/
@@ -25,19 +31,12 @@ build/
 .env.local
 .env.*.local
 
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
 # System files
 .DS_Store
 Thumbs.db
 
 # Git
 .git/
-.gitignore
 
 # Test files
 test_*.py
@@ -55,7 +54,12 @@ docs/
 *.swp
 *.swo
 
-# Files nella ROOT che non servono per deployment
+# OLD Files
+_old_files/
+*.old
+*.backup
+
+# Cartelle ROOT da ignorare (solo /frontend e /backend sono validi)
 /app/
 /components/
 /config/
@@ -63,9 +67,13 @@ docs/
 /lib/
 /scripts/
 /workers/
+/prisma/
+/memory/
+/deploy/
+/fiat/
+
+# File config ROOT da ignorare
 /components.json
 /jsconfig.json
 /postcss.config.js
 /tailwind.config.js
-*.old
-*.backup
