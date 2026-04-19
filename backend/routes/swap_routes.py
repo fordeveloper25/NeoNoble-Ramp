@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from engines.swap_engine_v2 import SwapEngineV2, BuildResult, QuoteResult, TrackResult
+from engines.hybrid_swap_engine import HybridSwapEngine
 from engines.swap_tokens import list_tokens
 from middleware.auth import get_current_user
 
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/swap", tags=["Swap"])
 
 _engine: Optional[SwapEngineV2] = None
+_hybrid_engine: Optional[HybridSwapEngine] = None
 
 
 def get_engine() -> SwapEngineV2:
@@ -46,9 +48,24 @@ def get_engine() -> SwapEngineV2:
     return _engine
 
 
+def get_hybrid_engine() -> HybridSwapEngine:
+    global _hybrid_engine
+    if _hybrid_engine is None:
+        _hybrid_engine = HybridSwapEngine(None)  # DB will be set later
+    return _hybrid_engine
+
+
 def set_swap_db(db):
     """Called from server.py at startup to wire the DB."""
     get_engine().set_db(db)
+    # Also initialize hybrid engine with DB
+    global _hybrid_engine
+    if _hybrid_engine is None:
+        _hybrid_engine = HybridSwapEngine(db)
+    else:
+        _hybrid_engine.db = db
+        _hybrid_engine.swap_engine.set_db(db)
+        _hybrid_engine.market_maker.db = db
 
 
 # ---------------------------------------------------------------------------
@@ -173,3 +190,83 @@ async def swap_history(
     user_id = current_user.get("user_id") or "unknown"
     rows = await get_engine().get_user_history(user_id, limit=limit)
     return {"user_id": user_id, "count": len(rows), "history": rows}
+
+
+# ---------------------------------------------------------------------------
+# HYBRID SWAP ENDPOINTS (DEX + Market Maker + CEX Fallback)
+# ---------------------------------------------------------------------------
+
+@router.get("/hybrid/health")
+async def hybrid_swap_health():
+    """Health check for hybrid swap engine (DEX + Market Maker + CEX)"""
+    return await get_hybrid_engine().get_health()
+
+
+@router.post("/hybrid/quote")
+async def hybrid_swap_quote(body: QuoteRequest):
+    """
+    Get best quote using hybrid routing:
+    1. DEX (1inch → PancakeSwap)
+    2. Market Maker (NENO @ 10,000€)
+    3. CEX fallback (Binance, MEXC, Kraken, Coinbase)
+    """
+    try:
+        result = await get_hybrid_engine().get_quote(
+            body.from_token,
+            body.to_token,
+            float(body.amount_in)
+        )
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="No liquidity available for this pair across DEX, Market Maker, or CEX"
+            )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("hybrid_swap_quote failed")
+        raise HTTPException(status_code=500, detail=f"quote error: {e}")
+
+
+@router.post("/hybrid/build")
+async def hybrid_swap_build(
+    body: BuildRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Build swap using hybrid routing.
+    Returns either:
+    - DEX calldata (user signs in MetaMask)
+    - Market Maker execution details (platform executes)
+    - CEX execution details (platform executes)
+    """
+    user_id = current_user.get("user_id") or "unknown"
+    _rate_check(user_id)
+    
+    slippage = body.slippage if body.slippage is not None else 0.8
+    
+    try:
+        result = await get_hybrid_engine().build_swap(
+            body.from_token,
+            body.to_token,
+            float(body.amount_in),
+            body.user_wallet_address,
+            slippage
+        )
+        
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="Unable to build swap - no liquidity available"
+            )
+        
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("hybrid_swap_build failed")
+        raise HTTPException(status_code=500, detail=f"build error: {e}")
