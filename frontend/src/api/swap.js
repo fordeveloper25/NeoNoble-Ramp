@@ -18,6 +18,7 @@ swap.interceptors.request.use((config) => {
 });
 
 export const swapApi = {
+  // Standard endpoints (DEX only)
   health: async () => (await swap.get('/health')).data,
   tokens: async () => (await swap.get('/tokens')).data,
   quote: async (fromToken, toToken, amountIn) => {
@@ -43,6 +44,29 @@ export const swapApi = {
     return data;
   },
   history: async (limit = 50) => (await swap.get(`/history?limit=${limit}`)).data,
+  
+  // HYBRID endpoints (DEX → Market Maker → CEX Fallback)
+  hybrid: {
+    health: async () => (await swap.get('/hybrid/health')).data,
+    quote: async (fromToken, toToken, amountIn) => {
+      const { data } = await swap.post('/hybrid/quote', {
+        from_token: fromToken,
+        to_token: toToken,
+        amount_in: amountIn,
+      });
+      return data;
+    },
+    build: async ({ fromToken, toToken, amountIn, userWalletAddress, slippage }) => {
+      const { data } = await swap.post('/hybrid/build', {
+        from_token: fromToken,
+        to_token: toToken,
+        amount_in: amountIn,
+        user_wallet_address: userWalletAddress,
+        ...(slippage != null ? { slippage: Number(slippage) } : {}),
+      });
+      return data;
+    },
+  },
 };
 
 export default swapApi;

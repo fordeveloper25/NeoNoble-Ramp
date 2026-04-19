@@ -87,7 +87,8 @@ export default function Swap() {
     setQuoteError(null);
     const h = setTimeout(async () => {
       try {
-        const q = await swapApi.quote(fromToken, toToken, amt);
+        // Use hybrid endpoint for intelligent routing (DEX → Market Maker → CEX)
+        const q = await swapApi.hybrid.quote(fromToken, toToken, amt);
         setQuote(q);
       } catch (err) {
         setQuoteError(err?.response?.data?.detail || err.message);
@@ -169,10 +170,10 @@ export default function Swap() {
     try {
       await ensureBsc();
 
-      // 1) Build calldata from backend
+      // 1) Build calldata from backend (using hybrid routing)
       setFlow('building');
       setFlowMessage('Fetching best route…');
-      const built = await swapApi.build({
+      const built = await swapApi.hybrid.build({
         fromToken,
         toToken,
         amountIn: amt,
@@ -364,7 +365,7 @@ export default function Swap() {
               <div className="mt-4 min-h-[52px]">
                 {quoteError && <div className="text-sm text-rose-400">⚠ {quoteError}</div>}
                 {quote && (
-                  <div className="text-xs text-slate-400 space-y-1">
+                  <div className="text-xs text-slate-400 space-y-2">
                     <div>
                       Rate: 1 {fromToken} ≈{' '}
                       <span className="text-slate-200">
@@ -372,10 +373,30 @@ export default function Swap() {
                         {toToken}
                       </span>
                     </div>
-                    <div>
-                      Route: <span className="text-slate-200 uppercase">{quoteSource}</span>
-                      {quote.note && <span className="ml-2 text-amber-400">({quote.note})</span>}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span>Route:</span>
+                      {/* Source Badge */}
+                      {quoteSource === 'market_maker' ? (
+                        <span className="px-2 py-1 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-semibold">
+                          🏦 Market Maker (NENO @ 10.000€)
+                        </span>
+                      ) : quoteSource?.startsWith('cex_') ? (
+                        <span className="px-2 py-1 rounded-full bg-blue-600 text-white text-xs font-semibold">
+                          🏛️ CEX {quoteSource.replace('cex_', '').toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full bg-emerald-600 text-white text-xs font-semibold uppercase">
+                          ⚡ {quoteSource || 'DEX'}
+                        </span>
+                      )}
+                      {quote.note && <span className="text-amber-400 text-xs">({quote.note})</span>}
                     </div>
+                    {/* Show EUR price if Market Maker */}
+                    {quote.price_eur && (
+                      <div className="text-amber-200 font-medium">
+                        💶 Prezzo fisso NENO: {Number(quote.price_eur).toLocaleString()}€
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
