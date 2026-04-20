@@ -10,32 +10,13 @@ Modalita` operative (automatiche):
    `STO_NAV_ORACLE`, `POLYGON_RPC_URL` → gli endpoint on-chain diventano
    attivi e leggono/costruiscono tx reali.
 
-Endpoints:
-    # Pubblici (no auth)
-    GET    /api/sto/health
-    GET    /api/sto/public-info         # nome, simbolo, NAV, supply, total raised
-    POST   /api/sto/lead                # pre-registrazione landing
-
-    # Investitore (JWT)
-    POST   /api/sto/kyc/submit
-    GET    /api/sto/kyc/status
-    GET    /api/sto/portfolio           # balance + claimable revenue + redemption requests
-    POST   /api/sto/redemption/request  # build tx per MetaMask
-    GET    /api/sto/redemption/my       # lista mie richieste
-    POST   /api/sto/revenue/claim-build # build tx claim distribution
-
-    # Admin (JWT + role check stub — estendere in prod)
-    POST   /api/sto/admin/whitelist/add
-    POST   /api/sto/admin/mint-build
-    POST   /api/sto/admin/redemption/approve
-    POST   /api/sto/admin/redemption/reject
-    POST   /api/sto/admin/nav/update-build
-    POST   /api/sto/admin/revenue/distribute-build
-    GET    /api/sto/admin/leads
-    GET    /api/sto/admin/report/holders   # CSV export
+Tutte le chiamate web3 sync sono wrappate con asyncio.to_thread per non
+bloccare l'event loop FastAPI. Rate limit su /lead (3 req/min per IP).
+Admin check via JWT role claim ('admin').
 """
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import json
@@ -52,6 +33,7 @@ from pydantic import BaseModel, EmailStr, Field
 from web3 import Web3
 
 from middleware.auth import get_current_user
+from utils.rate_limiter import rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sto", tags=["STO"])
@@ -144,9 +126,9 @@ def require_deployed(s: _StoState):
 
 
 def require_admin(user: dict):
-    # Stub: in prod sostituire con check role == ADMIN
-    email = (user or {}).get("email", "")
-    if not email.endswith("neonobleramp.com"):
+    """Role-based admin check via JWT role claim (populated from users.role in DB)."""
+    role = (user or {}).get("role", "").lower()
+    if role not in ("admin", "superadmin"):
         raise HTTPException(403, "admin only")
 
 
@@ -213,6 +195,12 @@ class RevClaimBuildIn(BaseModel):
     distribution_id: int
 
 
+class BroadcastIn(BaseModel):
+    subject: str = Field(..., min_length=3, max_length=200)
+    html: str = Field(..., min_length=10, max_length=50_000)
+    only_accepts_marketing: bool = True
+
+
 # ---------------------------------------------------------------------------
 # Public endpoints
 # ---------------------------------------------------------------------------
@@ -254,12 +242,14 @@ async def public_info():
     try:
         t = s.token()
         o = s.oracle()
-        name = t.functions.name().call()
-        symbol = t.functions.symbol().call()
-        supply = t.functions.totalSupply().call()
-        nav = o.functions.navPerToken().call()
-        eff = o.functions.effectiveFrom().call()
-        rhash = o.functions.reportHash().call()
+        name, symbol, supply, nav, eff, rhash = await asyncio.gather(
+            asyncio.to_thread(t.functions.name().call),
+            asyncio.to_thread(t.functions.symbol().call),
+            asyncio.to_thread(t.functions.totalSupply().call),
+            asyncio.to_thread(o.functions.navPerToken().call),
+            asyncio.to_thread(o.functions.effectiveFrom().call),
+            asyncio.to_thread(o.functions.reportHash().call),
+        )
     except Exception as e:
         raise HTTPException(500, f"on-chain read error: {e}")
     return {
@@ -276,7 +266,7 @@ async def public_info():
     }
 
 
-@router.post("/lead")
+@router.post("/lead", dependencies=[Depends(rate_limit(max_calls=3, window_seconds=60, key_prefix="sto_lead"))])
 async def lead_capture(body: LeadIn):
     """Pre-registrazione pubblica. Nessun auth: raccoglie lead per go-live."""
     s = get_state()
@@ -346,9 +336,11 @@ async def portfolio(
         t = s.token()
         o = s.oracle()
         rs = s.revshare()
-        bal = t.functions.balanceOf(Web3.to_checksum_address(wallet)).call()
-        nav = o.functions.navPerToken().call()
-        distro_count = rs.functions.distributionsCount().call()
+        bal, nav, distro_count = await asyncio.gather(
+            asyncio.to_thread(t.functions.balanceOf(Web3.to_checksum_address(wallet)).call),
+            asyncio.to_thread(o.functions.navPerToken().call),
+            asyncio.to_thread(rs.functions.distributionsCount().call),
+        )
     except Exception as e:
         raise HTTPException(500, f"read: {e}")
 
@@ -357,10 +349,12 @@ async def portfolio(
     start = max(0, distro_count - 24)
     for i in range(start, distro_count):
         try:
-            claimed = rs.functions.hasClaimed(Web3.to_checksum_address(wallet), i).call()
+            claimed = await asyncio.to_thread(
+                rs.functions.hasClaimed(Web3.to_checksum_address(wallet), i).call
+            )
             if claimed:
                 continue
-            d = rs.functions.distributions(i).call()
+            d = await asyncio.to_thread(rs.functions.distributions(i).call)
             amount, supply_at, _, timestamp = d
             if supply_at == 0:
                 continue
@@ -601,3 +595,95 @@ async def admin_report_holders(user: dict = Depends(get_current_user)):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=holders.csv"},
     )
+
+
+@router.get("/admin/leads/export")
+async def admin_leads_export(user: dict = Depends(get_current_user)):
+    """CSV export di tutte le lead pre-registrazione."""
+    require_admin(user)
+    s = get_state()
+    if s.db is None:
+        raise HTTPException(503, "db not ready")
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["email", "full_name", "country", "amount_range", "wallet_address",
+                "accepts_marketing", "created_at", "updated_at", "source"])
+    async for d in s.db.sto_leads.find({}, {"_id": 0}).sort("created_at", -1):
+        w.writerow([
+            d.get("email", ""), d.get("full_name", ""), d.get("country", ""),
+            d.get("amount_range", ""), d.get("wallet_address", ""),
+            "yes" if d.get("accepts_marketing") else "no",
+            d.get("created_at", ""), d.get("updated_at", ""), d.get("source", ""),
+        ])
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=sto_leads.csv"},
+    )
+
+
+@router.post("/admin/leads/broadcast")
+async def admin_leads_broadcast(body: BroadcastIn, user: dict = Depends(get_current_user)):
+    """
+    Invia un'email broadcast a tutti i lead (oppure solo a quelli con
+    accepts_marketing=true). Usa Resend via email_service. In assenza di
+    RESEND_API_KEY (dev), le chiamate vengono loggate come stub.
+    """
+    require_admin(user)
+    s = get_state()
+    if s.db is None:
+        raise HTTPException(503, "db not ready")
+
+    # Lazy import per non rompere test se resend manca
+    try:
+        from services.email_service import get_email_service
+    except Exception as e:
+        raise HTTPException(500, f"email service missing: {e}")
+
+    svc = get_email_service()
+    if svc is None:
+        logger.warning("broadcast: email service not initialized (stub mode)")
+
+    query = {"accepts_marketing": True} if body.only_accepts_marketing else {}
+    emails = []
+    async for d in s.db.sto_leads.find(query, {"_id": 0, "email": 1}):
+        if d.get("email"):
+            emails.append(d["email"])
+
+    sent, failed = 0, 0
+    errors = []
+    for email in emails:
+        try:
+            if svc is None:
+                logger.info("[email stub] to=%s subject=%r", email, body.subject)
+                sent += 1
+                continue
+            ok = await svc.send_email(
+                to_email=email,
+                subject=body.subject,
+                html_content=body.html,
+            )
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+        except Exception as e:
+            failed += 1
+            errors.append({"to": email, "error": str(e)})
+
+    # Log broadcast
+    try:
+        await s.db.sto_broadcasts.insert_one({
+            "subject": body.subject,
+            "recipients_count": len(emails),
+            "sent": sent,
+            "failed": failed,
+            "only_marketing": body.only_accepts_marketing,
+            "sent_by": user.get("email"),
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.warning("broadcast log failed: %s", e)
+
+    return {"recipients": len(emails), "sent": sent, "failed": failed, "errors": errors[:20]}

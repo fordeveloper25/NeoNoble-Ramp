@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 50 STO hardening — backend testing complete. 18/18 pytest tests pass (71.9s). Validated rate limiter on POST /api/sto/lead (3/60s per-IP, 4th -> 429 with Retry-After), per-IP shared bucket (different email still 429), pydantic validation (422), JWT role-based admin auth (ADMIN -> 200, USER -> 403, no JWT -> 401/403), CSV export with attachment header, broadcast endpoint (subject<3 -> 422, html<10 -> 422, valid -> {recipients,sent,failed,errors}), and regression on /api/sto/health, /api/sto/public-info, /api/sto/portfolio (deployed=false), /api/sto/kyc/submit, /api/swap/hybrid/health, /api/launchpad/health.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/sto/lead", "issue": "Rate limiter dependency runs BEFORE pydantic body validation, so requests with invalid payload still consume a slot in the per-IP bucket. Could be abused by attackers to trigger 429 for legitimate users on same NAT/proxy IP. Consider validating body before rate limit, or use a separate bucket for failed validations."},
+      {"endpoint": "POST /api/sto/admin/leads/broadcast", "issue": "Sequential loop awaits svc.send_email per recipient. For >100 leads this blocks; consider asyncio.gather with bounded semaphore for batched sends."},
+      {"endpoint": "Rate limiter (utils/rate_limiter.py)", "issue": "In-memory dict — does not work across multiple worker processes/pods. Documented in module docstring; flag for production: switch to Redis. Also no eviction of empty buckets -> small memory leak per unique IP."},
+      {"endpoint": "POST /api/sto/admin/leads/broadcast", "issue": "When RESEND_API_KEY is set (current env), real emails will be dispatched to opted-in test leads (email addresses ending in @example.com). Resend will likely fail delivery silently but the API returns sent>=1. No test-mode flag."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration50_sto_hardening.py",
+    "/app/test_reports/pytest/iteration50_sto.xml"
+  ],
+  "action_items": [
+    "(Optional/non-blocking) Move pydantic validation before rate-limit dependency (or split bucket for invalid payloads) to prevent abuse.",
+    "(Optional) Add a test-mode/dry-run flag on /admin/leads/broadcast to avoid real Resend dispatch when RESEND_API_KEY is set.",
+    "(Production) Replace in-memory SlidingWindowLimiter with Redis-backed limiter for multi-instance deploys; add periodic cleanup of empty deque entries.",
+    "(Production) Use X-Forwarded-For (with trusted proxy validation) for client IP — current code uses request.client.host which behind ingress may resolve to ingress IP, making bucket effectively global."
+  ],
+  "critical_code_review_comments": [
+    "rate_limiter.py: request.client.host may return the K8s ingress/proxy IP rather than the real client IP behind LB; combined with global in-memory bucket this can degrade to a single shared bucket for ALL users in production. Recommend trusting X-Forwarded-For with allow-list of trusted proxies.",
+    "sto_routes.py admin_leads_broadcast: per-email await blocks; for large lists wrap with asyncio.gather + semaphore.",
+    "require_admin: correctly compares role.lower() in {'admin','superadmin'}. ADMIN claim from JWT verified working.",
+    "sto_routes.py: web3 sync calls correctly wrapped in asyncio.to_thread (good).",
+    "Email service stub mode: when svc is None it increments sent counter — acceptable per spec but should also persist a 'mode=stub' marker on the broadcast log row for auditability.",
+    "No _id leakage observed — all DB reads use projection {'_id':0}."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration50_sto_hardening.py"],
+  "success_rate": {"backend": "100%", "frontend": "N/A (backend-only request)"},
+  "test_credentials": "admin@neonobleramp.com / Admin123! (role=ADMIN). Non-admin user auto-registered per run with prefix test_nonadmin_<rand>@example.com / Test1234! and role=USER.",
+  "seed_data_creation": "Per-test-run: 1 non-admin user, 3+ STO lead docs (test_nonadmin_*, lead_*@example.com), 1 KYC submission, 1 broadcast log row (subject='[TEST iter50] Subject'). All test data prefixed/identifiable.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test file at /app/backend/tests/test_iteration50_sto_hardening.py. Rate-limit tests live in TestRateLimit and SLEEP 65s upfront to clear the per-IP bucket from earlier tests in same suite — keep that sleep if extending. RESEND_API_KEY is currently set in /app/backend/.env so broadcast actually attempts to send via Resend (test addresses are @example.com so Resend should reject delivery but API still returns sent>=1). require_admin uses role.lower() ∈ {'admin','superadmin'}; JWT carries role='ADMIN'.",
+  "rca of the issue": "No bugs found requiring fix. Minor design observations recorded under backend_issues.minor and action_items."
+}

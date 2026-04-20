@@ -153,21 +153,106 @@ Output: indirizzi dei 6 contratti. Copiali nelle env del backend NeoNoble
 ## Deploy su Polygon Mainnet
 
 > ⚠️ **Non deployare in mainnet prima di:**
-> 1. Aver passato tutti i test locali
+> 1. Aver passato tutti i test locali (`yarn test` → 9/9 PASS)
 > 2. Aver deployato su Amoy e testato il flow end-to-end (subscription → redemption → revenue share) con almeno 2-3 investitori di test
 > 3. **Audit smart contract** (OpenZeppelin, Certik, Quantstamp) — **obbligatorio** prima di emettere token con soldi reali
 > 4. Avvocato approva il prospetto e le regole di compliance (country list, lockup, maxHolders)
 
-```bash
-# 1. Ricompilare con le regole finali approvate dall'avvocato (env)
-# 2. Assicurarsi che il wallet deployer abbia ~5 MATIC per il gas
-# 3. Verificare SETTLEMENT_TOKEN_POLYGON = indirizzo USDC native ufficiale
-#    (0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
+### Passi deploy Polygon Mainnet
 
+```bash
+# 1. Verificare l'ambiente
+cd /app/contracts/sto
+yarn test                                # 9/9 PASS obbligatorio
+yarn compile
+
+# 2. Setup .env di produzione
+cat > .env <<EOF
+PRIVATE_KEY=0x...                        # Wallet deployer con >= 5 MATIC
+POLYGON_RPC_URL=https://polygon-rpc.com  # Oppure Alchemy/Infura
+POLYGONSCAN_API_KEY=XXXXXXX              # Per verifica source
+STO_TOKEN_NAME=NeoNoble Revenue Share Token
+STO_TOKEN_SYMBOL=NNRS
+SETTLEMENT_TOKEN_POLYGON=0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359  # USDC nativo Polygon
+INITIAL_NAV=250000000                    # 250 USDC (6 dec) per token
+MAX_HOLDERS=149                          # < 150 per esenzione art. 100-bis TUF
+LOCKUP_UNTIL=<timestamp 12 mesi>
+TREASURY_ADDRESS=0x...                   # Wallet tesoreria segregato
+EOF
+
+# 3. Simulazione dry-run su fork Polygon (OPZIONALE ma consigliato)
+#    Hardhat network fork per testare il deploy senza spendere MATIC reali.
+
+# 4. Deploy effettivo
 yarn deploy:polygon
+
+# Output atteso: 6 indirizzi Polygon mainnet.
+# Annotarli su documento sicuro (password manager condiviso team).
+
+# 5. Verifica sorgente Polygonscan (obbligatorio)
+export REGISTRY=0x...
+export COMPLIANCE=0x...
+export TOKEN=0x...
+export ORACLE=0x...
+export REDEMPTION=0x...
+export REVSHARE=0x...
+yarn verify:polygon
+
+# 6. Country allowlist (eseguire in Remix o script separato)
+#    Country codes ISO 3166-1 numeric:
+#    IT=380, DE=276, FR=250, ES=724, NL=528, BE=056, AT=040,
+#    LU=442, IE=372, PT=620, FI=246, SE=752, DK=208, CH=756
+#    Chiamare compliance.setCountryAllowed(code, true) per ciascuno.
+
+# 7. Configurazione backend NeoNoble
+#    Aggiungere a /app/backend/.env (o Railway env):
+cat <<EOF
+POLYGON_RPC_URL=https://polygon-rpc.com
+POLYGON_CHAIN_ID=137
+STO_TOKEN_ADDRESS=0x...
+STO_REGISTRY_ADDRESS=0x...
+STO_NAV_ORACLE=0x...
+STO_REDEMPTION_VAULT=0x...
+STO_REVSHARE_VAULT=0x...
+STO_SETTLEMENT_TOKEN=0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359
+STO_TOKEN_NAME=NeoNoble Revenue Share Token
+STO_TOKEN_SYMBOL=NNRS
+STO_NOMINAL_EUR=250
+RESEND_API_KEY=re_xxxxx                  # Per broadcast email lead
+EOF
+#    Poi: sudo supervisorctl restart backend
+
+# 8. Smoke test produzione
+curl https://<tuo-dominio>/api/sto/health    # atteso: deployed=true
+curl https://<tuo-dominio>/api/sto/public-info  # atteso: phase="live"
 ```
 
-Costo stimato del deploy in mainnet: ~1–3 MATIC (~€0.50–€1.50).
+### Costo deploy stimato
+
+| Voce | Costo MATIC | Costo EUR (MATIC ~€0.50) |
+|---|---|---|
+| IdentityRegistry | ~0.15 | €0.08 |
+| DefaultCompliance | ~0.20 | €0.10 |
+| NenoSecurityToken | ~0.50 | €0.25 |
+| NAVOracle | ~0.15 | €0.08 |
+| RedemptionVault | ~0.25 | €0.13 |
+| RevenueShareVault | ~0.20 | €0.10 |
+| Wiring (6 tx) | ~0.10 | €0.05 |
+| Country allowlist (~10 tx) | ~0.15 | €0.08 |
+| **TOTALE** | **~1.70 MATIC** | **~€0.85** |
+
+Prevedere 3-5 MATIC nel wallet deployer per margine.
+
+### Post-deploy checklist
+
+- [ ] Indirizzi salvati su documento sicuro (password manager condiviso)
+- [ ] Polygonscan verification OK per tutti e 6 i contratti
+- [ ] Country allowlist configurata
+- [ ] Frontend `/sto/public-info` ritorna `phase=live`
+- [ ] Backend admin può chiamare `/api/sto/admin/whitelist/add` con successo
+- [ ] Treasury alimenta riserva con 100 USDC test → `RedemptionVault.fund()`
+- [ ] Test dry-run con 1 investitore pilota (amico whitelisted) subscription 100 USDC → mint 0.4 token → richiesta redemption → claim
+- [ ] Email broadcast ai lead (`/admin/sto/leads`) per annunciare go-live
 
 ---
 
