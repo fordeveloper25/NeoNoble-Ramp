@@ -37,6 +37,9 @@ import ReferralPage from "./pages/ReferralPage";
 import CustomTokenTrade from "./pages/CustomTokenTrade";
 import Swap from "./pages/Swap";
 import Help from "./pages/Help";
+import LaunchpadList from "./pages/LaunchpadList";
+import LaunchpadCreate from "./pages/LaunchpadCreate";
+import LaunchpadToken from "./pages/LaunchpadToken";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -343,6 +346,32 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ReferralPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Launchpad (bonding curve token factory) */}
+      <Route
+        path="/launchpad"
+        element={
+          <ProtectedRoute>
+            <LaunchpadList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/launchpad/create"
+        element={
+          <ProtectedRoute>
+            <LaunchpadCreate />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/launchpad/:address"
+        element={
+          <ProtectedRoute>
+            <LaunchpadToken />
           </ProtectedRoute>
         }
       />

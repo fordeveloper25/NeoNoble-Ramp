@@ -1,0 +1,52 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [{"name":"_platformFeeRecipient","type":"address"}],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function", "name": "owner", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"address"}]
+  },
+  {
+    "type": "function", "name": "platformFeeRecipient", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"address"}]
+  },
+  {
+    "type": "function", "name": "deployFee", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "allTokens", "stateMutability": "view",
+    "inputs": [{"type":"uint256"}], "outputs": [{"type":"address"}]
+  },
+  {
+    "type": "function", "name": "allTokensLength", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "getTokensByCreator", "stateMutability": "view",
+    "inputs": [{"name":"creator","type":"address"}],
+    "outputs": [{"type":"address[]"}]
+  },
+  {
+    "type": "function", "name": "createToken", "stateMutability": "payable",
+    "inputs": [
+      {"name":"name","type":"string"},
+      {"name":"symbol","type":"string"},
+      {"name":"metadataURI","type":"string"}
+    ],
+    "outputs": [{"name":"tokenAddr","type":"address"}]
+  },
+  {
+    "type": "event", "name": "TokenCreated", "anonymous": false,
+    "inputs": [
+      {"indexed": true, "name":"token","type":"address"},
+      {"indexed": true, "name":"creator","type":"address"},
+      {"indexed": false, "name":"name","type":"string"},
+      {"indexed": false, "name":"symbol","type":"string"},
+      {"indexed": false, "name":"metadataURI","type":"string"},
+      {"indexed": false, "name":"timestamp","type":"uint256"}
+    ]
+  }
+]

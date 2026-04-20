@@ -319,6 +319,27 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Launchpad Quick Access */}
+              <div className="mb-6 p-4 bg-gradient-to-r from-purple-600/20 to-amber-600/20 border border-purple-500/30 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-amber-500 rounded-lg flex items-center justify-center text-white font-bold text-lg">
+                      🚀
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium">Launchpad — Crea il tuo token</h3>
+                      <p className="text-gray-400 text-xs">Bonding curve su BSC, zero collateral — fee deploy ~0.05 BNB</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Link to="/launchpad" data-testid="launchpad-link"
+                      className="px-4 py-2 bg-gradient-to-r from-purple-500 to-amber-600 hover:from-purple-600 hover:to-amber-700 text-white rounded-lg font-medium text-sm transition-colors">
+                      Open Launchpad
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
               {/* NENO Trading Quick Access */}
               <div className="mb-6 p-4 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-xl">
                 <div className="flex items-center justify-between">

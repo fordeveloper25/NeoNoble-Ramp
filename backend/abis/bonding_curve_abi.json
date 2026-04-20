@@ -1,0 +1,125 @@
+[
+  {
+    "type": "function", "name": "name", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"string"}]
+  },
+  {
+    "type": "function", "name": "symbol", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"string"}]
+  },
+  {
+    "type": "function", "name": "decimals", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint8"}]
+  },
+  {
+    "type": "function", "name": "totalSupply", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "balanceOf", "stateMutability": "view",
+    "inputs": [{"type":"address"}], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "creator", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"address"}]
+  },
+  {
+    "type": "function", "name": "metadataURI", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"string"}]
+  },
+  {
+    "type": "function", "name": "graduated", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"bool"}]
+  },
+  {
+    "type": "function", "name": "virtualBnbReserve", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "virtualTokenReserve", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "realBnbReserve", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "realTokenReserve", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "currentPriceWei", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "marketCapWei", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "getTokensOut", "stateMutability": "view",
+    "inputs": [{"name":"bnbInGross","type":"uint256"}],
+    "outputs": [
+      {"name":"tokensOut","type":"uint256"},
+      {"name":"bnbAfterFees","type":"uint256"}
+    ]
+  },
+  {
+    "type": "function", "name": "getBnbOut", "stateMutability": "view",
+    "inputs": [{"name":"tokensIn","type":"uint256"}],
+    "outputs": [
+      {"name":"bnbOut","type":"uint256"},
+      {"name":"userReceives","type":"uint256"}
+    ]
+  },
+  {
+    "type": "function", "name": "buy", "stateMutability": "payable",
+    "inputs": [{"name":"minTokensOut","type":"uint256"}],
+    "outputs": []
+  },
+  {
+    "type": "function", "name": "sell", "stateMutability": "nonpayable",
+    "inputs": [
+      {"name":"tokensIn","type":"uint256"},
+      {"name":"minBnbOut","type":"uint256"}
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function", "name": "approve", "stateMutability": "nonpayable",
+    "inputs": [{"type":"address"},{"type":"uint256"}],
+    "outputs": [{"type":"bool"}]
+  },
+  {
+    "type": "function", "name": "GRADUATION_BNB", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "function", "name": "TOKENS_ON_CURVE", "stateMutability": "view",
+    "inputs": [], "outputs": [{"type":"uint256"}]
+  },
+  {
+    "type": "event", "name": "Buy", "anonymous": false,
+    "inputs": [
+      {"indexed":true,"name":"buyer","type":"address"},
+      {"indexed":false,"name":"bnbIn","type":"uint256"},
+      {"indexed":false,"name":"tokensOut","type":"uint256"},
+      {"indexed":false,"name":"priceAfter","type":"uint256"}
+    ]
+  },
+  {
+    "type": "event", "name": "Sell", "anonymous": false,
+    "inputs": [
+      {"indexed":true,"name":"seller","type":"address"},
+      {"indexed":false,"name":"tokensIn","type":"uint256"},
+      {"indexed":false,"name":"bnbOut","type":"uint256"},
+      {"indexed":false,"name":"priceAfter","type":"uint256"}
+    ]
+  },
+  {
+    "type": "event", "name": "Graduated", "anonymous": false,
+    "inputs": [
+      {"indexed":false,"name":"bnbCollected","type":"uint256"},
+      {"indexed":false,"name":"tokensForLp","type":"uint256"}
+    ]
+  }
+]

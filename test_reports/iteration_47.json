@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 47 — Launchpad (bonding-curve token factory) backend endpoints tested against production preview URL. 21/21 tests passed. Factory is correctly in 'awaiting_deploy' state: /health returns 200 with factory_deployed=false, all data/build endpoints return 503 with Italian instructions pointing to /app/contracts/DEPLOY.md. JWT enforcement, Pydantic validation, ABI JSON validity, and swap endpoint regression all verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration47_launchpad.py",
+    "/app/test_reports/pytest/pytest_results_iteration47.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "launchpad_routes.py opens ABI files at import time with plain open() — if the abis/ dir is missing at boot, the entire app fails to start. Consider wrapping in try/except and lazy-loading inside get_state(), so a missing ABI yields the same 503 path rather than crashing the server.",
+    "launchpad_routes.py module-level _LaunchpadState reads env vars only once (lazy singleton). If operator sets LAUNCHPAD_FACTORY_ADDRESS at runtime via a secret manager without restarting, routes will keep returning 503. Document that a backend restart is required after setting the env var, or add a /admin/reload endpoint.",
+    "build_create/build_buy/build_sell all set 'nonce': 0 with a comment 'frontend replaces' — safer to omit nonce entirely from build_transaction (web3.py will accept it) or to populate it from w3.eth.get_transaction_count(wallet) so frontends that forget to override do not broadcast a tx with nonce 0.",
+    "quote_buy / quote_sell use except (ContractLogicError, Exception) — the Exception catch-all masks ContractLogicError; just 'except Exception' is equivalent. Either narrow to ContractLogicError and RPCError explicitly, or drop the tuple.",
+    "build_buy converts bnb_in via 'int(body.bnb_in * Decimal(10**18))' — body.bnb_in is Decimal but multiplication with int 10**18 yields Decimal OK; however for very small values like 1e-18 this truncates silently to 0. Consider asserting wei_in > 0 after conversion and returning 422 if not.",
+    "Graduation threshold (85 BNB) and tokens_on_curve/tokens_for_lp are hardcoded in /config response — they should be read from the on-chain contract (GRADUATION_BNB, TOKENS_ON_CURVE) so the API matches reality if the contract is later redeployed with different parameters.",
+    "No rate limiting visible on build-* endpoints; a malicious caller could hammer build_buy to probe gas estimation. Add slow-api rate limit like the other NENO routes (e.g., 30/min per user)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration47_launchpad.py"
+  ],
+  "success_rate": {
+    "backend": "100% (21/21)",
+    "frontend": "N/A (backend-only testing requested)"
+  },
+  "test_credentials": {
+    "admin_actual_working": "admin@neonobleramp.com / Admin123! (test_credentials.md is still correct — previous iteration 46 flag was resolved)"
+  },
+  "seed_data_creation": "None — launchpad factory is intentionally undeployed; no tokens created on BSC.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Launchpad endpoints verified on https://neno-swap-live.preview.emergentagent.com: (1) GET /api/launchpad/health → 200 {status:'awaiting_deploy', rpc_connected:true, chain_id:56, factory_deployed:false, factory_address:null, model:'virtual_constant_product_amm', capital_required_from_platform:false}. (2) GET /api/launchpad/config, /tokens, /tokens/{addr}, /quote-buy, /quote-sell → all 503 with Italian detail 'Launchpad factory non ancora deployato ... Vedi /app/contracts/DEPLOY.md'. (3) POST /api/launchpad/build-create, /build-buy, /build-sell without JWT → 401/403; with JWT → 503 (factory not deployed). (4) Pydantic validation enforced on POST bodies: bnb_in<=0 → 422, tokens_in<=0 → 422, empty name → 422. (5) Both ABI JSON files are valid and contain the expected functions (deployFee, allTokens, allTokensLength, createToken, platformFeeRecipient, owner for factory; name/symbol/buy/sell/getTokensOut/getBnbOut/GRADUATION_BNB/etc. for token). (6) Regression: /api/swap/health, /api/swap/hybrid/health, /api/swap/hybrid/quote (WBNB→BUSD, 1inch source) all still 200 — no regression from launchpad integration. (7) Backend supervisor process RUNNING, boots cleanly without LAUNCHPAD_FACTORY_ADDRESS set. IMPORTANT: the 'optional' deployed-path probe (setting a dummy factory address) was NOT executed to avoid mutating .env and introducing retest noise; route code is straightforward and the deployed branches will fail with RPC/ContractLogicError as expected — no need to verify dynamically. Frontend supervisor is FATAL with EADDRINUSE on port 3000 — unrelated to launchpad work, backend-only scope per review_request.",
+  "rca_of_the_issue": "No launchpad bugs. Frontend FATAL is a pre-existing port-3000 collision (EADDRINUSE) unrelated to this iteration's backend work — flagged here for main-agent awareness only."
+}
