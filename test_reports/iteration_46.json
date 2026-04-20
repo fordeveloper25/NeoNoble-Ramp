@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 46 — USER-SIGNED DEX swap backend tests. 14/14 passed. All hybrid and non-hybrid swap endpoints verified on the production preview URL against real 1inch + real BSC RPC + real PancakeSwap router. Zero platform-capital model confirmed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/app/memory/test_credentials.md", "issue": "Stale admin password 'Admin1234!' — actual working password is 'Admin123!' (also matches review request). File should be corrected to avoid future testing agents failing login."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_swap_user_signed_dex.py",
+    "/app/test_reports/pytest/pytest_results_iteration46.xml"
+  ],
+  "action_items": [
+    "Correct /app/memory/test_credentials.md: admin password is 'Admin123!' (not 'Admin1234!'). The review_request and live backend both confirm Admin123!."
+  ],
+  "critical_code_review_comments": [
+    "swap_routes.py /hybrid/quote docstring still mentions 'Market Maker (NENO @ 10,000€)' and 'CEX fallback (Binance, MEXC, Kraken, Coinbase)', but the hybrid engine is now pure user-signed DEX. Update the docstring so it matches the new architecture and does not mislead future readers/API consumers.",
+    "swap_routes.py /hybrid/build docstring still advertises 'Market Maker' and 'CEX execution details (platform executes)'. In user-signed mode, execution_mode is always 'on-chain'. Docstring cleanup recommended.",
+    "hybrid_swap_engine.execute_swap() is kept as a stub returning a tuple — but /hybrid/execute route no longer calls it (returns 410 directly). The dead method can be removed for clarity.",
+    "swap_routes.py — the ledger insert inside _save_build does not use idempotency key; if /hybrid/build is retried with the same inputs, multiple 'built' ledger rows will appear. Consider deduping on (user_id, user_wallet, from_token, to_token, amount_in) within short window, or exposing an Idempotency-Key header like the other NENO routes.",
+    "Section banner in swap_routes.py still reads 'HYBRID SWAP ENDPOINTS (DEX + Market Maker + CEX Fallback)' — update to 'HYBRID SWAP ENDPOINTS (User-signed DEX)' to reflect reality."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_swap_user_signed_dex.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14)",
+    "frontend": "N/A (backend-only testing requested)"
+  },
+  "test_credentials": {
+    "admin_actual_working": "admin@neonobleramp.com / Admin123!"
+  },
+  "seed_data_creation": "None — track test uses a synthetic 0xaaaa... tx hash which correctly persists a 'pending' ledger row in db.swaps.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "USER-SIGNED DEX swap model fully verified on BSC: (1) /api/swap/health → rpc_connected=true, oneinch_configured=true, chain_id=56. (2) /api/swap/tokens returns all 8 BSC tokens (NENO, USDT, BTCB, BUSD, WBNB, USDC, CAKE, ETH); WBNB address is canonical 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c. (3) /api/swap/hybrid/health returns status=operational, mode=user_signed_dex, capital_required=false. (4) /api/swap/hybrid/quote returns non-zero estimated_amount_out with source='1inch' for NENO→USDT, WBNB→BUSD, CAKE→USDT. (5) /api/swap/hybrid/build (JWT required) returns execution_mode='on-chain', valid 42-char router 'to', 0x-prefixed calldata, needs_approve flag + approve_calldata when allowance<amount; swap_id persisted. (6) /api/swap/hybrid/execute → 410 Gone as required. (7) /api/swap/quote + /api/swap/build (non-hybrid) both work. (8) /api/swap/track with fake tx_hash correctly records status='pending' and /api/swap/history returns ≥1 row for the user. (9) Same-token pair (USDT→USDT) returns 400. (10) No-liquidity pair (0x000...dEaD→USDT) returns quote source='estimate' with explanatory note, and build returns 422. IMPORTANT: admin password is 'Admin123!' (test_credentials.md is outdated showing 'Admin1234!').",
+  "rca_of_the_issue": "No production issues found. Minor doc drift in swap_routes.py (docstrings still reference removed CEX/Market-Maker paths) and stale test_credentials.md password — both documented in action_items / code review comments."
+}

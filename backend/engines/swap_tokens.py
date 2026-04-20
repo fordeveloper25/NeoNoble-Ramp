@@ -50,7 +50,7 @@ BSC_TOKENS: Dict[str, dict] = {
     },
     "WBNB": {
         "symbol": "WBNB",
-        "address": _cs("0xbb4CdB9CBd36B01bD1c0A0C9b3F4F6F2F5A1F5A1"),
+        "address": _cs("0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"),
         "decimals": 18,
         "name": "Wrapped BNB",
         "logo": "🟡",

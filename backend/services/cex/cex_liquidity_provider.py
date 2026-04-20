@@ -224,10 +224,8 @@ class CexLiquidityProvider:
                 "note": f"Withdrawal initiated from {cex_name}. Tokens will arrive in 5-30 minutes."
             }
             
-        except Exception as e:
-            # Common errors: insufficient permissions, non-whitelisted address, etc.
-            logger.warning(f"CEX withdrawal not possible: {e}")
-            raise
+        except ValueError as e:
+            logger.warning("CEX withdrawal not possible: %s", e)
     
     async def _provide_liquidity_mock(
         self,

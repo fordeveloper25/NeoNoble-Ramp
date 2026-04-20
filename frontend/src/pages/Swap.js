@@ -176,27 +176,7 @@ export default function Swap() {
       });
       setLastSwap(built);
 
-      // 2) Check execution mode
-      const executionMode = built.execution_mode;
-
-      if (executionMode === 'platform' || executionMode === 'platform_cex') {
-        // Platform-executed swap (Market Maker or CEX)
-        setFlow('swapping');
-        setFlowMessage('Submitting swap to platform...');
-        
-        const execResult = await swapApi.hybrid.execute(built);
-        
-        setFlow('done');
-        const source = built.source === 'market_maker' ? 'Market Maker' : `CEX ${built.exchange || ''}`;
-        setFlowMessage(
-          `✅ Swap submitted to ${source}!\n\nSwap ID: ${execResult.swap_id}\n\nYour ${built.estimated_amount_out?.toFixed(4) || '?'} ${toToken} will arrive in your wallet within ${execResult.estimated_delivery_minutes || 5} minutes.\n\nYou can track this swap in your history.`
-        );
-        // Refresh history after a delay
-        setTimeout(() => refreshHistory(), 3000);
-        return;
-      }
-
-      // 3) User-signed mode (DEX swap) - require wallet connection
+      // 2) User-signed mode (DEX swap via 1inch / PancakeSwap) — always
       if (!isConnected || !address) {
         openWalletModal();
         return;
@@ -204,7 +184,7 @@ export default function Swap() {
 
       await ensureBsc();
 
-      // 4) If ERC-20 approval is required, ask the user to sign it first
+      // 3) If ERC-20 approval is required, ask the user to sign it first
       if (built.needs_approve && built.approve_calldata) {
         setFlow('approving');
         setFlowMessage(`Sign the approval for ${built.from_token} in your wallet…`);
@@ -217,7 +197,7 @@ export default function Swap() {
         setFlowMessage(`Approval sent (${approveHash.slice(0, 10)}…). Now sign the swap…`);
       }
 
-      // 5) Send the actual swap tx
+      // 4) Send the actual swap tx
       setFlow('swapping');
       setFlowMessage('Sign the swap transaction in your wallet…');
       const hash = await sendTransactionAsync({
@@ -395,28 +375,23 @@ export default function Swap() {
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span>Route:</span>
-                      {/* Source Badge */}
-                      {quoteSource === 'market_maker' ? (
-                        <span className="px-2 py-1 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-semibold">
-                          🏦 Market Maker (NENO @ 10.000€)
+                      {/* Source Badge (DEX aggregator) */}
+                      {quoteSource === '1inch' ? (
+                        <span data-testid="quote-source-1inch" className="px-2 py-1 rounded-full bg-indigo-600 text-white text-xs font-semibold uppercase">
+                          ⚡ 1inch aggregator
                         </span>
-                      ) : quoteSource?.startsWith('cex_') ? (
-                        <span className="px-2 py-1 rounded-full bg-blue-600 text-white text-xs font-semibold">
-                          🏛️ CEX {quoteSource.replace('cex_', '').toUpperCase()}
+                      ) : quoteSource === 'pancakeswap' ? (
+                        <span data-testid="quote-source-pancake" className="px-2 py-1 rounded-full bg-amber-600 text-white text-xs font-semibold uppercase">
+                          🥞 PancakeSwap V2
                         </span>
                       ) : (
-                        <span className="px-2 py-1 rounded-full bg-emerald-600 text-white text-xs font-semibold uppercase">
-                          ⚡ {quoteSource || 'DEX'}
+                        <span data-testid="quote-source-other" className="px-2 py-1 rounded-full bg-slate-700 text-white text-xs font-semibold uppercase">
+                          {quoteSource || 'DEX'}
                         </span>
                       )}
                       {quote.note && <span className="text-amber-400 text-xs">({quote.note})</span>}
                     </div>
-                    {/* Show EUR price if Market Maker */}
-                    {quote.price_eur && (
-                      <div className="text-amber-200 font-medium">
-                        💶 Prezzo fisso NENO: {Number(quote.price_eur).toLocaleString()}€
-                      </div>
-                    )}
+                    {/* EUR price removed: user-signed DEX only */}
                   </div>
                 )}
               </div>

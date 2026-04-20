@@ -1,168 +1,165 @@
 """
-Hybrid Swap Engine - Simplified with CEX Liquidity Integration
-Handles NENO Market Maker @ 10,000€ with real token delivery
+Hybrid Swap Engine — USER-SIGNED DEX MODE (ZERO PLATFORM CAPITAL)
+
+This engine is now a thin wrapper around SwapEngineV2. All swaps are
+executed on-chain by the USER's own wallet (MetaMask) via:
+
+    1) 1inch Aggregator (BSC) — aggregates PancakeSwap, Biswap, BakerySwap,
+       ApeSwap, MDEX, Uniswap V3 BSC, etc. → best available route.
+    2) PancakeSwap V2 fallback — direct router quote for simple pairs.
+
+Liquidity sources
+-----------------
+Public DEX pools provided by anonymous LPs on chain. The platform owner
+does NOT need to provide any capital or seed liquidity. If no DEX route
+exists anywhere on BSC for a pair, we return a clean "no liquidity" error
+(swapping a token with zero on-chain liquidity is physically impossible
+without counter-party capital — this is an economic reality, not a bug).
+
+The legacy CEX / Market-Maker fallback has been intentionally removed
+because it required platform-held capital.
 """
+
+from __future__ import annotations
+
 import logging
 from decimal import Decimal
 from typing import Dict, Optional
 
-from services.cex.cex_liquidity_provider import CexLiquidityProvider
+from engines.swap_engine_v2 import SwapEngineV2
 
 logger = logging.getLogger(__name__)
 
 
 class HybridSwapEngine:
-    """
-    Hybrid Swap Engine for NENO Market Maker with CEX liquidity
-    """
-    
-    def __init__(self):
-        self.market_maker_enabled = True
-        self.cex_fallback_enabled = True
-        self.neno_price_eur = Decimal("10000.0")
-        
-        # Initialize CEX liquidity provider
-        self.cex_provider = CexLiquidityProvider()
-        
-        logger.info(f"✅ HybridSwapEngine initialized (NENO @ {self.neno_price_eur}€) with CEX liquidity")
-    
+    """User-signed DEX aggregator wrapper."""
+
+    def __init__(self, v2: Optional[SwapEngineV2] = None):
+        # Share the singleton SwapEngineV2 so DB wiring in server.py
+        # applies to both `/swap/*` and `/swap/hybrid/*` routes.
+        self.v2 = v2 or SwapEngineV2()
+        logger.info("✅ HybridSwapEngine → user-signed DEX mode (1inch + PancakeSwap)")
+
+    # ---------- quote ------------------------------------------------------
+
     async def get_quote(
         self,
         from_token: str,
         to_token: str,
-        amount_in: float
+        amount_in: float,
     ) -> Optional[Dict]:
-        """Get quote for swap"""
+        """
+        Return a dict compatible with the existing /hybrid/quote response
+        schema used by the frontend.
+        """
         try:
-            # Market Maker for NENO
-            if from_token.upper() == "NENO":
-                # EUR per NENO = 10,000
-                # Approximate EUR/USDT rate = 1.05
-                eur_value = Decimal(str(amount_in)) * self.neno_price_eur
-                
-                # Convert EUR to target token (simplified)
-                if to_token.upper() in ["USDT", "USDC", "BUSD"]:
-                    amount_out = float(eur_value / Decimal("0.95"))  # 1 EUR ≈ 1.05 USD
-                elif to_token.upper() in ["BTCB", "BTC"]:
-                    amount_out = float(eur_value / Decimal("90000"))  # 1 BTC ≈ 90k EUR
-                elif to_token.upper() in ["BNB", "WBNB"]:
-                    amount_out = float(eur_value / Decimal("550"))  # 1 BNB ≈ 550 EUR
-                elif to_token.upper() in ["ETH"]:
-                    amount_out = float(eur_value / Decimal("3000"))  # 1 ETH ≈ 3k EUR
-                else:
-                    amount_out = float(eur_value)  # Default 1:1
-                
+            q = await self.v2.get_quote(
+                from_token, to_token, Decimal(str(amount_in))
+            )
+            # Convert Pydantic model to plain dict expected by the UI
+            out = q.model_dump()
+
+            # If no route found, signal clearly
+            if out.get("estimated_amount_out", 0) <= 0 or out.get("source") == "estimate":
                 return {
-                    "source": "market_maker",
-                    "from_token": from_token,
-                    "to_token": to_token,
-                    "amount_in": amount_in,
-                    "estimated_amount_out": amount_out,
-                    "rate": amount_out / amount_in,
-                    "price_eur": float(self.neno_price_eur),
-                    "note": f"Platform market maker (NENO={self.neno_price_eur}€)"
+                    **out,
+                    "source": out.get("source") or "estimate",
+                    "note": out.get("note")
+                    or "Nessuna liquidità DEX disponibile per questa coppia su BSC "
+                       "(PancakeSwap / 1inch). La piattaforma non deposita capitale: "
+                       "lo swap è possibile solo se esiste un pool pubblico per la coppia.",
                 }
-            
-            # No quote available for non-NENO tokens yet
-            return None
-            
+            return out
+        except ValueError as e:
+            logger.warning("hybrid.get_quote value error: %s", e)
+            return {
+                "from_token": from_token,
+                "to_token": to_token,
+                "amount_in": amount_in,
+                "estimated_amount_out": 0,
+                "rate": 0,
+                "source": "error",
+                "note": str(e),
+            }
         except Exception as e:
-            logger.error(f"HybridSwapEngine.get_quote error: {e}")
-            return None
-    
+            logger.exception("hybrid.get_quote failed")
+            return {
+                "from_token": from_token,
+                "to_token": to_token,
+                "amount_in": amount_in,
+                "estimated_amount_out": 0,
+                "rate": 0,
+                "source": "error",
+                "note": f"quote error: {e}",
+            }
+
+    # ---------- build ------------------------------------------------------
+
     async def build_swap(
         self,
         from_token: str,
         to_token: str,
         amount_in: float,
         user_wallet: str,
-        slippage_pct: float = 0.8
+        slippage_pct: float = 0.8,
+        user_id: str = "unknown",
     ) -> Optional[Dict]:
-        """Build swap transaction"""
-        try:
-            quote = await self.get_quote(from_token, to_token, amount_in)
-            
-            if not quote:
-                return None
-            
-            # For Market Maker swaps, return platform execution mode
-            if quote["source"] == "market_maker":
-                return {
-                    "execution_mode": "platform",
-                    "source": "market_maker",
-                    "from_token": from_token,
-                    "to_token": to_token,
-                    "amount_in": amount_in,
-                    "estimated_amount_out": quote["estimated_amount_out"],
-                    "user_wallet": user_wallet,
-                    "status": "ready_for_execution",
-                    "note": f"Platform will execute swap at {quote['price_eur']}€ per NENO"
-                }
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"HybridSwapEngine.build_swap error: {e}")
-            return None
-    
-    async def execute_swap(
-        self,
-        from_token: str,
-        to_token: str,
-        amount_in: float,
-        user_wallet: str,
-        user_id: str
-    ) -> tuple[bool, Optional[str], Optional[Dict]]:
         """
-        Execute Market Maker swap with real CEX liquidity delivery
-        Returns: (success, swap_id, details)
+        Build an unsigned transaction for the user's MetaMask to sign.
+        Always returns execution_mode = "on-chain" so the frontend knows
+        to request a signature (never a server-side execution).
         """
         try:
-            # Generate swap ID
-            import uuid
-            swap_id = str(uuid.uuid4())
-            
-            logger.info(f"Executing Market Maker swap {swap_id}: {amount_in} {from_token} → {to_token}")
-            
-            # Process swap with CEX liquidity provider
-            result = await self.cex_provider.process_market_maker_swap(
-                amount_in=Decimal(str(amount_in)),
+            built = await self.v2.build_swap_tx(
+                user_id=user_id,
                 from_token=from_token,
                 to_token=to_token,
+                amount_in=Decimal(str(amount_in)),
                 user_wallet=user_wallet,
-                chain="BSC"
+                slippage=slippage_pct,
             )
-            
-            if not result["success"]:
-                return False, None, {"error": result.get("error", "Swap execution failed")}
-            
-            logger.info(
-                f"✅ Market Maker swap {swap_id} completed: "
-                f"{amount_in} {from_token} → {result['amount_out']:.4f} {to_token} "
-                f"(mode: {result.get('mode', 'unknown')})"
-            )
-            
-            return True, swap_id, {
-                "swap_id": swap_id,
-                "status": "completed" if result.get("mode") == "real" else "simulated",
-                "amount_out": result["amount_out"],
-                "tx_hash": result.get("tx_hash"),
-                "mode": result.get("mode", "unknown"),
-                "note": result.get("note", "Swap processed"),
-                "execution_eta_minutes": 0 if result.get("mode") == "mock" else 30
-            }
-            
-        except Exception as e:
-            logger.error(f"HybridSwapEngine.execute_swap error: {e}")
-            return False, None, {"error": str(e)}
-    
-    async def get_health(self) -> Dict:
-        """Get health status"""
-        return {
-            "mode": "hybrid_simplified",
-            "market_maker_enabled": self.market_maker_enabled,
-            "cex_fallback_enabled": self.cex_fallback_enabled,
-            "neno_price_eur": float(self.neno_price_eur),
-            "status": "operational"
+            payload = built.model_dump()
+            # Force on-chain / user-signed mode so the UI always triggers
+            # a MetaMask prompt — never a platform-executed swap.
+            payload["execution_mode"] = "on-chain"
+            return payload
+        except ValueError as e:
+            logger.warning("hybrid.build_swap value error: %s", e)
+            raise
+        except RuntimeError as e:
+            # No liquidity found → let the route return 422
+            logger.info("hybrid.build_swap: no liquidity — %s", e)
+            raise
+        except Exception:
+            logger.exception("hybrid.build_swap failed")
+            raise
+
+    # ---------- execute (DISABLED in user-signed mode) ---------------------
+
+    async def execute_swap(self, *args, **kwargs):
+        """
+        User-signed mode: the platform never executes swaps on-chain.
+        Kept only to avoid AttributeError from stale callers.
+        """
+        return False, None, {
+            "error": "Server-side execution is disabled. "
+                     "Swaps are signed and submitted by the user's own wallet."
         }
 
+    # ---------- health -----------------------------------------------------
+
+    async def get_health(self) -> Dict:
+        h = self.v2.health()
+        return {
+            "mode": "user_signed_dex",
+            "capital_required": False,
+            "rpc_connected": h.get("rpc_connected"),
+            "oneinch_configured": h.get("oneinch_configured"),
+            "chain_id": h.get("chain_id"),
+            "default_slippage_pct": h.get("default_slippage_pct"),
+            "max_slippage_pct": h.get("max_slippage_pct"),
+            "supported_tokens_count": len(h.get("supported_tokens", [])),
+            "note": "All swaps are executed by the user's wallet via DEX aggregators. "
+                    "The platform does not deposit any capital.",
+            "status": "operational",
+        }
