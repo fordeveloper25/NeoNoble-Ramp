@@ -12,41 +12,49 @@ Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banki
 ## Architettura Core
 - Backend: FastAPI + MongoDB (Motor async)
 - Frontend: React + Tailwind + Shadcn
-- Blockchain: Web3.py (BSC), PancakeSwap V2
+- Blockchain: Web3.py (BSC), PancakeSwap V2, 1inch Aggregator
+- Swap Model: **USER-SIGNED DEX ONLY** (zero platform capital — vedi sezione Swap Engine)
 - Wallets: Circle USDC (Client/Treasury/Revenue segregation)
 - Payments: Stripe SEPA (LIVE) + Autonomous Pipeline
 - Card Issuing: Abstraction layer (Marqeta/NIUM/Adyen/Stripe/Internal)
-- Liquidity: Institutional Router (Binance/Kraken/MEXC/DEX/Internal)
 - KYC/AML: Sumsub (ready) + AI Document Verification (fallback)
+
+## Swap Engine — USER-SIGNED DEX (Implementato: Feb 2026)
+
+### Architettura
+Tutti gli swap (NENO, custom tokens, BEP-20 standard) vengono eseguiti **dal wallet dell'utente** (MetaMask) con liquidità proveniente da pool DEX pubblici esistenti:
+
+1. **1inch Aggregator (BSC)** — aggrega PancakeSwap V2/V3, Biswap, ApeSwap, MDEX, Uniswap V3 BSC, ecc.
+2. **PancakeSwap V2** — fallback diretto per coppie semplici.
+
+Il backend ritorna **solo calldata non firmata** (`execution_mode: "on-chain"`); la piattaforma **non deposita capitale**, **non esegue swap server-side**, **non detiene hot-wallet con riserve token**.
+
+### Endpoint
+| Endpoint | Uso |
+|---|---|
+| `GET /api/swap/health` | Stato RPC + 1inch |
+| `GET /api/swap/tokens` | Lista 8 token BSC supportati |
+| `POST /api/swap/quote` | Preventivo via 1inch→PancakeSwap |
+| `POST /api/swap/build` | Calldata per MetaMask |
+| `POST /api/swap/track` | Registra tx hash firmato |
+| `GET /api/swap/history` | Storico user |
+| `GET /api/swap/hybrid/health` | Stesso del v2 (alias) |
+| `POST /api/swap/hybrid/quote` | Stesso del v2 (alias) |
+| `POST /api/swap/hybrid/build` | Stesso del v2 (alias, con `execution_mode=on-chain`) |
+| `POST /api/swap/hybrid/execute` | **410 Gone** — server-side execution disabilitata |
+
+### Rationale
+Il modello Market Maker + CEX withdrawal (via ccxt) è stato rimosso perché richiedeva capitale depositato dalla piattaforma. Le API CEX non creano liquidità dal nulla: richiedono saldo nell'exchange. Il modello user-signed DEX è l'unica soluzione economicamente valida a **zero-capitale**.
+
+### Limite
+Se una coppia non ha **alcun** pool DEX su BSC (né PancakeSwap né aggregati 1inch), lo swap è fisicamente impossibile: il backend ritorna `source: "estimate"` + nota, e `/build` ritorna HTTP 422.
 
 ## Production Hardening Status: COMPLETE
 
-### safeFetch Migration (Body Stream Fix)
-ALL frontend pages migrated from bare `fetch()` to `xhrGet`/`xhrPost` wrapper:
-- AuditLog.js, DCABot.js, ForgotPassword.js, KYCPage.js, MarketData.js
-- ResetPassword.js, SettingsPage.js, SubscriptionPlans.js, TokenList.js
-- WalletPage.js (has own safeFetch with clone())
-- AdminDashboard.js, CardManagement.js, Dashboard.js, ExchangePage.js
-- MarginTrading.js, NenoExchange.js, ReferralPage.js, TradingPage.js
+### safeFetch Migration, Idempotency, Stripe Webhook, Liquidity Router, KYC
+(invariati rispetto a versioni precedenti)
 
-### Idempotency
-Applied to: NENO buy, NENO sell, NENO swap, NENO offramp, Revenue Withdraw
-
-### Stripe Webhook Signature Enforcement
-- Webhook URL registered on Stripe portal
-- Signature verification active (400 without valid `stripe-signature` header)
-
-### Institutional Liquidity Router
-- 5 venues: Internal, PancakeSwap, Binance, Kraken, MEXC
-- Best execution scoring: net price, fee, slippage, latency, depth
-- Order splitting for orders > €5,000
-- Custom token fallback: CEX direct → DEX → intermediate routing → RFQ
-
-### KYC/AML Provider
-- Sumsub integration ready (awaiting API keys)
-- AI document verification fallback active
-
-## Endpoint API Completi
+## Endpoint API Completi (riepilogo)
 
 ### Auth
 - `POST /api/auth/login` | `POST /api/auth/register` | `GET /api/auth/me`
@@ -61,33 +69,8 @@ Applied to: NENO buy, NENO sell, NENO swap, NENO offramp, Revenue Withdraw
 - `GET /api/neno/pricing` | `POST /api/neno/buy` | `POST /api/neno/sell`
 - `POST /api/neno/swap` | `POST /api/neno/off-ramp` | `GET /api/neno/quote`
 
-### Institutional Liquidity Router
-- `GET /api/router/status` | `POST /api/router/quote` | `POST /api/router/execute`
-- `GET /api/router/venues` | `GET /api/router/fallback-matrix`
-
-### Autonomous Pipeline
-- `GET /api/pipeline/status` | `POST /api/pipeline/deposit`
-- `GET /api/pipeline/deposits` | `GET /api/pipeline/payouts`
-- `POST /api/pipeline/auto-payout-check` | `POST /api/pipeline/auto-fund`
-- `POST /api/stripe/webhook` (signature enforced)
-
-### Card Engine
-- `POST /api/card-engine/issue` | `POST /api/card-engine/reveal` (2FA)
-- `POST /api/card-engine/authorize` | `POST /api/card-engine/settlement`
-
-### Growth & Revenue
-- `GET /api/growth/dashboard` | `GET /api/growth/revenue` | `GET /api/growth/revenue/daily`
-- `GET /api/growth/my-tier` | `GET /api/growth/my-rewards`
-- `POST /api/cashout/revenue-withdraw` (idempotent) | `GET /api/cashout/report`
-
-### KYC/AML
-- `POST /api/kyc-provider/applicant` | `GET /api/kyc-provider/status`
-- `GET /api/kyc-provider/verification-url` | `GET /api/kyc-provider/provider-status`
-- `POST /api/kyc-provider/webhook` | `POST /api/kyc/submit` | `GET /api/kyc/status`
-
-### Admin
-- `GET /api/admin/audit/logs` | `GET /api/admin/audit/stats`
-- `GET /api/admin/audit/export/csv`
+### Card Engine, Growth, KYC, Admin
+(invariati)
 
 ## Testing History
 | Iteration | Scope | Result |
@@ -97,20 +80,13 @@ Applied to: NENO buy, NENO sell, NENO swap, NENO offramp, Revenue Withdraw
 | 43 | Autonomous Pipeline | 23/23 PASS |
 | 44 | Liquidity Router / KYC | 21/22 PASS |
 | 45 | FINAL Production Hardening | 30/30 PASS |
-
-## Venue Connectivity (Production)
-| Venue | Status | Note |
-|-------|--------|------|
-| NeoNoble Internal | ONLINE | Market maker, treasury |
-| Kraken | ONLINE | Major pairs |
-| MEXC | ONLINE | Wide altcoin coverage |
-| Coinbase | ONLINE | Limited pairs |
-| Binance | OFFLINE | HTTP 451 geo-blocked |
-| PancakeSwap V2 | AVAILABLE | DEX for custom tokens |
+| 46 | **User-Signed DEX Swap** (Feb 2026) | **14/14 PASS** |
 
 ## Backlog
+- [ ] Supporto Bitcoin nativo (attualmente via BTCB su BSC)
+- [ ] Banner "Low BNB Gas" più prominente con link a bridge/ramp
+- [ ] Pagina FAQ dedicata al modello user-signed
+- [ ] Fix smart contract "ERC20: burn amount exceeds balance" su `redeemCustom`
 - [ ] Sumsub API keys per KYC reale
 - [ ] NIUM fiat rail (templateId)
-- [ ] Microservices split
 - [ ] Dynamic NENO pricing
-- [ ] Multi-currency scaling

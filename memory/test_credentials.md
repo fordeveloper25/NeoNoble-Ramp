@@ -2,7 +2,7 @@
 
 ## Platform Admin
 - Email: admin@neonobleramp.com
-- Password: Admin1234!
+- Password: Admin123!
 - Role: ADMIN
 
 ## Treasury Owner

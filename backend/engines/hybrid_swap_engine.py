@@ -135,16 +135,8 @@ class HybridSwapEngine:
             raise
 
     # ---------- execute (DISABLED in user-signed mode) ---------------------
-
-    async def execute_swap(self, *args, **kwargs):
-        """
-        User-signed mode: the platform never executes swaps on-chain.
-        Kept only to avoid AttributeError from stale callers.
-        """
-        return False, None, {
-            "error": "Server-side execution is disabled. "
-                     "Swaps are signed and submitted by the user's own wallet."
-        }
+    # Server-side execution is intentionally not implemented. The HTTP route
+    # /api/swap/hybrid/execute returns 410 Gone directly.
 
     # ---------- health -----------------------------------------------------
 

@@ -220,10 +220,12 @@ async def hybrid_swap_health():
 @router.post("/hybrid/quote")
 async def hybrid_swap_quote(body: QuoteRequest):
     """
-    Get best quote using hybrid routing:
-    1. DEX (1inch → PancakeSwap)
-    2. Market Maker (NENO @ 10,000€)
-    3. CEX fallback (Binance, MEXC, Kraken, Coinbase)
+    Get best DEX route (user-signed). Tries 1inch aggregator first
+    (which spans PancakeSwap V2/V3, Biswap, ApeSwap, MDEX, etc.) and
+    falls back to a direct PancakeSwap V2 router quote.
+
+    The platform deposits zero capital; liquidity is provided by public
+    on-chain pools.
     """
     try:
         result = await get_hybrid_engine().get_quote(
@@ -250,11 +252,9 @@ async def hybrid_swap_build(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Build swap using hybrid routing.
-    Returns either:
-    - DEX calldata (user signs in MetaMask)
-    - Market Maker execution details (platform executes)
-    - CEX execution details (platform executes)
+    Build a user-signed DEX swap. Always returns unsigned calldata
+    (execution_mode='on-chain') ready to be submitted by MetaMask.
+    The platform never executes swaps on behalf of the user.
     """
     user_id = current_user.get("user_id") or "unknown"
     _rate_check(user_id)
