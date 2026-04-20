@@ -1,0 +1,5 @@
+[
+  {"type":"function","name":"registerIdentity","stateMutability":"nonpayable","inputs":[{"type":"address"},{"type":"uint16"},{"type":"uint40"},{"type":"bytes32"}],"outputs":[]},
+  {"type":"function","name":"removeIdentity","stateMutability":"nonpayable","inputs":[{"type":"address"}],"outputs":[]},
+  {"type":"function","name":"isVerified","stateMutability":"view","inputs":[{"type":"address"}],"outputs":[{"type":"bool"}]}
+]

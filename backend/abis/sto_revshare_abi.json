@@ -1,0 +1,8 @@
+[
+  {"type":"function","name":"distribute","stateMutability":"nonpayable","inputs":[{"type":"uint256"}],"outputs":[]},
+  {"type":"function","name":"claim","stateMutability":"nonpayable","inputs":[{"type":"uint256"}],"outputs":[]},
+  {"type":"function","name":"claimMany","stateMutability":"nonpayable","inputs":[{"type":"uint256[]"}],"outputs":[]},
+  {"type":"function","name":"distributionsCount","stateMutability":"view","inputs":[],"outputs":[{"type":"uint256"}]},
+  {"type":"function","name":"hasClaimed","stateMutability":"view","inputs":[{"type":"address"},{"type":"uint256"}],"outputs":[{"type":"bool"}]},
+  {"type":"function","name":"distributions","stateMutability":"view","inputs":[{"type":"uint256"}],"outputs":[{"type":"uint256"},{"type":"uint256"},{"type":"uint256"},{"type":"uint40"}]}
+]

@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 49 STO backend testing — 23/23 pytest tests PASSED. Validated pre-deploy phase: public health/info, lead capture (idempotent upsert + 422 validation for email/name/country), KYC submit/status flow with JWT, portfolio read (200 deployed=false, 400 on invalid wallet), graceful 503 for on-chain endpoints (redemption/request, revenue/claim-build, admin mint/whitelist/nav/etc.), admin authorization stub (403 for non-admin user, 503 for admin since contracts not deployed), and regression on swap (hybrid/health, hybrid/quote) and launchpad (/health). Backend started cleanly without STO_*_ADDRESS env set.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/sto/admin/whitelist/add", "issue": "When operator wallet not provided, code falls back to s.token_address (empty string in pre-deploy) — would raise InvalidAddress instead of clear 503 if require_deployed were skipped. Not user-facing now (require_deployed runs first), but fragile in post-deploy if admin user lacks wallet_address."},
+      {"endpoint": "/api/sto/admin/redemption/approve|reject|nav/update-build|revenue/distribute-build", "issue": "Same pattern: operator = user.get('wallet_address') or s.token_address. Should explicitly require an operator wallet input or fail with a clear 400 'admin operator wallet not configured'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration49_sto.py",
+    "/app/test_reports/pytest/iteration49_sto.xml"
+  ],
+  "action_items": [
+    "(Optional, non-blocking) Harden admin endpoints so operator wallet must be explicitly provided or fetched from a configured signer, instead of silently falling back to s.token_address.",
+    "(Optional) Consider adding rate-limit on POST /api/sto/lead since it is unauthenticated to prevent flooding sto_leads collection."
+  ],
+  "critical_code_review_comments": [
+    "sto_routes.py is 604 LOC — close to the 700-line guideline. As more on-chain endpoints get added post-deploy, recommend splitting into sto_public.py / sto_investor.py / sto_admin.py.",
+    "ABI loader silently returns [] on missing files — fine for pre-deploy but should log a warning so operators notice missing ABIs.",
+    "/api/sto/portfolio scans last 24 distributions inline (sync web3 calls inside async handler) — acceptable now (deployed=false short-circuits) but post-deploy this will block the event loop. Wrap in run_in_executor or build an indexer.",
+    "require_admin uses email suffix check (stub) — clearly documented as a stub; main agent should replace with a real role check before mainnet go-live.",
+    "All admin tx-build endpoints set nonce=0 — caller must replace nonce client-side; consider adding a comment in response payload to make this explicit for the frontend integrator."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration49_sto.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "n/a (backend-only run)"},
+  "test_credentials": "Admin: admin@neonobleramp.com / Admin123!. Non-admin: dynamic test_sto_<rand>@example.com / Test1234! (registered fresh each run).",
+  "seed_data_creation": "1 lead per run inserted in sto_leads collection (email lead_<rand>@example.com). 1 KYC doc per run upserted in sto_kyc keyed by user_id. Both are TEST_-pattern transient and safe to leave.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 23 STO backend endpoints validated against public REACT_APP_BACKEND_URL. Contracts intentionally NOT deployed — on-chain endpoints return 503 by design. When STO_TOKEN_ADDRESS et al. are set, re-run this suite: the on-chain assertions (currently expecting 503) will need to be flipped to expect 200 with build-tx payload. Regression suites: swap/hybrid and launchpad endpoints verified up.",
+  "rca of the issue": "n/a — no functional bug found."
+}

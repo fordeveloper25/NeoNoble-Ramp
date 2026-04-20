@@ -1,0 +1,8 @@
+[
+  {"type":"function","name":"requestRedemption","stateMutability":"nonpayable","inputs":[{"type":"uint256"}],"outputs":[{"type":"uint256"}]},
+  {"type":"function","name":"approve","stateMutability":"nonpayable","inputs":[{"type":"uint256"}],"outputs":[]},
+  {"type":"function","name":"reject","stateMutability":"nonpayable","inputs":[{"type":"uint256"},{"type":"string"}],"outputs":[]},
+  {"type":"function","name":"claim","stateMutability":"nonpayable","inputs":[{"type":"uint256"}],"outputs":[]},
+  {"type":"function","name":"fund","stateMutability":"nonpayable","inputs":[{"type":"uint256"}],"outputs":[]},
+  {"type":"function","name":"reserveAvailable","stateMutability":"view","inputs":[],"outputs":[{"type":"uint256"}]}
+]

@@ -40,6 +40,8 @@ import Help from "./pages/Help";
 import LaunchpadList from "./pages/LaunchpadList";
 import LaunchpadCreate from "./pages/LaunchpadCreate";
 import LaunchpadToken from "./pages/LaunchpadToken";
+import StoInvest from "./pages/StoInvest";
+import StoPortfolio from "./pages/StoPortfolio";
 import { usePageTracking } from "./hooks/usePageTracking";
 
 // Protected Route Component
@@ -372,6 +374,17 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LaunchpadToken />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* STO — Security Token Offering (Polygon) */}
+      <Route path="/sto/invest" element={<StoInvest />} />
+      <Route
+        path="/sto/portfolio"
+        element={
+          <ProtectedRoute>
+            <StoPortfolio />
           </ProtectedRoute>
         }
       />

@@ -163,6 +163,7 @@ from routes.stripe_payout_routes import (
 from routes.liquidity_routes import router as liquidity_router
 from routes.swap_routes import router as swap_router, set_swap_db
 from routes.launchpad_routes import router as launchpad_router
+from routes.sto_routes import router as sto_router, set_sto_db
 
 # Wire DB into the on-chain swap engine (reads secrets from env at runtime)
 try:
@@ -170,6 +171,13 @@ try:
     logger.info("SwapEngine DB wired")
 except Exception as _e:
     logger.warning("SwapEngine DB wiring failed: %s", _e)
+
+# Wire DB into the STO routes
+try:
+    set_sto_db(db)
+    logger.info("STO DB wired")
+except Exception as _e:
+    logger.warning("STO DB wiring failed: %s", _e)
 
 # Import DEX and Transak routes
 from routes.dex_routes import router as dex_router
@@ -952,6 +960,7 @@ api_router.include_router(notification_router)
 api_router.include_router(token_router)
 api_router.include_router(swap_router)
 api_router.include_router(launchpad_router)
+api_router.include_router(sto_router)
 api_router.include_router(subscription_router)
 api_router.include_router(market_data_router)
 api_router.include_router(analytics_router)

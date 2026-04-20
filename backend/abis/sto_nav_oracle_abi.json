@@ -1,0 +1,7 @@
+[
+  {"type":"function","name":"navPerToken","stateMutability":"view","inputs":[],"outputs":[{"type":"uint256"}]},
+  {"type":"function","name":"effectiveFrom","stateMutability":"view","inputs":[],"outputs":[{"type":"uint40"}]},
+  {"type":"function","name":"reportHash","stateMutability":"view","inputs":[],"outputs":[{"type":"bytes32"}]},
+  {"type":"function","name":"settlementToken","stateMutability":"view","inputs":[],"outputs":[{"type":"address"}]},
+  {"type":"function","name":"updateNAV","stateMutability":"nonpayable","inputs":[{"type":"uint256"},{"type":"uint40"},{"type":"bytes32"}],"outputs":[]}
+]
