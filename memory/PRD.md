@@ -88,7 +88,8 @@ yarn deploy:polygon # mainnet (DOPO audit)
 | 45 | FINAL Production Hardening | 30/30 PASS |
 | 46 | User-Signed DEX Swap | 14/14 PASS |
 | 47 | Launchpad Bonding Curve | 21/21 PASS |
-| 48 | **STO Contracts (Solidity Hardhat)** | **9/9 PASS** |
+| 48 | STO Contracts (Solidity Hardhat) | 9/9 PASS |
+| 49 | **STO Backend + Frontend Landing** | **23/23 PASS** |
 
 ## Backlog
 - [ ] **Avvocato fintech** nominato + prospetto/esenzione CONSOB
