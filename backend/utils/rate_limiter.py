@@ -34,8 +34,17 @@ _limiter = SlidingWindowLimiter()
 
 
 def rate_limit(max_calls: int, window_seconds: int, key_prefix: str = ""):
-    """FastAPI dependency factory for rate limiting by client IP."""
+    """FastAPI dependency factory for rate limiting by client IP.
+
+    Uses X-Forwarded-For when available (production behind K8s ingress / CDN)
+    and falls back to request.client.host otherwise. Only the leftmost address
+    in X-Forwarded-For is trusted — adjust if your proxy chain is different.
+    """
     def dep(request: Request):
-        client = request.client.host if request.client else "unknown"
+        xff = request.headers.get("x-forwarded-for") or request.headers.get("x-real-ip")
+        if xff:
+            client = xff.split(",")[0].strip()
+        else:
+            client = request.client.host if request.client else "unknown"
         _limiter.check(f"{key_prefix}:{client}", max_calls, window_seconds)
     return dep
