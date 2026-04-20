@@ -203,6 +203,109 @@ export default function Help() {
           >
             🚀 Vai a Swap On-Chain
           </Link>
+          <Link
+            to="/launchpad"
+            className="ml-3 inline-block px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 rounded-xl font-semibold transition"
+          >
+            🎯 Launchpad Token
+          </Link>
+        </div>
+
+        {/* Launchpad FAQ */}
+        <div className="mt-10 space-y-6">
+          <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
+            <span>🎯</span> Launchpad — Bonding Curve Token
+          </h2>
+
+          <FAQSection
+            icon="🚀"
+            title="Cos'è il Launchpad?"
+            content={
+              <div className="space-y-3">
+                <p>
+                  Il Launchpad ti permette di <strong>creare un token ERC-20 sulla BSC</strong> con
+                  bonding curve automatica (stile Pump.fun). Paghi solo la <strong>deploy fee (~0.05 BNB)</strong>,
+                  nessun collateral, nessun capitale bloccato.
+                </p>
+                <p className="text-sm text-slate-400">
+                  Il prezzo del token parte basso e sale man mano che gli utenti comprano. La liquidità
+                  viene interamente dai buyer — tu come creator ricevi l'1% di fee automaticamente su ogni
+                  compra/vendita.
+                </p>
+              </div>
+            }
+          />
+
+          <FAQSection
+            icon="📈"
+            title="Come funziona la bonding curve?"
+            content={
+              <div className="space-y-2 text-sm">
+                <p>
+                  <strong>Formula:</strong> x * y = k (constant-product, stile Uniswap V2). Le reserve
+                  "virtuali" iniziali bootstrapano il prezzo senza bisogno di LP.
+                </p>
+                <ul className="list-disc ml-6 space-y-1 text-slate-400">
+                  <li>Ogni buy: l'utente paga BNB → il contratto minta token</li>
+                  <li>Ogni sell: l'utente brucia token → il contratto restituisce BNB dalle reserve</li>
+                  <li>Quando il contratto raccoglie <strong>85 BNB</strong> la curva si chiude (graduation)</li>
+                  <li>200M token vengono riservati per creare un LP su PancakeSwap post-graduation</li>
+                </ul>
+              </div>
+            }
+          />
+
+          <FAQSection
+            icon="💡"
+            title="Importante: NON è un sistema a prezzo fisso"
+            content={
+              <div className="space-y-2 text-sm">
+                <p className="text-amber-200">
+                  Il prezzo del tuo token <strong>fluttua col volume</strong>. Non c'è redeem garantito a
+                  un valore nominale prestabilito. Se nessuno compra, chi ha comprato presto può vendere solo
+                  al prezzo corrente della curva (che può essere più basso).
+                </p>
+                <p className="text-slate-400">
+                  Per un sistema con valore ancorato + redeem a NAV trimestrale, è in sviluppo il
+                  <strong> programma STO (Security Token)</strong> — conforme MiCA/CONSOB. Contattaci per
+                  accesso beta.
+                </p>
+              </div>
+            }
+          />
+        </div>
+
+        {/* Low BNB Gas tip */}
+        <div className="mt-10 space-y-6">
+          <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
+            <span>⛽</span> BNB per il gas
+          </h2>
+          <FAQSection
+            icon="💰"
+            title="Perché mi serve BNB?"
+            content={
+              <div className="space-y-2 text-sm">
+                <p>
+                  Ogni transazione su BSC (swap, buy, sell, approve) richiede un piccolo pagamento in BNB
+                  come <strong>gas fee</strong> (~0.0005–0.002 BNB per operazione). Questo va ai miner della
+                  rete, <strong>non a NeoNoble</strong>.
+                </p>
+                <p className="text-slate-400">
+                  Raccomandiamo di tenere sempre <strong>0.005–0.01 BNB</strong> nel wallet per non rimanere
+                  bloccato a metà operazione. Vedi il banner giallo nella pagina Swap se il tuo saldo è basso.
+                </p>
+                <p className="text-slate-400 text-xs">
+                  Puoi comprare BNB direttamente da MetaMask (pulsante "Buy"), da un exchange (Binance,
+                  Coinbase, Kraken) e inviarlo al tuo wallet, oppure usare on-ramp come Transak integrato
+                  in NeoNoble.
+                </p>
+              </div>
+            }
+          />
+        </div>
+
+        {/* Spare div for spacing */}
+        <div className="mt-10">
         </div>
 
         {/* Contact/Support */}

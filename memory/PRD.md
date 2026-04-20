@@ -1,71 +1,82 @@
 # NeoNoble Ramp — Product Requirements Document
 
 ## Problema Originale
-Piattaforma fintech enterprise (IPO-Ready) per trading, exchange, wallet e banking con esecuzione reale su blockchain (BSC/PancakeSwap), Circle USDC, Stripe SEPA. Obiettivo: Full Money Loop + Real Cards + Profit Engine + Mass User Growth + Pipeline Finanziario Autonomo + Institutional Liquidity Routing + **Launchpad per token custom con bonding curve (zero capitale piattaforma)**.
+Piattaforma fintech enterprise per trading, exchange, wallet e banking con esecuzione reale su blockchain (BSC/PancakeSwap), Circle USDC, Stripe SEPA. Obiettivo: Full Money Loop + Real Cards + Launchpad token custom + STO security token offering regolamentato.
 
 ## Utenti
-- **Admin**: Treasury, revenue withdrawal, growth analytics, monetization, pipeline autonomo, liquidity routing
-- **Trader**: Compra/vendi/swap NENO e altri asset, best execution multi-venue
-- **Utente Banking**: IBAN virtuale, carte, bonifici SEPA
-- **Referrer**: Guadagni passivi da network di invitati
-- **Token Creator (nuovo, Feb 2026)**: Crea token ERC20 con bonding curve sulla piattaforma, paga solo ~0.05 BNB di deploy fee, riceve 1% su ogni trade del suo token automaticamente
+- **Admin**: Treasury, revenue withdrawal, growth analytics, monetization, pipeline autonomo
+- **Trader**: Compra/vendi/swap NENO e altri asset
+- **Banking**: IBAN virtuale, carte, bonifici SEPA
+- **Token Creator (Launchpad, Feb 2026)**: Crea token bonding-curve su BSC, zero collateral
+- **Investitore STO (Feb 2026)**: Sottoscrive security token revenue-share, KYC-gated, redeem a NAV
 
 ## Architettura Core
 - Backend: FastAPI + MongoDB (Motor async)
 - Frontend: React + Tailwind + Shadcn + wagmi/viem
-- Blockchain: Web3.py (BSC), PancakeSwap V2, 1inch Aggregator, **Launchpad factory custom**
+- Blockchain: Web3.py (BSC), PancakeSwap V2, 1inch, Launchpad factory custom (BSC), **STO contracts (Polygon)**
 - Swap Model: **USER-SIGNED DEX ONLY** (zero platform capital)
-- Launchpad Model: **Virtual constant-product AMM bonding curve** stile Pump.fun
-- Wallets: Circle USDC (Client/Treasury/Revenue segregation)
-- Payments: Stripe SEPA (LIVE) + Autonomous Pipeline
-- Card Issuing: Abstraction layer (Marqeta/NIUM/Adyen/Stripe/Internal)
+- Launchpad: **Virtual constant-product AMM bonding curve** stile Pump.fun (BSC)
+- STO: **ERC-3643-inspired** security token + NAV oracle + Redemption Vault + Revenue Share (Polygon)
 
 ## Swap Engine — USER-SIGNED DEX (Feb 2026)
-Tutti gli swap (NENO, custom, BEP-20) vengono firmati dal wallet dell'utente via 1inch + PancakeSwap V2. Zero capitale piattaforma. Dettagli in iteration 46 (14/14 PASS).
+Iteration 46: 14/14 PASS. User-signed via 1inch + PancakeSwap V2.
 
-## Launchpad — Bonding Curve Token Factory (Feb 2026)
+## Launchpad — Bonding Curve (Feb 2026)
+Iteration 47: 21/21 PASS.
+- Contracts: `/app/contracts/{Launchpad,BondingCurveToken}.sol`
+- Backend: `/api/launchpad/*` (9 endpoint)
+- Frontend: `/launchpad`, `/launchpad/create`, `/launchpad/:address`
+- Deploy pending user action (factory non ancora in mainnet BSC)
+- Fee: 0.05 BNB deploy, 1% platform + 1% creator per trade, graduation @ 85 BNB
 
-### Architettura
-Un utente crea un token ERC20 pagando **solo** una deploy fee (~0.05 BNB). Il token ha una curva di prezzo virtuale `x*y=k` bootstrap con reserve virtuali. I buyer mettono BNB nella curva e ricevono token mintati; i seller bruciano token e ricevono BNB dalla curva. A **85 BNB raccolti** la curva si chiude (graduation) e 200M token vengono riservati per migrare su PancakeSwap.
+## STO — Security Token Offering (Feb 2026, NEW)
 
-### Fee Economics
-- Deploy fee: 0.05 BNB (modificabile owner-only)
-- Platform fee: 1% su ogni buy/sell (va a `platformFeeRecipient`)
-- Creator fee: 1% su ogni buy/sell (va al creator del token)
-- Zero capitale richiesto alla piattaforma
-- Zero collateral richiesto al creator (solo la deploy fee)
-
-### Contracts
-- `/app/contracts/Launchpad.sol` — factory, deploy dei token
-- `/app/contracts/BondingCurveToken.sol` — ERC20 minimal + curve buy/sell/graduation
-- `/app/contracts/DEPLOY.md` — guida deploy via Remix
-
-### Endpoint API
-| Endpoint | Uso |
-|---|---|
-| `GET /api/launchpad/health` | Stato factory + RPC |
-| `GET /api/launchpad/config` | Fee, graduation threshold, token count |
-| `GET /api/launchpad/tokens` | Lista token con paginazione |
-| `GET /api/launchpad/tokens/{addr}` | Dettaglio + reserve + price live |
-| `GET /api/launchpad/quote-buy` | Preventivo buy (BNB → token) |
-| `GET /api/launchpad/quote-sell` | Preventivo sell (token → BNB) |
-| `POST /api/launchpad/build-create` | Calldata deploy nuovo token |
-| `POST /api/launchpad/build-buy` | Calldata buy (user-signed) |
-| `POST /api/launchpad/build-sell` | Calldata sell (user-signed) |
-
-### Config ENV
+### Architettura Contratti (Solidity, Polygon PoS target)
 ```
-LAUNCHPAD_FACTORY_ADDRESS=0x...  # impostato dopo deploy del factory
+/app/contracts/sto/
+├── contracts/
+│   ├── interfaces/ (IIdentityRegistry, ICompliance, INAVOracle, IRedemptionVault)
+│   ├── registry/IdentityRegistry.sol          — whitelist KYC on-chain
+│   ├── compliance/DefaultCompliance.sol       — regole transfer (KYC, lockup, max holders, country, exempt vaults)
+│   ├── token/NenoSecurityToken.sol            — ERC-20 + transfer restrictions + forced transfer + pause
+│   ├── oracle/NAVOracle.sol                   — NAV trimestrale + reportHash auditabile
+│   └── vault/
+│       ├── RedemptionVault.sol                — redemption a NAV con riserva dedicata
+│       └── RevenueShareVault.sol              — distribuzione pro-rata ricavi agli holder
+├── scripts/ (deploy, verify, whitelist-add, nav-update)
+├── test/NenoSecurityToken.test.js             — 9/9 PASS
+├── hardhat.config.js                          — Polygon mainnet + Amoy testnet
+├── .env.example
+└── STO_DEPLOY.md                              — guida completa (architettura, deploy, operations)
 ```
-Se assente, gli endpoint ritornano 503 con istruzioni di deploy.
 
-### Frontend Pages
-- `/launchpad` — lista token con progress bar graduation
-- `/launchpad/create` — form creazione token (user-signed)
-- `/launchpad/:address` — dettaglio + buy/sell UI (user-signed)
+### Modello economico
+- **Tipo token**: Utility + revenue share (1d)
+- **Emissione target**: €1M–€8M (esenzione art. 100-bis TUF)
+- **Chain**: Polygon PoS (mainnet 137 / Amoy testnet 80002)
+- **Redemption**: a NAV con riserva dedicata in USDC (4b)
+- **Timeline**: 6 mesi (5b) — audit obbligatorio + prospetto
 
-## Endpoint API Completi (Swap + NENO + Banking)
-(invariati, vedi sezioni precedenti)
+### Test Solidity (9/9 PASS)
+1. Mint solo verso address whitelisted
+2. Transfer blocca destinatari non KYC
+3. Max holders enforced (per esenzione prospetto)
+4. Redemption a NAV con riserva sufficiente
+5. Redemption rifiutata se riserva insufficiente
+6. Revenue share pro-rata
+7. Forced transfer loggato con compliance sul destinatario
+8. Pause blocca transfer secondari ma non mint/burn agent
+9. Lockup blocca transfer ma non mint
+
+### Comandi chiave
+```bash
+cd /app/contracts/sto
+yarn install
+yarn compile      # compila 11 contratti in Solidity 0.8.20
+yarn test         # 9/9 PASS
+yarn deploy:amoy  # testnet
+yarn deploy:polygon # mainnet (DOPO audit)
+```
 
 ## Testing History
 | Iteration | Scope | Result |
@@ -76,16 +87,29 @@ Se assente, gli endpoint ritornano 503 con istruzioni di deploy.
 | 44 | Liquidity Router / KYC | 21/22 PASS |
 | 45 | FINAL Production Hardening | 30/30 PASS |
 | 46 | User-Signed DEX Swap | 14/14 PASS |
-| 47 | **Launchpad Bonding Curve (Feb 2026)** | **21/21 PASS** |
+| 47 | Launchpad Bonding Curve | 21/21 PASS |
+| 48 | **STO Contracts (Solidity Hardhat)** | **9/9 PASS** |
 
 ## Backlog
-- [ ] **Deploy del Launchpad factory su BSC Mainnet** (responsabilità utente) + impostare `LAUNCHPAD_FACTORY_ADDRESS`
-- [ ] Migrazione automatica post-graduation su PancakeSwap V3 (v2)
-- [ ] Grafico prezzo live sulla pagina token (TradingView o recharts)
-- [ ] Pagina FAQ dedicata al modello user-signed DEX + Launchpad
-- [ ] Fix smart contract "ERC20: burn amount exceeds balance" su `redeemCustom` (bug legacy)
-- [ ] Supporto Bitcoin nativo (oggi via BTCB)
-- [ ] Sumsub API keys per KYC reale
-- [ ] NIUM fiat rail (templateId)
-- [ ] Rate limiting su endpoint build-* (da code review iter47)
-- [ ] Endpoint admin per reload config senza restart (da code review iter47)
+- [ ] **Avvocato fintech** nominato + prospetto/esenzione CONSOB
+- [ ] **Audit smart contract STO** (OpenZeppelin/Certik/Quantstamp) — €15–30k
+- [ ] Deploy STO su Amoy testnet → end-to-end test con 3 wallet
+- [ ] Deploy STO su Polygon mainnet (dopo audit)
+- [ ] Backend endpoint `/api/sto/*` (KYC submit, whitelist, subscribe, redeem, reports)
+- [ ] Frontend pagine `/sto/invest`, `/sto/portfolio`, `/admin/sto`
+- [ ] Deploy Launchpad factory su BSC Mainnet (user action, guida in `/app/contracts/DEPLOY.md`)
+- [ ] Migrazione automatica post-graduation su PancakeSwap V3
+- [ ] Fix smart contract legacy "ERC20: burn amount exceeds balance" (necessario sorgente dall'utente)
+- [ ] Supporto Bitcoin nativo
+- [ ] Grafico prezzo live (Trading View / recharts) nel detail Launchpad
+- [ ] Sumsub API keys per KYC reale + integrazione con IdentityRegistry
+- [ ] Rate limiting su endpoint build-*
+
+## Checklist STO pre-emissione (vedi `/app/contracts/sto/STO_DEPLOY.md` per dettaglio)
+- [ ] Audit contratti
+- [ ] Prospetto / esenzione approvata dall'avvocato
+- [ ] Sumsub integration + KYC flow backend
+- [ ] Treasury bancario segregato per riserva redemption
+- [ ] Procedura revisione NAV trimestrale firmata con revisore
+- [ ] Registro OAM (se VASP)
+- [ ] Dry-run con investitore pilota
