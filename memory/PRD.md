@@ -90,7 +90,8 @@ yarn deploy:polygon # mainnet (DOPO audit)
 | 47 | Launchpad Bonding Curve | 21/21 PASS |
 | 48 | STO Contracts (Solidity Hardhat) | 9/9 PASS |
 | 49 | STO Backend + Frontend Landing | 23/23 PASS |
-| 50 | **STO Hardening (role auth + rate limit + broadcast)** | **18/18 PASS** |
+| 50 | STO Hardening (role auth + rate limit + broadcast) | 18/18 PASS |
+| 51 | **Feb 2026: OG-image + Deploy Checklist + BNB banner + BTC bridge scaffold** | curl-tested |
 
 ## Backlog
 - [ ] **Avvocato fintech** nominato + prospetto/esenzione CONSOB

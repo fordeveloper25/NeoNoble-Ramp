@@ -265,25 +265,54 @@ export default function Swap() {
 
         {/* Low BNB Gas Warning Banner */}
         {hasLowGas && (
-          <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-amber-900/40 to-orange-900/40 border border-amber-600/50 backdrop-blur">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">⚠️</span>
+          <div
+            data-testid="low-bnb-gas-banner"
+            className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-amber-900/60 to-orange-900/60 border-2 border-amber-500/70 backdrop-blur shadow-xl shadow-amber-900/30 animate-pulse-slow"
+          >
+            <div className="flex items-start gap-4">
+              <span className="text-4xl leading-none">⛽</span>
               <div className="flex-1">
-                <h3 className="font-semibold text-amber-200 mb-1">
-                  Saldo BNB Basso
+                <h3 className="font-bold text-amber-100 text-lg mb-1">
+                  Saldo BNB Basso — gas insufficiente per le transazioni
                 </h3>
-                <p className="text-sm text-amber-100/90 leading-relaxed">
-                  Il tuo wallet ha meno di 0.002 BNB. Hai bisogno di BNB per pagare le commissioni gas delle transazioni su BSC.
+                <p className="text-sm text-amber-100/95 leading-relaxed">
+                  Il tuo wallet ha meno di 0.002 BNB. Ogni swap/approve costa ~0.0005–0.002 BNB di gas.
                   {' '}
-                  <span className="font-medium">
-                    Ti consigliamo di aggiungere almeno 0.005-0.01 BNB
+                  <span className="font-semibold text-amber-50">
+                    Aggiungi almeno 0.01 BNB prima di fare swap.
                   </span>
-                  {' '}
-                  al tuo wallet prima di effettuare swap.
                 </p>
-                <p className="text-xs text-amber-200/70 mt-2">
-                  💡 Saldo attuale: {balance?.formatted ? `${parseFloat(balance.formatted).toFixed(6)} ${balance.symbol}` : '—'}
+                <p className="text-xs text-amber-200/80 mt-2">
+                  💡 Saldo attuale: <span className="font-mono">{balance?.formatted ? `${parseFloat(balance.formatted).toFixed(6)} ${balance.symbol}` : '—'}</span>
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a
+                    href="https://www.binance.com/en/trade/BNB_USDT"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="low-bnb-binance-link"
+                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-amber-950 text-xs font-semibold transition"
+                  >
+                    Compra su Binance ↗
+                  </a>
+                  <a
+                    href="https://global.transak.com/?cryptoCurrencyCode=BNB&network=bsc"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="low-bnb-transak-link"
+                    className="px-3 py-1.5 rounded-lg bg-amber-700/80 hover:bg-amber-700 text-amber-50 text-xs font-semibold transition"
+                  >
+                    Carta / SEPA via Transak ↗
+                  </a>
+                  <a
+                    href="https://bridge.chainport.io/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg bg-amber-800/60 hover:bg-amber-700/80 text-amber-100 text-xs font-semibold transition"
+                  >
+                    Bridge da altra chain ↗
+                  </a>
+                </div>
               </div>
             </div>
           </div>

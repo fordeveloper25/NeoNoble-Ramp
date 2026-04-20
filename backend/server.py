@@ -164,6 +164,7 @@ from routes.liquidity_routes import router as liquidity_router
 from routes.swap_routes import router as swap_router, set_swap_db
 from routes.launchpad_routes import router as launchpad_router
 from routes.sto_routes import router as sto_router, set_sto_db
+from routes.btc_routes import router as btc_router, set_btc_db
 
 # Wire DB into the on-chain swap engine (reads secrets from env at runtime)
 try:
@@ -178,6 +179,13 @@ try:
     logger.info("STO DB wired")
 except Exception as _e:
     logger.warning("STO DB wiring failed: %s", _e)
+
+# Wire DB into BTC native bridge routes
+try:
+    set_btc_db(db)
+    logger.info("BTC bridge DB wired")
+except Exception as _e:
+    logger.warning("BTC bridge DB wiring failed: %s", _e)
 
 # Import DEX and Transak routes
 from routes.dex_routes import router as dex_router
@@ -961,6 +969,7 @@ api_router.include_router(token_router)
 api_router.include_router(swap_router)
 api_router.include_router(launchpad_router)
 api_router.include_router(sto_router)
+api_router.include_router(btc_router)
 api_router.include_router(subscription_router)
 api_router.include_router(market_data_router)
 api_router.include_router(analytics_router)
