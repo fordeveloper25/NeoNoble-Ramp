@@ -14,7 +14,7 @@ from decimal import Decimal
 import aiohttp
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://neno-swap-live.preview.emergentagent.com"
+BACKEND_URL = "https://sto-deployment-full.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials

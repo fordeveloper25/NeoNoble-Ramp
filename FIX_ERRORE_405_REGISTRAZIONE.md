@@ -17,7 +17,7 @@
 
 Test eseguito:
 ```bash
-curl -X POST https://neno-swap-live.preview.emergentagent.com/api/auth/register \
+curl -X POST https://sto-deployment-full.preview.emergentagent.com/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"test@test.com","password":"Test1234!","role":"USER"}'
 
@@ -94,7 +94,7 @@ Ho aggiornato `/app/frontend/.env.production` per includere note sulla configura
 
 **✅ Frontend in locale (Emergent preview):**
 - Funziona correttamente
-- Usa `https://neno-swap-live.preview.emergentagent.com`
+- Usa `https://sto-deployment-full.preview.emergentagent.com`
 
 ---
 

@@ -306,7 +306,7 @@ curl -X POST .../api/swap/hybrid/execute \
 
 **URL Produzione:**
 ```
-https://neno-swap-live.preview.emergentagent.com
+https://sto-deployment-full.preview.emergentagent.com
 ```
 
 **Login Admin:**

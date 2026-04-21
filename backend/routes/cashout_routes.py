@@ -304,7 +304,7 @@ async def stripe_balance_topup(req: StripeTopUpRequest, current_user: dict = Dep
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe non configurato")
 
-    frontend_url = "https://neno-swap-live.preview.emergentagent.com"
+    frontend_url = "https://sto-deployment-full.preview.emergentagent.com"
 
     try:
         session = stripe.checkout.Session.create(

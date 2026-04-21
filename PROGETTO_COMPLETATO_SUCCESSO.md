@@ -11,7 +11,7 @@
 
 ### **Applicazione Principale (Emergent Preview)**
 ```
-https://neno-swap-live.preview.emergentagent.com
+https://sto-deployment-full.preview.emergentagent.com
 ```
 
 **Status:** ✅ **OPERATIVO AL 100%**
@@ -22,7 +22,7 @@ https://neno-swap-live.preview.emergentagent.com
 
 ### **Account Admin**
 ```
-URL: https://neno-swap-live.preview.emergentagent.com/login
+URL: https://sto-deployment-full.preview.emergentagent.com/login
 Email: admin@neonobleramp.com
 Password: Admin123!
 Role: ADMIN
@@ -229,8 +229,8 @@ Durante lo sviluppo sono stati creati:
 
 ### **Ambiente di Produzione (Emergent)**
 ```
-Frontend: https://neno-swap-live.preview.emergentagent.com
-Backend: https://neno-swap-live.preview.emergentagent.com/api
+Frontend: https://sto-deployment-full.preview.emergentagent.com
+Backend: https://sto-deployment-full.preview.emergentagent.com/api
 Database: MongoDB Atlas
 Status: ✅ OPERATIVO
 ```
@@ -248,7 +248,7 @@ Status: ⚠️ Configurazione richiesta
 
 ### **Per Utenti Finali**
 
-1. **Vai su:** https://neno-swap-live.preview.emergentagent.com
+1. **Vai su:** https://sto-deployment-full.preview.emergentagent.com
 2. **Registrati:** Click "Sign Up" → Compila form → Conferma
 3. **Connetti Wallet:** Click "Connect Wallet" → MetaMask
 4. **Swap Crypto:**
@@ -259,7 +259,7 @@ Status: ⚠️ Configurazione richiesta
 
 ### **Per Admin**
 
-1. **Login:** https://neno-swap-live.preview.emergentagent.com/login
+1. **Login:** https://sto-deployment-full.preview.emergentagent.com/login
    - Email: admin@neonobleramp.com
    - Password: Admin123!
 2. **Dashboard Admin:** Accesso automatico a `/admin`
@@ -308,7 +308,7 @@ La piattaforma **NeoNoble Ramp** è:
 
 **URL Principale:**
 ```
-https://neno-swap-live.preview.emergentagent.com
+https://sto-deployment-full.preview.emergentagent.com
 ```
 
 **Login Admin:**

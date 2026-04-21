@@ -13,7 +13,7 @@ Usage:
     python scripts/e2e_test.py
     
     # Or with custom API URL:
-    API_URL=https://neno-swap-live.preview.emergentagent.com/api python scripts/e2e_test.py
+    API_URL=https://sto-deployment-full.preview.emergentagent.com/api python scripts/e2e_test.py
 
 Requirements:
     pip install requests
@@ -28,7 +28,7 @@ import sys
 import os
 
 # Use environment variable or default to production URL
-BASE_URL = os.environ.get('API_URL', 'https://neno-swap-live.preview.emergentagent.com/api')
+BASE_URL = os.environ.get('API_URL', 'https://sto-deployment-full.preview.emergentagent.com/api')
 
 # Colors for output
 GREEN = '\033[92m'

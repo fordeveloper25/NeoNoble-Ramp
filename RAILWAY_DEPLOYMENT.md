@@ -59,7 +59,7 @@ KRAKEN_API_SECRET=gvFA2y9siWdkpFp1YonZ1BlI+/p8diY8SNR+1PedGiKttWxsPj5CDPjMg7COPf
 
 #### Coinbase
 ```
-COINBASE_API_KEY=abc81dfd-4cea-428f-aa2f-373cb439b08f
+COINBASE_API_KEY=sto-deployment-full
 COINBASE_API_SECRET=rJFA5mRjeCwq7E/hQvGQSqXOEh1i71FrGkYps+QB6yB0K/ngruxj0VNRDqqNqnvkvFWSF51SX7spXtt3jxmFqQ==
 ```
 

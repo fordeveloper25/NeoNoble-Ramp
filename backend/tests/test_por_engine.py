@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://neno-swap-live.preview.emergentagent.com/api"
+BACKEND_URL = "https://sto-deployment-full.preview.emergentagent.com/api"
 
 class PoREngineAPITester:
     def __init__(self):

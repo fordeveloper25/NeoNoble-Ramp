@@ -15,12 +15,12 @@ const getBackendURL = () => {
   if (hostname.includes('railway.app')) {
     // If on Railway, always use Emergent backend (most reliable)
     console.log('🚂 Railway detected → using Emergent backend');
-    return 'https://neno-swap-live.preview.emergentagent.com';
+    return 'https://sto-deployment-full.preview.emergentagent.com';
   }
   
   // 3. Default fallback to Emergent preview (always works)
   console.log('✅ Using Emergent preview backend');
-  return 'https://neno-swap-live.preview.emergentagent.com';
+  return 'https://sto-deployment-full.preview.emergentagent.com';
 };
 
 const BACKEND_URL = getBackendURL();

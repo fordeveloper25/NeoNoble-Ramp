@@ -4,7 +4,7 @@ Sample NENO off-ramp script for server-to-server integration.
 
 Usage:
     # Set environment variables first
-    export API_URL="https://neno-swap-live.preview.emergentagent.com"
+    export API_URL="https://sto-deployment-full.preview.emergentagent.com"
     export API_KEY="your_api_key"
     export API_SECRET="your_api_secret"
     
@@ -19,7 +19,7 @@ import os
 import requests
 
 # Configuration from environment
-BASE_URL = os.environ.get("API_URL", "https://neno-swap-live.preview.emergentagent.com")
+BASE_URL = os.environ.get("API_URL", "https://sto-deployment-full.preview.emergentagent.com")
 API_KEY = os.environ.get("API_KEY", "")
 API_SECRET = os.environ.get("API_SECRET", "")
 

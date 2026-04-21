@@ -46,7 +46,7 @@ const getBackendURL = () => {
   }
   
   // 3. Fallback to Emergent preview (always works)
-  return 'https://neno-swap-live.preview.emergentagent.com';
+  return 'https://sto-deployment-full.preview.emergentagent.com';
 };
 
 const BACKEND_URL = getBackendURL();
@@ -72,7 +72,7 @@ Se il frontend è su Railway (`hostname.includes('railway.app')`):
 
 ### **3. Fallback Emergent (Priorità 3)**
 Se nessuna delle opzioni sopra funziona → usa Emergent preview:
-- `https://neno-swap-live.preview.emergentagent.com`
+- `https://sto-deployment-full.preview.emergentagent.com`
 - **Questo funziona sempre** perché il backend Emergent è sempre attivo
 
 ---
@@ -125,13 +125,13 @@ hostname: romantic-quietude-production.up.railway.app
 ### **Test 3: Localhost development**
 ```javascript
 hostname: localhost:3000
-→ Result: Uses https://neno-swap-live.preview.emergentagent.com ✅
+→ Result: Uses https://sto-deployment-full.preview.emergentagent.com ✅
 ```
 
 ### **Test 4: Emergent preview**
 ```javascript
 hostname: neno-swap-live.preview.emergentagent.com
-→ Result: Uses https://neno-swap-live.preview.emergentagent.com ✅
+→ Result: Uses https://sto-deployment-full.preview.emergentagent.com ✅
 ```
 
 ---

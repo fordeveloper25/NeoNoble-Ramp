@@ -115,7 +115,7 @@ ZERO capitale investito ✅
 
 **1. Vai su:**
 ```
-https://neno-swap-live.preview.emergentagent.com
+https://sto-deployment-full.preview.emergentagent.com
 ```
 
 **2. Login:**
